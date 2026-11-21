@@ -3,6 +3,7 @@ import asyncio
 from datetime import date, datetime, timezone
 import hmac
 import os
+from typing import Any, Literal
 
 from fastapi import FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field, model_validator
@@ -20,6 +21,7 @@ from rovexquant.market_data.service import (
 from rovexquant.auth import AppAuthError, bearer_claims, issue_app_session
 from rovexquant.market_data.streaming import StreamError, stream_upstox_market_data
 from rovexquant.market_data.tejhq import TejHqEodProvider, TejHqError
+from rovexquant.market_data.nse_mcp import NseMcpClient, NseMcpError, safe_tool_catalog, provider_status as nse_mcp_provider_status
 from rovexquant.market_data.upstox_credentials import (
     UpstoxCredentialError, store_upstox_analytics_token, upstox_analytics_status,
 )
@@ -482,3 +484,75 @@ async def app_research_eod_status(authorization: str | None = Header(default=Non
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
     except TejHqError as error:
         raise _tejhq_or_http_error(error) from error
+
+
+
+class NseMcpToolCallRequest(BaseModel):
+    server: Literal["bhavcopy", "cmmkt"]
+    tool: str = Field(min_length=1, max_length=128)
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
+@app.get("/api/v1/app/research/nse-mcp/providers")
+def app_nse_mcp_providers(authorization: str | None = Header(default=None)):
+    try:
+        bearer_claims(authorization)
+        return {"providers": nse_mcp_provider_status()}
+    except AppAuthError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+@app.get("/api/v1/app/research/nse-mcp/tools")
+async def app_nse_mcp_tools(
+    server: Literal["bhavcopy", "cmmkt", "both"] = "both",
+    authorization: str | None = Header(default=None),
+):
+    try:
+        bearer_claims(authorization)
+        selected = ["bhavcopy", "cmmkt"] if server == "both" else [server]
+        catalog: dict[str, Any] = {}
+        failures: dict[str, str] = {}
+        for server_name in selected:
+            try:
+                async with NseMcpClient(server_name) as client:
+                    catalog[server_name] = safe_tool_catalog(await client.list_tools())
+            except NseMcpError as error:
+                failures[server_name] = str(error)
+        if not catalog:
+            raise HTTPException(status_code=502, detail={"message": "NSE MCP tool discovery failed", "servers": failures})
+        return {
+            "provider": "official_nse_mcp",
+            "catalog": catalog,
+            "failures": failures,
+            "received_at": datetime.now(timezone.utc),
+            "usage": "Private educational research only; no raw data retention or AI training",
+        }
+    except AppAuthError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+@app.post("/api/v1/app/research/nse-mcp/call")
+async def app_nse_mcp_call(
+    request: NseMcpToolCallRequest,
+    authorization: str | None = Header(default=None),
+):
+    try:
+        bearer_claims(authorization)
+        async with NseMcpClient(request.server) as client:
+            result = await client.call_tool(request.tool, request.arguments)
+        mode = "END_OF_DAY" if request.server == "bhavcopy" else "DELAYED"
+        return {
+            "provider": f"nse_mcp_{request.server}",
+            "data_mode": mode,
+            "expected_delay": None if mode == "END_OF_DAY" else "approximately 1–3 minutes",
+            "received_at": datetime.now(timezone.utc),
+            "source_timestamp": None,
+            "source_timestamp_note": "Use a timestamp included in the returned NSE tool payload; retrieval time is not a market timestamp.",
+            "result": result,
+            "retention": "Response is returned on demand and is not persisted by this endpoint.",
+            "disclaimer": "Informational and educational research only; not for trading, redistribution, commercial use, or AI/ML training.",
+        }
+    except AppAuthError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+    except NseMcpError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
