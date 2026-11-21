@@ -4,7 +4,7 @@ from rovexquant.backtesting.engine import BacktestBar, BacktestConfig, run_long_
 
 def bars(prices):
     start = datetime(2025, 1, 1, tzinfo=timezone.utc)
-    return [BacktestBar(start + timedelta(days=i), p, p + 2, p - 2, p) for i, p in enumerate(prices)]
+    return [BacktestBar(start + timedelta(days=i), p, p + 2, p - 1, p) for i, p in enumerate(prices)]
 
 def test_signal_fills_at_next_open_and_closes_on_next_open():
     data = bars([100, 100, 105, 110])
@@ -34,3 +34,13 @@ def test_rejects_non_chronological_bars():
 def test_rejects_future_leakage_signal_values():
     with pytest.raises(ValueError):
         run_long_only_backtest(bars([100, 101]), [2, 0])
+
+def test_stop_can_trigger_after_entry_on_same_bar():
+    data = bars([100, 100, 101])
+    entry_bar = data[1]
+    from dataclasses import replace
+    data[1] = replace(entry_bar, low=97)
+    result = run_long_only_backtest(data, [1, 0, 0], BacktestConfig(stop_fraction=0.02, commission_bps=0, slippage_bps=0))
+    assert result.trade_count == 1
+    assert result.trades[0].exit_reason == "STOP"
+    assert result.trades[0].entry_time == result.trades[0].exit_time
