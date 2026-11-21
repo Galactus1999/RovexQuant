@@ -203,3 +203,23 @@ jobs:
           gradle-version: "8.9"
       - name: Android unit tests (no emulator)
         run: gradle -p android :app:testDebugUnitTest --no-daemon --stacktrace
+
+
+  quant-nse-mcp-live-smoke:
+    name: Quant Official NSE MCP Live Connectivity
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_nse_live_smoke == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout Quant source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend
+        working-directory: backend
+        run: python -m pip install .
+      - name: Verify official NSE MCP initialization and tool discovery
+        working-directory: backend
+        run: python scripts/nse_mcp_live_smoke.py
