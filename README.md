@@ -13,9 +13,9 @@ Independent, provider-agnostic Indian-market research terminal. Signals, alerts 
 ### Backend
 - FastAPI research API and versioned strategy catalogue.
 - Indicators: SMA, EMA, RSI, MACD, ATR, ADX, session VWAP and OBV/relative volume.
-- Research strategies: SMA crossover, EMA alignment, RSI regime, Donchian breakout, volume-confirmed breakout, opening-range breakout and session VWAP cross.
+- Research strategies: SMA crossover, EMA alignment, RSI regime, Donchian breakout, volume-confirmed breakout, Bollinger re-entry, opening-range breakout and session VWAP cross.
 - Long-only event-driven backtest prototype with next-bar-open entries, stop handling, configurable commission and slippage.
-- Strict local OHLCV CSV importer for timezone-aware user-supplied datasets.
+- Strict local OHLCV CSV importer for timezone-aware user-supplied datasets, with conservative intraday gap detection.
 
 ## Run backend locally
 
