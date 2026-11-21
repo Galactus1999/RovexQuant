@@ -14,7 +14,7 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 fun PortfolioScreen() {
-    var capital by rememberSaveable { mutableStateOf("100000") }
+    var capital by rememberSaveable { mutableStateOf("") }
     var risk by rememberSaveable { mutableStateOf("1.0") }
     val amount = capital.toDoubleOrNull() ?: 0.0
     val riskPercent = risk.toDoubleOrNull() ?: 0.0
@@ -25,12 +25,12 @@ fun PortfolioScreen() {
             TerminalCard {
                 Eyebrow("Your risk profile")
                 Spacer(Modifier.height(9.dp))
-                OutlinedTextField(value = capital, onValueChange = { capital = it.filter(Char::isDigit).take(12) }, label = { Text("Capital · INR") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = capital, onValueChange = { capital = it.filter(Char::isDigit).take(12) }, label = { Text("Capital · INR") }, placeholder = { Text("Enter your capital") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(value = risk, onValueChange = { risk = it.filter { char -> char.isDigit() || char == '.' }.take(5) }, label = { Text("Maximum planned risk per trade · %") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(14.dp))
                 Text("Indicative risk budget", color = Muted, fontSize = 10.sp)
-                Text("₹" + "%,.0f".format(riskBudget), color = Mint, fontSize = 27.sp, fontWeight = FontWeight.Bold)
+                Text(if (amount > 0 && riskPercent in 0.0..5.0) "₹" + "%,.0f".format(riskBudget) else "—", color = Mint, fontSize = 27.sp, fontWeight = FontWeight.Bold)
                 Text("Capital × risk percentage. This is a planning limit, not a suggested trade.", color = Muted, fontSize = 10.sp, lineHeight = 16.sp)
             }
         }
