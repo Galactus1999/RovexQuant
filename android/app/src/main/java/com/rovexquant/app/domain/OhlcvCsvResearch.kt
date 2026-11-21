@@ -1,6 +1,7 @@
 package com.rovexquant.app.domain
 
 import java.time.OffsetDateTime
+import kotlin.math.max
 
 data class OhlcvBar(
     val timestamp: OffsetDateTime,
@@ -31,7 +32,9 @@ object OhlcvCsvResearch {
         require(maxRows > 0) { "maxRows must be positive" }
         val lines = content.lineSequence().filter { it.isNotBlank() }.iterator()
         require(lines.hasNext()) { "CSV is empty" }
-        val headers = parseRecord(lines.next()).map { it.trim().lowercase() }
+        val headers = parseRecord(lines.next()).mapIndexed { index, header ->
+            (if (index == 0) header.removePrefix("\uFEFF") else header).trim().lowercase()
+        }
         val indexes = required.associateWith { name ->
             headers.indexOf(name).also { require(it >= 0) { "CSV is missing required column: $name" } }
         }
@@ -50,7 +53,7 @@ object OhlcvCsvResearch {
             } catch (error: Exception) {
                 throw IllegalArgumentException("CSV row $rowNumber timestamp must be ISO-8601 with a timezone offset", error)
             }
-            require(previous == null || timestamp.isAfter(previous)) {
+            require(previous?.let { timestamp.isAfter(it) } ?: true) {
                 "CSV timestamps must be strictly increasing without duplicates (row $rowNumber)"
             }
             fun price(name: String): Double {
@@ -66,7 +69,7 @@ object OhlcvCsvResearch {
             val close = price("close")
             val volume = value("volume").toLongOrNull()
             require(volume != null && volume >= 0) { "CSV row $rowNumber has invalid volume" }
-            require(high >= maxOf(open, close) && low <= minOf(open, close) && high >= low) {
+            require(high >= max(open, close) && low <= minOf(open, close) && high >= low) {
                 "CSV row $rowNumber has invalid OHLC range"
             }
             bars += OhlcvBar(timestamp, open, high, low, close, volume)
@@ -90,15 +93,9 @@ object OhlcvCsvResearch {
         }
         val last = bars.last()
         return OhlcvResearchSummary(
-            rows = bars.size,
-            firstTimestamp = bars.first().timestamp,
-            lastTimestamp = last.timestamp,
-            latestClose = latest,
-            latestVolume = last.volume,
-            sma20 = sma20,
-            sma50 = sma50,
-            rsi14 = rsi,
-            trend = trend
+            rows = bars.size, firstTimestamp = bars.first().timestamp, lastTimestamp = last.timestamp,
+            latestClose = latest, latestVolume = last.volume, sma20 = sma20, sma50 = sma50,
+            rsi14 = rsi, trend = trend
         )
     }
 
@@ -107,15 +104,20 @@ object OhlcvCsvResearch {
         return values.takeLast(period).average()
     }
 
+    /** Wilder-smoothed RSI, seeded with the first full period of gains and losses. */
     private fun relativeStrengthIndex(values: List<Double>, period: Int): Double? {
         if (values.size <= period) return null
-        val changes = values.takeLast(period + 1).zipWithNext { a, b -> b - a }
-        val gains = changes.filter { it > 0.0 }.sum() / period
-        val losses = -changes.filter { it < 0.0 }.sum() / period
+        val changes = values.zipWithNext { a, b -> b - a }
+        var averageGain = changes.take(period).sumOf { max(it, 0.0) } / period
+        var averageLoss = changes.take(period).sumOf { max(-it, 0.0) } / period
+        for (index in period until changes.size) {
+            averageGain = ((averageGain * (period - 1)) + max(changes[index], 0.0)) / period
+            averageLoss = ((averageLoss * (period - 1)) + max(-changes[index], 0.0)) / period
+        }
         return when {
-            gains == 0.0 && losses == 0.0 -> 50.0
-            losses == 0.0 -> 100.0
-            else -> 100.0 - (100.0 / (1.0 + gains / losses))
+            averageGain == 0.0 && averageLoss == 0.0 -> 50.0
+            averageLoss == 0.0 -> 100.0
+            else -> 100.0 - (100.0 / (1.0 + averageGain / averageLoss))
         }
     }
 

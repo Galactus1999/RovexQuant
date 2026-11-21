@@ -22,7 +22,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.InputStream
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.Locale
 
 private const val LOCAL_DATASET_FILE = "quant_local_research.csv"
@@ -46,7 +50,14 @@ fun ResearchLabScreen() {
                     val csv = context.contentResolver.openInputStream(uri)?.use { it.readUtf8Limited() }
                         ?: throw IllegalArgumentException("Could not open the selected file")
                     val bars = OhlcvCsvResearch.parse(csv)
-                    context.openFileOutput(LOCAL_DATASET_FILE, Context.MODE_PRIVATE).bufferedWriter().use { it.write(csv) }
+                    val temporary = File(context.filesDir, "$LOCAL_DATASET_FILE.tmp")
+                    val destination = File(context.filesDir, LOCAL_DATASET_FILE)
+                    temporary.writeText(csv, Charsets.UTF_8)
+                    try {
+                        Files.move(temporary.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+                    } catch (_: AtomicMoveNotSupportedException) {
+                        Files.move(temporary.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                    }
                     OhlcvCsvResearch.summarize(bars)
                 }
                 summary = loaded

@@ -24,11 +24,12 @@ class QuantDashboardRegressionTest {
 
     @Test fun bottomNavigationOpensAllWorkspaces() {
         composeRule.onNodeWithText("Scan").performClick()
-        composeRule.onNodeWithText("STRATEGY SCANNER.").assertIsDisplayed()
+        composeRule.onNodeWithText("FIND SETUPS, NOT STORIES").assertIsDisplayed()
         composeRule.onNodeWithText("Signals").performClick()
         composeRule.onNodeWithText("Signal centre.").assertIsDisplayed()
         composeRule.onNodeWithText("Lab").performClick()
         composeRule.onNodeWithText("Research lab.").assertIsDisplayed()
+        composeRule.onNodeWithText("Import OHLCV CSV").assertIsDisplayed()
         composeRule.onNodeWithText("Portfolio").performClick()
         composeRule.onNodeWithText("Portfolio & risk.").assertIsDisplayed()
         composeRule.onNodeWithText("Planned entry price · ₹").assertIsDisplayed()
