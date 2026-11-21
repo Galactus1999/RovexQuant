@@ -13,6 +13,7 @@ def _session(monkeypatch):
 
 def test_nse_mcp_routes_require_app_session():
     client = TestClient(api.app)
+    assert client.get("/api/v1/app/research/nse-mcp/providers").status_code == 401
     assert client.get("/api/v1/app/research/nse-mcp/tools").status_code == 401
     assert client.post("/api/v1/app/research/nse-mcp/call", json={
         "server": "bhavcopy", "tool": "get_history", "arguments": {},
