@@ -19,7 +19,7 @@ Documented endpoints used by Quant:
 | `GET /v1/delivery/{exchange}/{symbol}?from=...&to=...` | Optional free key | Delivery quantity and percentage |
 | `GET /v1/status` | Keyless | Provider freshness/status |
 
-The optional free key is created at https://tejhq.dev/keys and is configured only as backend environment variable `TEJHQ_API_KEY`. It is not required for keyless OHLCV, snapshots or corporate actions. The free-key tier currently documents 1,000 calls/day and 300 calls/minute. Do not commit the key or put it in Android.
+The optional free key is created at https://tejhq.dev/keys and is configured only as backend environment variable `TEJHQ_API_KEY`. It is not required for keyless OHLCV, snapshots or corporate actions. Keyless requests are limited to 120/minute per IP; the free-key tier currently documents 1,000 calls/day and 300 calls/minute. Do not commit the key or put it in Android.
 
 Quant API routes (all require the existing short-lived Quant app Bearer session):
 
@@ -30,7 +30,7 @@ Quant API routes (all require the existing short-lived Quant app Bearer session)
 - `GET /api/v1/app/research/market-data/actions/{symbol}`
 - `GET /api/v1/app/research/market-data/status`
 
-Exchange is NSE or BSE. The backend validates symbol syntax, date ordering/range, row count, dates, finite positive OHLC values, OHLC consistency and non-negative integral volume/trade counts. It distinguishes provider/rate-limit failures and never returns configured API keys. The endpoints do not persist bars yet; durable local research storage and scanner integration are separate follow-on work.
+Exchange is NSE or BSE. The backend validates symbol syntax, date ordering/range, row count, dates, finite positive OHLC values, OHLC consistency and non-negative integral volume/trade counts. It distinguishes provider/rate-limit failures and never returns configured API keys. For adjusted responses, the adapter preserves raw OHLC, adjusted close and the cumulative adjustment factor. Adjusted open/high/low must be calculated by multiplying raw OHLC by that factor; volume remains raw. Do not use raw close across a split/bonus for returns or backtests. The endpoints do not persist bars yet; durable local research storage and scanner integration are separate follow-on work.
 
 ### Data rights
 
