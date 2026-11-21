@@ -36,7 +36,7 @@ The API does not return the token. The server stores it encrypted at rest. Keep 
 4. The app receives a short-lived bearer session and uses it for protected quote and WebSocket routes.
 5. Rotate the signing key to revoke all active sessions.
 
-The V3 WebSocket bridge authorizes with the server-side Analytics Token, subscribes using Upstox's documented JSON control frame, decodes binary Protobuf messages on the backend and forwards normalized JSON ticks to the app. Only NSE index keys are accepted in this initial mobile stream. The bridge allows up to 100 index keys per connection in this implementation; Upstox account-level connection/subscription limits still apply.
+The backend resolves NSE index instrument keys from Upstox's official daily NSE BOD instrument master (`NSE_INDEX` + `INDEX` records), caches that result for six hours, and exposes the authenticated `/api/v1/app/market/index-instruments` endpoint. The Android app uses those returned keys to subscribe to supported dashboard indices; it does not construct or guess instrument keys. The V3 WebSocket bridge authorizes with the server-side Analytics Token, subscribes using Upstox's documented JSON control frame, decodes binary Protobuf messages on the backend and forwards normalized JSON ticks to the app. Only NSE index keys are accepted in this dashboard stream. The bridge allows up to 100 index keys per connection in this implementation; Upstox account-level connection/subscription limits still apply.
 
 ## Operational and compliance requirements
 

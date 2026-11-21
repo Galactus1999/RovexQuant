@@ -14,7 +14,7 @@ import websockets
 from rovexquant.market_data import upstox_market_data_pb2
 
 
-_INSTRUMENT_KEY = re.compile(r"^NSE_INDEX\|[A-Za-z0-9 ]{1,80}$")
+_INSTRUMENT_KEY = re.compile(r"^NSE_INDEX\|[A-Za-z0-9 _&()./-]{1,80}$")
 
 
 class StreamError(Exception):

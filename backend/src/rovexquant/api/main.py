@@ -13,6 +13,7 @@ from rovexquant.indicators.momentum import rsi
 from rovexquant.indicators.trend import adx, macd
 from rovexquant.indicators.volatility import atr
 from rovexquant.market_data.providers import QuoteInstrument
+from rovexquant.market_data.instruments import InstrumentMasterError, get_nse_index_instruments
 from rovexquant.market_data.service import (
     MarketGatewayError, authorize_market_gateway, fetch_quotes, provider_status,
 )
@@ -76,6 +77,19 @@ def app_market_providers(authorization: str | None = Header(default=None)):
         bearer_claims(authorization)
         return {"providers": provider_status()}
     except AppAuthError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+
+@app.get("/api/v1/app/market/index-instruments")
+async def app_market_index_instruments(authorization: str | None = Header(default=None)):
+    try:
+        bearer_claims(authorization)
+        instruments = await get_nse_index_instruments()
+        return {"provider": "upstox_instrument_master", "instruments": instruments}
+    except AppAuthError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+    except InstrumentMasterError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
 
