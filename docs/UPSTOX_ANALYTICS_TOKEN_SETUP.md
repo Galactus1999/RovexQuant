@@ -1,61 +1,49 @@
-# Upstox Analytics Token setup for Quant
+# Quant mobile market-data setup
 
-Quant uses the Upstox **Analytics Token** for market-data REST and V3 WebSocket access. It is read-only and is not an order-placement credential.
+The Android app authenticates to the Quant backend with a short-lived app session. It never contains the Upstox Analytics Token, the admin key, or the market-gateway key.
 
-## Why Analytics Token
+## Required server environment
 
-Upstox documents this token as free, valid for one year, and supported for Market Quote and WebSocket APIs. The ordinary OAuth access token has a much shorter daily validity and is not the right token lifecycle for this market-data-only service.
+- `QUANT_APP_USERNAME`: login name for the private Quant installation.
+- `QUANT_APP_PASSWORD`: long, unique login password (at least 20 random characters recommended).
+- `QUANT_APP_SESSION_SIGNING_KEY`: random secret of at least 32 characters; rotate to revoke all active app sessions.
+- `QUANT_APP_SESSION_TTL_SECONDS`: optional session lifetime, default 14400 seconds (4 hours; maximum 24 hours).
+- `QUANT_TOKEN_ENCRYPTION_KEY`: Fernet key used by the Analytics Token vault.
+- `QUANT_TOKEN_DB_PATH`: persistent writable SQLite path.
+- `QUANT_ADMIN_GATEWAY_TOKEN`: private admin provisioning key.
+- `UPSTOX_ANALYTICS_TOKEN`: optional local-development fallback only; encrypted vault takes precedence.
 
-Official documentation:
-- https://upstox.com/developer/api-documentation/analytics-token/
-- https://upstox.com/developer/api-documentation/v3/get-market-data-feed/
-- https://upstox.com/developer/api-documentation/get-full-market-quote-v3/
+Generate keys with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` for the Fernet key and `python -c "import secrets; print(secrets.token_urlsafe(48))"` for the session signing key.
 
-## Server configuration
+## Provision the Upstox Analytics Token
 
-Set these values in the backend deployment's secret/environment configuration. Never commit actual values:
-
-- `QUANT_ADMIN_GATEWAY_TOKEN`: long random admin credential protecting credential provisioning and status endpoints.
-- `QUANT_TOKEN_ENCRYPTION_KEY`: Fernet key generated once and retained securely.
-- `QUANT_TOKEN_DB_PATH`: path to a persistent SQLite file on a durable backend volume.
-- `QUANT_MARKET_GATEWAY_TOKEN`: legacy server gateway key; do not embed it in the Android APK.
-- `UPSTOX_ANALYTICS_TOKEN`: optional local-development fallback only. Prefer the encrypted vault in hosted deployments.
-
-Generate an encryption key on a trusted machine:
+Use the Upstox developer console to create a read-only Analytics Token. Provision it once over HTTPS using the admin key:
 
 ```bash
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-```
-
-Back up the encryption key separately from the database. Losing the key makes the encrypted token unrecoverable. Losing the persistent database requires provisioning the Analytics Token again.
-
-## Generate and provision the token
-
-1. Open Upstox Developer Apps and select the Analytics tab.
-2. Generate an Analytics Token and copy it once.
-3. Send it to the backend over HTTPS using the admin-protected endpoint:
-
-```bash
-curl -X POST "https://YOUR_BACKEND/api/v1/integrations/upstox/analytics-token" \
+curl --fail-with-body -X POST "$QUANT_API_URL/api/v1/integrations/upstox/analytics-token" \
+  -H "X-Quant-Admin-Key: $QUANT_ADMIN_GATEWAY_TOKEN" \
   -H "Content-Type: application/json" \
-  -H "X-Quant-Admin-Key: YOUR_QUANT_ADMIN_GATEWAY_TOKEN" \
-  --data '{"token":"PASTE_ANALYTICS_TOKEN_HERE"}'
+  --data-binary @<(jq -n --arg token "$UPSTOX_ANALYTICS_TOKEN" '{token:$token}')
 ```
 
-4. Check the connection without retrieving the secret:
+The API does not return the token. The server stores it encrypted at rest. Keep the Fernet key and SQLite database backup together; losing the key makes the encrypted credential unrecoverable.
 
-```bash
-curl "https://YOUR_BACKEND/api/v1/integrations/upstox/status" \
-  -H "X-Quant-Admin-Key: YOUR_QUANT_ADMIN_GATEWAY_TOKEN"
-```
+## Android connection
 
-The API never returns the token. It encrypts the value before writing it to SQLite. Configure a persistent disk/volume for `QUANT_TOKEN_DB_PATH`; ephemeral container filesystems are not suitable for credential persistence.
+1. Deploy the backend behind HTTPS/WSS with a persistent volume.
+2. Configure the app login environment variables above.
+3. In Quant, enter the HTTPS API base URL, app username and password.
+4. The app receives a short-lived bearer session and uses it for protected quote and WebSocket routes.
+5. Rotate the signing key to revoke all active sessions.
 
-## Security and operating boundaries
+The V3 WebSocket bridge authorizes with the server-side Analytics Token, subscribes using Upstox's documented JSON control frame, decodes binary Protobuf messages on the backend and forwards normalized JSON ticks to the app. Only NSE index keys are accepted in this initial mobile stream. The bridge allows up to 100 index keys per connection in this implementation; Upstox account-level connection/subscription limits still apply.
 
-- Use HTTPS only. Restrict access to the admin endpoint at the network layer where possible.
-- Never place the Analytics Token, encryption key, admin key, or market gateway key in the Android APK, source control, screenshots, issue comments, or logs.
-- Rotate/revoke the Analytics Token in Upstox if it is exposed.
-- The vault records the documented one-year lifetime and reports expired credentials as disconnected. Re-provision after expiry or revocation.
-- Market-data API access does not grant permission to redistribute exchange data to other users. Review Upstox and exchange terms before multi-user distribution.
-- The current shared market gateway key is suitable only for a trusted development setup. Android integration must use a separate short-lived app-session authentication layer; never ship that shared key in the client.
+## Operational and compliance requirements
+
+- HTTPS/WSS is mandatory outside local development. Do not expose admin endpoints publicly without network controls.
+- Apply reverse-proxy login rate limiting, request size limits and access logging with Authorization headers redacted.
+- Never put any server secret or provider token in the APK, remote config, source control, crash reports or client logs.
+- The SQLite database must be on persistent storage; ephemeral containers will lose credentials and sessions.
+- Upstox Analytics Token supports read-only market-data APIs. A successful app login does not prove that the provider credential is provisioned or that the upstream market is open.
+- Market data is exchange/provider intellectual property. Verify display, storage and redistribution entitlements before multi-user/public distribution.
+- The initial stream is for private single-install use, not a multi-tenant fan-out service. Deploy only one active app stream unless a connection manager/multiplexer is added.

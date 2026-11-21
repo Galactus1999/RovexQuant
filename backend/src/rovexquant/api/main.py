@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import hmac
 import os
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field, model_validator
 
 from rovexquant.ai.gateway import GatewayError, authorize_gateway, complete_chat, configured_providers
@@ -15,7 +15,7 @@ from rovexquant.market_data.providers import QuoteInstrument
 from rovexquant.market_data.service import (
     MarketGatewayError, authorize_market_gateway, fetch_quotes, provider_status,
 )
-from rovexquant.market_data.upstox_credentials import (
+from rovexquant.auth import AppAuthError, bearer_claims, issue_app_session\nfrom rovexquant.market_data.streaming import StreamError, stream_upstox_market_data\nfrom rovexquant.market_data.upstox_credentials import (
     UpstoxCredentialError, store_upstox_analytics_token, upstox_analytics_status,
 )
 from rovexquant.strategies.registry import default_registry
@@ -52,7 +52,88 @@ class MarketQuotesRequest(BaseModel):
         return self
 
 
-class IndicatorRequest(BaseModel):
+
+class AppLoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=120)
+    password: str = Field(min_length=1, max_length=256)
+
+
+@app.post("/api/v1/auth/session")
+def create_app_session(request: AppLoginRequest):
+    try:
+        token, expires_in = issue_app_session(request.username, request.password)
+        return {"access_token": token, "token_type": "Bearer", "expires_in": expires_in}
+    except AppAuthError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+@app.get("/api/v1/app/market/providers")
+def app_market_providers(authorization: str | None = Header(default=None)):
+    try:
+        bearer_claims(authorization)
+        return {"providers": provider_status()}
+    except AppAuthError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+@app.post("/api/v1/app/market/quotes")
+async def app_market_quotes(
+    request: MarketQuotesRequest,
+    authorization: str | None = Header(default=None),
+):
+    try:
+        bearer_claims(authorization)
+        instruments = [
+            QuoteInstrument(
+                symbol=item.symbol,
+                upstox_instrument_key=item.upstox_instrument_key,
+                dhan_exchange_segment=item.dhan_exchange_segment,
+                dhan_security_id=item.dhan_security_id,
+            )
+            for item in request.instruments
+        ]
+        provider, quotes, fallback_used = await fetch_quotes(instruments, request.provider_order)
+        quoted_symbols = {item.symbol for item in quotes}
+        return {
+            "provider": provider, "fallback_used": fallback_used,
+            "received_at": datetime.now(timezone.utc), "complete": len(quoted_symbols) == len(instruments),
+            "missing_symbols": [item.symbol for item in instruments if item.symbol not in quoted_symbols],
+            "quotes": [asdict(item) for item in quotes],
+        }
+    except AppAuthError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+    except MarketGatewayError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+@app.websocket("/api/v1/app/market/stream")
+async def app_market_stream(websocket: WebSocket):
+    try:
+        authorization = websocket.headers.get("authorization")
+        bearer_claims(authorization)
+    except AppAuthError:
+        await websocket.close(code=4401, reason="Authentication required")
+        return
+    await websocket.accept()
+    try:
+        subscription = await asyncio.wait_for(websocket.receive_json(), timeout=10)
+        if not isinstance(subscription, dict):
+            raise StreamError("Invalid subscription request")
+        keys = subscription.get("instrument_keys")
+        mode = subscription.get("mode", "full")
+        if not isinstance(keys, list) or any(not isinstance(key, str) for key in keys):
+            raise StreamError("instrument_keys must be a list of NSE index keys")
+        await stream_upstox_market_data(websocket, keys, mode)
+    except (StreamError, asyncio.TimeoutError) as error:
+        await websocket.send_json({"type": "error", "message": str(error)})
+        await websocket.close(code=4400, reason="Invalid or unavailable market stream")
+    except WebSocketDisconnect:
+        return
+    except Exception:
+        await websocket.send_json({"type": "error", "message": "Market stream disconnected"})
+        await websocket.close(code=1011, reason="Market stream unavailable")
+
+\nclass IndicatorRequest(BaseModel):
     close: list[float] = Field(min_length=1)
     high: list[float] | None = None
     low: list[float] | None = None
