@@ -1,4 +1,3 @@
-import asyncio
 from urllib.parse import parse_qs, urlparse
 
 from cryptography.fernet import Fernet
