@@ -23,7 +23,7 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.padding(24.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text("RovexQuant", style = MaterialTheme.typography.headlineLarge)
+                        Text("Quant", style = MaterialTheme.typography.headlineLarge)
                         Text("Quantitative research • Paper trading • Signals only")
                         Text("Data: Local / not connected")
                         Text("Broker connections: Not configured")
