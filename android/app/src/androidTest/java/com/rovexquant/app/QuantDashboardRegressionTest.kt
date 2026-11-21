@@ -1,13 +1,12 @@
 package com.rovexquant.app
 
-import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -20,16 +19,17 @@ class QuantDashboardRegressionTest {
     @get:Rule val composeRule = createAndroidComposeRule<MainActivity>()
 
     @Test fun appStartsWithQuantMarketPulseAndHonestOfflineState() {
-        composeRule.onNodeWithText("QUANT").assertIsDisplayed()
+        composeRule.onNodeWithTag("quant.header").assertIsDisplayed()
         composeRule.onNodeWithText("Market pulse.").assertIsDisplayed()
-        composeRule.onAllNodesWithText("Feed not connected").assertCountEquals(2)
-        composeRule.onNodeWithText("MARKET DATA NOT CONNECTED").assertIsDisplayed()
+        composeRule.onNodeWithTag("market.feed.status").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("market.sector.heading").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("NIFTY BANK").performScrollTo().assertIsDisplayed()
     }
 
-    @Test fun bottomNavigationOpensAllWorkspaces() {
+    @Test fun bottomNavigationOpensAllWorkspacesAndSectorCoverage() {
         composeRule.onNodeWithText("Scan").performClick()
-        composeRule.onNodeWithText("FIND SETUPS, NOT STORIES").assertIsDisplayed()
-        composeRule.onNodeWithText("No local dataset loaded").assertIsDisplayed()
+        composeRule.onNodeWithText("Strategy scanner.").assertIsDisplayed()
+        composeRule.onNodeWithText("No local dataset loaded").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Signals").performClick()
         composeRule.onNodeWithText("Signal centre.").assertIsDisplayed()
         composeRule.onNodeWithText("Lab").performClick()

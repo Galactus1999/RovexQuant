@@ -10,6 +10,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -67,7 +68,7 @@ fun TerminalHeader() {
         Box(Modifier.size(40.dp).clip(RoundedCornerShape(13.dp)).background(PanelRaised), contentAlignment = Alignment.Center) { Text("Q", color = Mint, fontSize = 24.sp, fontWeight = FontWeight.Black) }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text("QUANT", color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp, fontWeight = FontWeight.Black, letterSpacing = 1.8.sp)
+            Text("QUANT", color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp, fontWeight = FontWeight.Black, letterSpacing = 1.8.sp, modifier = Modifier.testTag("quant.header"))
             Text("INDIAN MARKET INTELLIGENCE", color = Muted, fontSize = 8.sp, letterSpacing = 1.25.sp)
         }
         StatusPill("Research · Offline")
