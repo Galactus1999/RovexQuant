@@ -16,10 +16,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Locale
 
-private data class SectorIndex(val sector: String, val benchmark: String, val instrumentKey: String? = null)
+private data class SectorIndex(val sector: String, val benchmark: String)
 
 private val coreSectorIndices = listOf(
-    SectorIndex("Banking", "NIFTY BANK", "NSE_INDEX|Nifty Bank"),
+    SectorIndex("Banking", "NIFTY BANK"),
     SectorIndex("Financial Services", "NIFTY FINANCIAL SERVICES"),
     SectorIndex("Information Technology", "NIFTY IT"),
     SectorIndex("Automobiles", "NIFTY AUTO"),
@@ -41,9 +41,17 @@ private val coreSectorIndices = listOf(
 )
 
 @Composable
-fun MarketPulseScreen(ticks: Map<String, MarketTick> = emptyMap(), streamStatus: String = "Not connected") {
-    val nifty = ticks["NSE_INDEX|Nifty 50"]
-    val bank = ticks["NSE_INDEX|Nifty Bank"]
+fun MarketPulseScreen(
+    ticks: Map<String, MarketTick> = emptyMap(),
+    indexKeys: Map<String, String> = emptyMap(),
+    streamStatus: String = "Not connected"
+) {
+    val nifty = indexKeys["NIFTY 50"]?.let { ticks[it] }
+    val bank = indexKeys["NIFTY BANK"]?.let { ticks[it] }
+    val latestTick = listOfNotNull(nifty, bank).maxByOrNull { it.receivedAt }
+    val exchangeClock = latestTick?.exchangeTimestamp?.substringAfter("T")?.take(8) ?: "unavailable"
+    val receiveClock = latestTick?.receivedAt?.substringAfter("T")?.take(8) ?: "unavailable"
+
     LazyColumn(contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item { SectionHeading("The market, without the noise", "Market pulse.", "A clean overview of indices, breadth, sectors and your tracked universe.") }
         item {
@@ -83,11 +91,13 @@ fun MarketPulseScreen(ticks: Map<String, MarketTick> = emptyMap(), streamStatus:
                     verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     Text("SOURCE · UPSTOX V3 · $streamStatus", color = Muted, fontSize = 9.sp, letterSpacing = .5.sp, fontWeight = FontWeight.Bold)
+                    Text("EXCHANGE · $exchangeClock UTC    RECEIVED · $receiveClock UTC", color = Muted, fontSize = 8.sp)
                     Text(
-                        "EXCHANGE · ${utcClock(latestTick?.exchangeTimestamp)} UTC    RECEIVED · ${utcClock(latestTick?.receivedAt)} UTC",
-                        color = Muted, fontSize = 8.sp
+                        "TICK QUALITY · ${latestTick?.quality ?: "NO VERIFIED TICK"}",
+                        color = latestTick?.let { if (it.quality == "VALID") Mint else Gold } ?: Muted,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold
                     )
-                    Text("TICK QUALITY · ${latestTick?.quality ?: "NO VERIFIED TICK"}", color = latestTick?.let { if (it.quality == "VALID") Mint else Gold } ?: Muted, fontSize = 8.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -99,7 +109,8 @@ fun MarketPulseScreen(ticks: Map<String, MarketTick> = emptyMap(), streamStatus:
             }
         }
         items(coreSectorIndices, key = { it.benchmark }) { sector ->
-            val quote = sector.instrumentKey?.let { ticks[it] }
+            val instrumentKey = indexKeys[sector.benchmark]
+            val quote = instrumentKey?.let { ticks[it] }
             TerminalCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -107,7 +118,10 @@ fun MarketPulseScreen(ticks: Map<String, MarketTick> = emptyMap(), streamStatus:
                         Spacer(Modifier.height(3.dp))
                         Text(sector.benchmark, color = Muted, fontSize = 9.sp, letterSpacing = .5.sp, modifier = Modifier.testTag("sector.index.${sector.benchmark}"))
                     }
-                    StatusPill(if (quote?.quality == "VALID") "Live" else if (sector.instrumentKey == null) "Key pending" else "No tick", if (quote?.quality == "VALID") Mint else Gold)
+                    StatusPill(
+                        if (quote?.quality == "VALID") "Live" else if (instrumentKey == null) "Not listed" else "No tick",
+                        if (quote?.quality == "VALID") Mint else Gold
+                    )
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -117,9 +131,7 @@ fun MarketPulseScreen(ticks: Map<String, MarketTick> = emptyMap(), streamStatus:
                 }
             }
         }
-        item {
-            Text("Starter universe · editable controls pending", color = MaterialTheme.colorScheme.onBackground, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        }
+        item { Text("Starter universe · editable controls pending", color = MaterialTheme.colorScheme.onBackground, fontSize = 18.sp, fontWeight = FontWeight.Bold) }
         items(listOf("NIFTY 50" to "Index", "NIFTY BANK" to "Index", "RELIANCE" to "Energy", "HDFCBANK" to "Banking", "INFY" to "Technology")) { item ->
             TerminalCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

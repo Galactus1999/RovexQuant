@@ -1,20 +1,20 @@
 package com.rovexquant.app.ui
 
+import android.os.Handler
+import android.os.Looper
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
-import android.os.Handler
-import android.os.Looper
 
 data class QuantSession(val baseUrl: String, val accessToken: String)
-
+data class MarketIndexInstrument(val instrumentKey: String, val name: String, val tradingSymbol: String)
 data class MarketTick(
     val instrumentKey: String,
     val lastPrice: Double,
@@ -55,10 +55,35 @@ object QuantApi {
                 val detail = runCatching { JSONObject(text).optString("detail") }.getOrNull()
                 throw IllegalStateException(detail?.takeIf { it.isNotBlank() } ?: "Login failed (HTTP ${response.code}).")
             }
-            val json = JSONObject(text)
-            val token = json.optString("access_token")
+            val token = JSONObject(text).optString("access_token")
             require(token.isNotBlank()) { "Backend returned no session token." }
             return QuantSession(normalized, token)
+        }
+    }
+
+    fun fetchIndexInstruments(session: QuantSession): List<MarketIndexInstrument> {
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/market/index-instruments")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                throw IllegalStateException("Unable to load NSE index master (HTTP ${response.code}).")
+            }
+            val records = JSONObject(text).optJSONArray("instruments")
+                ?: throw IllegalStateException("Backend returned no NSE index master.")
+            return buildList {
+                for (index in 0 until records.length()) {
+                    val item = records.optJSONObject(index) ?: continue
+                    val key = item.optString("instrument_key")
+                    val name = item.optString("name")
+                    if (key.startsWith("NSE_INDEX|") && name.isNotBlank()) {
+                        add(MarketIndexInstrument(key, name, item.optString("trading_symbol")))
+                    }
+                }
+            }
         }
     }
 }
@@ -79,11 +104,16 @@ class MarketStreamController(
     private var socket: WebSocket? = null
     private var stopped = false
     private var attempts = 0
+    private var keys: List<String> = emptyList()
     private val retry = Runnable { connect() }
-    private val keys = listOf("NSE_INDEX|Nifty 50", "NSE_INDEX|Nifty Bank")
 
-    fun start() {
+    fun start(instrumentKeys: List<String>) {
+        keys = instrumentKeys.distinct().take(100)
         stopped = false
+        if (keys.isEmpty()) {
+            emitStatus("No verified NSE index keys found")
+            return
+        }
         connect()
     }
 
@@ -96,20 +126,23 @@ class MarketStreamController(
         client.connectionPool.evictAll()
     }
 
-    private fun emitStatus(value: String) { handler.post { if (!stopped) onStatus(value) } }
+    private fun emitStatus(value: String) {
+        handler.post { if (!stopped) onStatus(value) }
+    }
 
-    private fun emitTick(value: MarketTick) { handler.post { if (!stopped) onTick(value) } }
+    private fun emitTick(value: MarketTick) {
+        handler.post { if (!stopped) onTick(value) }
+    }
 
     private fun connect() {
-        if (stopped) return
+        if (stopped || keys.isEmpty()) return
         emitStatus(if (attempts == 0) "Connecting" else "Reconnecting $attempts")
-        val wsUrl = session.baseUrl.replaceFirst("https://", "wss://")
-            .replaceFirst("http://", "ws://") + "/api/v1/app/market/stream"
+        val wsUrl = session.baseUrl.replaceFirst("https://", "wss://") + "/api/v1/app/market/stream"
         val request = Request.Builder().url(wsUrl)
-            .header("Authorization", "Bearer ${session.accessToken}").build()
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .build()
         socket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                attempts = 0
                 emitStatus("Connected · awaiting ticks")
                 val subscription = JSONObject()
                     .put("instrument_keys", JSONArray(keys))
@@ -141,6 +174,7 @@ class MarketStreamController(
                         ))
                     }
                     if (json.optString("type") == "initial_feed" || json.optString("type") == "live_feed") {
+                        attempts = 0
                         emitStatus("Live · Upstox V3")
                     }
                 }.onFailure { emitStatus("Invalid market message") }
