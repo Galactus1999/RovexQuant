@@ -1,5 +1,3 @@
-from datetime import date
-
 import httpx
 from fastapi.testclient import TestClient
 
