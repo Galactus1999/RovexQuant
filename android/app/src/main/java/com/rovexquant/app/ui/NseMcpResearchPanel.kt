@@ -81,11 +81,13 @@ fun NseMcpResearchPanel(session: QuantSession) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
                     selected = server == "bhavcopy",
+                    enabled = !loadingCatalog && !calling,
                     onClick = { if (server != "bhavcopy") { server = "bhavcopy"; loadCatalog("bhavcopy") } },
                     label = { Text("Bhavcopy · EOD") }
                 )
                 FilterChip(
                     selected = server == "cmmkt",
+                    enabled = !loadingCatalog && !calling,
                     onClick = { if (server != "cmmkt") { server = "cmmkt"; loadCatalog("cmmkt") } },
                     label = { Text("CM market · delayed") }
                 )
