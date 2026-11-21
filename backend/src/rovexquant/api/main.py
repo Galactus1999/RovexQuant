@@ -21,7 +21,10 @@ from rovexquant.market_data.service import (
 from rovexquant.auth import AppAuthError, bearer_claims, issue_app_session
 from rovexquant.market_data.streaming import StreamError, stream_upstox_market_data
 from rovexquant.market_data.tejhq import TejHqEodProvider, TejHqError
-from rovexquant.market_data.nse_mcp import NseMcpClient, NseMcpError, safe_tool_catalog, provider_status as nse_mcp_provider_status
+from rovexquant.market_data.nse_mcp import (
+    NseMcpClient, NseMcpError, extract_source_timestamp, safe_tool_catalog,
+    provider_status as nse_mcp_provider_status,
+)
 from rovexquant.market_data.upstox_credentials import (
     UpstoxCredentialError, store_upstox_analytics_token, upstox_analytics_status,
 )
@@ -546,8 +549,8 @@ async def app_nse_mcp_call(
             "data_mode": mode,
             "expected_delay": None if mode == "END_OF_DAY" else "approximately 1–3 minutes",
             "received_at": datetime.now(timezone.utc),
-            "source_timestamp": None,
-            "source_timestamp_note": "Use a timestamp included in the returned NSE tool payload; retrieval time is not a market timestamp.",
+            "source_timestamp": extract_source_timestamp(result),
+            "source_timestamp_note": "Only an explicitly supplied source timestamp is reported; retrieval time is not a market timestamp.",
             "result": result,
             "retention": "Response is returned on demand and is not persisted by this endpoint.",
             "disclaimer": "Informational and educational research only; not for trading, redistribution, commercial use, or AI/ML training.",
