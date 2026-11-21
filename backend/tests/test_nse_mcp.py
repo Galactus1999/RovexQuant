@@ -130,3 +130,26 @@ def test_extract_source_timestamp_only_uses_explicit_source_fields():
         "structured_content": {"meta": {"source_timestamp": "2026-11-22T10:15:00+05:30"}}
     }) == "2026-11-22T10:15:00+05:30"
     assert extract_source_timestamp({"structured_content": {"retrieved_at": "now"}}) is None
+
+
+
+def test_invalid_json_initialization_response_fails_closed():
+    def handler(_request):
+        return httpx.Response(200, headers={"content-type": "application/json"}, text="not-json")
+    async def run():
+        async with NseMcpClient("bhavcopy", transport=httpx.MockTransport(handler)):
+            pass
+    with pytest.raises(NseMcpError, match="invalid JSON-RPC"):
+        asyncio.run(run())
+
+
+def test_http_rate_limit_is_retryable():
+    def handler(_request):
+        return httpx.Response(429, json={"message": "rate limited"})
+    async def run():
+        async with NseMcpClient("cmmkt", transport=httpx.MockTransport(handler)):
+            pass
+    with pytest.raises(NseMcpError) as error:
+        asyncio.run(run())
+    assert error.value.retryable is True
+    assert "rate limited" not in str(error.value)
