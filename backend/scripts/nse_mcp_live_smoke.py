@@ -1,8 +1,8 @@
 """Optional live validation for official NSE MCP read-only research tools.
 
 Discovers the live catalogue, prints tool descriptions and JSON input schemas,
-then invokes one explicitly allowlisted, zero-required-argument status/market
-summary tool per source. It reports response shape and explicit feed timestamps
+then invokes explicitly allowlisted read-only tools with schema-valid arguments.
+It reports response shape and explicit feed timestamps
 without persisting or dumping raw market data.
 """
 import asyncio
@@ -17,9 +17,23 @@ from rovexquant.market_data.nse_mcp import (
 
 # Explicitly allowlisted read-only data/status tools. Never select arbitrary tools.
 CANDIDATES = {
-    "bhavcopy": ("get_market_mood", "get_market_breadth", "get_index_snapshot"),
+    "bhavcopy": ("get_market_breadth", "get_market_mood", "get_index_snapshot"),
     "cmmkt": ("cm_get_data_status", "cm_get_allstocks_status", "cm_get_live_indices"),
 }
+
+# Only fixed, low-impact arguments for explicitly allowlisted read-only tools.
+# The Bhavcopy tools require an as-of date; use today's ISO date and let NSE
+# return its documented nearest available trading day when the market is shut.
+def _safe_arguments(server: str, tool_name: str) -> dict[str, Any] | None:
+    if server == "bhavcopy" and tool_name in {"get_market_breadth", "get_market_mood"}:
+        from datetime import date
+        return {"date": date.today().isoformat()}
+    if server == "bhavcopy" and tool_name == "get_index_snapshot":
+        from datetime import date
+        return {"date": date.today().isoformat(), "filter": "Nifty 50"}
+    if server == "cmmkt" and tool_name in {"cm_get_data_status", "cm_get_allstocks_status", "cm_get_live_indices"}:
+        return {}
+    return None
 
 
 def _required_fields(tool: dict[str, Any]) -> list[str]:
@@ -73,28 +87,32 @@ async def check(server: str) -> None:
             }, sort_keys=True))
 
         by_name = {tool.get("name"): tool for tool in raw_tools}
-        selected = next(
-            (
-                by_name[name]
-                for name in CANDIDATES[server]
-                if name in by_name
-                and name in {item["name"] for item in eligible}
-                and not _required_fields(by_name[name])
-            ),
-            None,
-        )
-        if selected is None:
+        eligible_names = {item["name"] for item in eligible}
+        selected = None
+        arguments = None
+        for name in CANDIDATES[server]:
+            if name not in by_name or name not in eligible_names:
+                continue
+            candidate_arguments = _safe_arguments(server, name)
+            if candidate_arguments is None:
+                continue
+            required = set(_required_fields(by_name[name]))
+            if required.issubset(candidate_arguments):
+                selected = by_name[name]
+                arguments = candidate_arguments
+                break
+        if selected is None or arguments is None:
             required_candidates = {
                 name: _required_fields(by_name[name])
                 for name in CANDIDATES[server]
                 if name in by_name
             }
             raise RuntimeError(
-                f"No allowlisted zero-required-argument tool available for {server}; "
+                f"No allowlisted tool has supported safe arguments for {server}; "
                 f"candidate required fields: {required_candidates}"
             )
 
-        result = await client.call_tool(selected["name"], {})
+        result = await client.call_tool(selected["name"], arguments)
         structured = result.get("structured_content")
         content = result.get("content")
         timestamp = extract_source_timestamp(result)
@@ -102,6 +120,7 @@ async def check(server: str) -> None:
             "validation": "tool_call_completed",
             "server": server,
             "tool": selected["name"],
+            "argument_names": sorted(arguments),
             "data_mode": "END_OF_DAY" if server == "bhavcopy" else "DELAYED",
             "source_timestamp": timestamp,
             "source_timestamp_status": "explicit_feed_timestamp" if timestamp is not None else "not_supplied",
