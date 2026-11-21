@@ -53,7 +53,7 @@ def test_upstox_auth_failure_is_not_retryable():
 
 def test_dhan_quote_adapter_maps_security_ids_and_marks_missing_timestamp():
     def handler(request):
-        assert request.url.path == "/marketfeed/quote"
+        assert request.url.path == "/v2/marketfeed/quote"
         assert request.headers["access-token"] == "dhan-secret"
         assert json.loads(request.content)["IDX_I"] == [25]
         return httpx.Response(200, json={"status": "success", "data": {
