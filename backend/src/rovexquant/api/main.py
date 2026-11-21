@@ -1,6 +1,7 @@
 from dataclasses import asdict
 import asyncio
 from datetime import date, datetime, timezone
+import json
 import hmac
 import os
 from typing import Any, Literal
@@ -497,7 +498,7 @@ class NseMcpToolCallRequest(BaseModel):
 
     @model_validator(mode="after")
     def bound_arguments(self):
-        if len(str(self.arguments).encode("utf-8")) > 32 * 1024:
+        if len(json.dumps(self.arguments, ensure_ascii=True, separators=(",", ":")).encode("utf-8")) > 32 * 1024:
             raise ValueError("NSE MCP arguments must not exceed 32 KB")
         return self
 
