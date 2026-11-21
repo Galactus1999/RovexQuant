@@ -1,7 +1,11 @@
 from dataclasses import asdict
 from datetime import datetime, timezone
-from fastapi import FastAPI, Header, HTTPException
+import hmac
+import os
+
+from fastapi import FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel, Field, model_validator
+
 from rovexquant.ai.gateway import GatewayError, authorize_gateway, complete_chat, configured_providers
 from rovexquant.backtesting.engine import BacktestBar, BacktestConfig, run_long_only_backtest
 from rovexquant.indicators.momentum import rsi
@@ -11,9 +15,21 @@ from rovexquant.market_data.providers import QuoteInstrument
 from rovexquant.market_data.service import (
     MarketGatewayError, authorize_market_gateway, fetch_quotes, provider_status,
 )
+from rovexquant.market_data.upstox_oauth import (
+    UpstoxOAuthError, build_authorization_url, exchange_authorization_code,
+    upstox_connection_status,
+)
 from rovexquant.strategies.registry import default_registry
 
-app = FastAPI(title="Quant API", version="0.3.0", description="Evidence-based market research. No order execution.")
+app = FastAPI(title="Quant API", version="0.4.0", description="Evidence-based market research. No order execution.")
+
+
+def authorize_quant_admin(supplied_key: str | None) -> None:
+    expected = os.getenv("QUANT_ADMIN_GATEWAY_TOKEN", "").strip()
+    if not expected:
+        raise UpstoxOAuthError("Quant admin endpoints are disabled until configured", 503)
+    if not supplied_key or not hmac.compare_digest(expected, supplied_key):
+        raise UpstoxOAuthError("Invalid Quant admin credential", 401)
 
 
 class MarketInstrumentInput(BaseModel):
@@ -25,9 +41,7 @@ class MarketInstrumentInput(BaseModel):
 
 class MarketQuotesRequest(BaseModel):
     instruments: list[MarketInstrumentInput] = Field(min_length=1, max_length=500)
-    provider_order: list[str] = Field(
-        default_factory=lambda: ["upstox", "dhan"], min_length=1, max_length=2
-    )
+    provider_order: list[str] = Field(default_factory=lambda: ["upstox", "dhan"], min_length=1, max_length=2)
 
     @model_validator(mode="after")
     def unique_symbols(self):
@@ -38,6 +52,7 @@ class MarketQuotesRequest(BaseModel):
             raise ValueError("Provider order must not contain duplicates")
         return self
 
+
 class IndicatorRequest(BaseModel):
     close: list[float] = Field(min_length=1)
     high: list[float] | None = None
@@ -46,12 +61,14 @@ class IndicatorRequest(BaseModel):
     atr_period: int = Field(default=14, ge=2, le=500)
     adx_period: int = Field(default=14, ge=2, le=500)
 
+
 class BacktestBarInput(BaseModel):
     timestamp: datetime
     open: float = Field(gt=0)
     high: float = Field(gt=0)
     low: float = Field(gt=0)
     close: float = Field(gt=0)
+
 
 class BacktestRequest(BaseModel):
     bars: list[BacktestBarInput] = Field(min_length=2, max_length=100000)
@@ -63,9 +80,11 @@ class BacktestRequest(BaseModel):
     commission_bps: float = Field(default=5, ge=0)
     slippage_bps: float = Field(default=5, ge=0)
 
+
 class AIMessage(BaseModel):
     role: str
     content: str = Field(min_length=1, max_length=12000)
+
 
 class AIChatRequest(BaseModel):
     provider_id: str
@@ -75,6 +94,40 @@ class AIChatRequest(BaseModel):
     fallback_providers: list[str] = Field(default_factory=list, max_length=3)
     max_tokens: int = Field(default=1200, ge=1, le=4096)
     temperature: float = Field(default=0.2, ge=0, le=2)
+
+
+@app.get("/api/v1/integrations/upstox/authorize")
+def upstox_authorize(x_quant_admin_key: str | None = Header(default=None)):
+    try:
+        authorize_quant_admin(x_quant_admin_key)
+        return {"authorization_url": build_authorization_url(), "expires_in_seconds": 600}
+    except UpstoxOAuthError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+@app.get("/api/v1/integrations/upstox/callback")
+async def upstox_callback(
+    code: str | None = Query(default=None, max_length=2048),
+    state: str = Query(min_length=1, max_length=2048),
+    error: str | None = Query(default=None, max_length=200),
+):
+    if error:
+        raise HTTPException(status_code=400, detail="Upstox authorization was declined; restart login")
+    try:
+        await exchange_authorization_code(code or "", state)
+        return {"status": "connected", "provider": "upstox",
+                "message": "Upstox token stored encrypted on the Quant backend"}
+    except UpstoxOAuthError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+@app.get("/api/v1/integrations/upstox/status")
+def upstox_status(x_quant_admin_key: str | None = Header(default=None)):
+    try:
+        authorize_quant_admin(x_quant_admin_key)
+        return upstox_connection_status()
+    except UpstoxOAuthError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
 
 @app.get("/api/v1/market/providers")
@@ -102,18 +155,14 @@ async def market_quotes(
             )
             for item in request.instruments
         ]
-        provider, quotes, fallback_used = await fetch_quotes(
-            instruments, request.provider_order
-        )
+        provider, quotes, fallback_used = await fetch_quotes(instruments, request.provider_order)
         quoted_symbols = {item.symbol for item in quotes}
         return {
             "provider": provider,
             "fallback_used": fallback_used,
             "received_at": datetime.now(timezone.utc),
             "complete": len(quoted_symbols) == len(instruments),
-            "missing_symbols": [
-                item.symbol for item in instruments if item.symbol not in quoted_symbols
-            ],
+            "missing_symbols": [item.symbol for item in instruments if item.symbol not in quoted_symbols],
             "quotes": [asdict(item) for item in quotes],
         }
     except MarketGatewayError as error:
@@ -124,6 +173,7 @@ async def market_quotes(
 def health():
     return {"status": "ok", "application": "Quant", "mode": "research-only"}
 
+
 @app.get("/api/v1/strategies")
 def strategies():
     return [
@@ -133,6 +183,7 @@ def strategies():
         for item in default_registry().all()
     ]
 
+
 @app.get("/api/v1/ai/providers")
 def ai_providers(x_quant_ai_gateway_key: str | None = Header(default=None)):
     try:
@@ -140,6 +191,7 @@ def ai_providers(x_quant_ai_gateway_key: str | None = Header(default=None)):
         return {"providers": configured_providers()}
     except GatewayError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
 
 @app.post("/api/v1/ai/chat")
 async def ai_chat(request: AIChatRequest, x_quant_ai_gateway_key: str | None = Header(default=None)):
@@ -157,6 +209,7 @@ async def ai_chat(request: AIChatRequest, x_quant_ai_gateway_key: str | None = H
     except GatewayError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
+
 @app.post("/api/v1/research/indicators")
 def calculate_indicators(request: IndicatorRequest):
     try:
@@ -171,6 +224,7 @@ def calculate_indicators(request: IndicatorRequest):
         return result
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+
 
 @app.post("/api/v1/research/backtest")
 def backtest(request: BacktestRequest):
