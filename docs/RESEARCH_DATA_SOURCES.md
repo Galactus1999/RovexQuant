@@ -38,7 +38,7 @@ TejHQ's data terms (updated 2026-11-08) say its free data is for one individual'
 - https://tejhq.dev/data-terms
 - https://tejhq.dev/docs
 
-## 2. NSE MCP (manual research assistant use)
+## 2. NSE MCP (private educational/research use)
 
 NSE's official MCP endpoints currently documented are:
 
@@ -47,7 +47,15 @@ NSE's official MCP endpoints currently documented are:
 
 NSE describes the CM market data as approximately 1–3 minutes delayed, not tick-by-tick or order-book data. The Bhavcopy service offers up to five years of EOD history. NSE's MCP terms say informational/educational use only and exclude commercial exploitation, commercial deployment, and using the data to train/fine-tune AI systems.
 
-For that reason, Quant does not silently ingest NSE MCP into its backend or label it as a licensed live feed. Use it manually in a compatible research assistant for informational questions, subject to NSE's current terms:
+For this repository's current single-user, non-commercial educational/research use, Quant may integrate the official NSE MCP servers as an on-demand research source, subject to NSE's current terms. The integration must:
+- make requests only for the authenticated owner's research session; do not expose an unauthenticated public data proxy or multi-user data service;
+- use data only to answer informational/educational questions and perform transparent, on-demand descriptive calculations;
+- never use NSE MCP data to train, fine-tune, evaluate or improve Ben, another AI model, ML model or algorithm;
+- never redistribute raw NSE data, offer a public data feed, place/route orders, or represent the delayed stream as exchange-authorized live trading data;
+- label CM market responses as `DELAYED` with the provider's observed timestamp/freshness where supplied, and Bhavcopy as `END_OF_DAY`;
+- avoid building a persistent raw-data archive from MCP responses unless NSE confirms the permitted retention terms in writing.
+
+This is a private non-commercial research configuration, not a blanket licence. Recheck the official terms before changing the deployment to multi-user/public access, monetizing it, sharing data or using it for any commercial purpose:
 - https://www.nseindia.com/nse-mcp
 
 ## 3. Official NSE/BSE reports
@@ -72,7 +80,7 @@ For all research results retain:
 - adjusted/unadjusted status and corporate-action provenance;
 - missing rows, gaps, validation failures and stale-data status.
 
-Do not mix adjusted and unadjusted OHLC series in one backtest. Delivery history is a separate dataset and must be joined by exchange, symbol/ISIN and trading date. A missing provider timestamp is never evidence of a live quote. NSE MCP is not a substitute for a licensed live trading feed.
+Do not mix adjusted and unadjusted OHLC series in one backtest. Delivery history is a separate dataset and must be joined by exchange, symbol/ISIN and trading date. A missing provider timestamp is never evidence of a live quote. NSE MCP is not a substitute for a licensed live trading feed. Do not use NSE MCP data for AI/ML training, fine-tuning, model evaluation or algorithm training.
 
 ## References
 
