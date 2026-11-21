@@ -3,6 +3,7 @@ from rovexquant.strategies.breakout import DonchianBreakout
 from rovexquant.strategies.intraday import OpeningRangeBreakout, SessionVwapCross
 from rovexquant.strategies.momentum import RsiRegime
 from rovexquant.strategies.trend import EmaTrend, SmaCrossover
+from rovexquant.strategies.volume_breakout import VolumeConfirmedBreakout
 
 class StrategyRegistry:
     def __init__(self):
@@ -23,7 +24,7 @@ class StrategyRegistry:
 def default_registry() -> StrategyRegistry:
     registry = StrategyRegistry()
     strategies = (
-        SmaCrossover(), EmaTrend(), RsiRegime(), DonchianBreakout(),
+        SmaCrossover(), EmaTrend(), RsiRegime(), DonchianBreakout(), VolumeConfirmedBreakout(),
         OpeningRangeBreakout(), SessionVwapCross(),
     )
     for strategy in strategies:
