@@ -55,7 +55,16 @@ For this repository's current single-user, non-commercial educational/research u
 - label CM market responses as `DELAYED` with the provider's observed timestamp/freshness where supplied, and Bhavcopy as `END_OF_DAY`;
 - avoid building a persistent raw-data archive from MCP responses unless NSE confirms the permitted retention terms in writing.
 
-This is a private non-commercial research configuration, not a blanket licence. Recheck the official terms before changing the deployment to multi-user/public access, monetizing it, sharing data or using it for any commercial purpose:
+Quant implements this as an authenticated, on-demand research connector. The backend performs MCP initialize, tools/list and tools/call over the two official Streamable HTTP endpoints. Tool names and JSON input schemas are discovered from NSE at request time; Quant does not assume tool names or scrape the NSE website. Tools with write/trade/order-like names or an explicit `readOnlyHint: false` are blocked. The tool catalogue is not treated as a market-data entitlement, and remote tool results are not cached or persisted by these routes.
+
+Authenticated app routes:
+- `GET /api/v1/app/research/nse-mcp/providers`
+- `GET /api/v1/app/research/nse-mcp/tools?server=bhavcopy|cmmkt|both`
+- `POST /api/v1/app/research/nse-mcp/call` with `{"server":"bhavcopy|cmmkt","tool":"<discovered-tool-name>","arguments":{...}}`
+
+The app labels Bhavcopy calls `END_OF_DAY` and CM market calls `DELAYED`. Retrieval time is not represented as the exchange's source timestamp; use only timestamps present in the NSE tool response. This is not an automated live scanner, trading signal engine, order router or AI training source. A manually requested result can be inspected and used for transparent educational calculations, but do not silently feed this data into background strategy execution or automated trading-decision pipelines.
+
+This is a private non-commercial research configuration, not a blanket licence or legal determination. Recheck the official terms before changing deployment scope, storing/redistributing data, adding users, monetizing it or using it for any commercial purpose:
 - https://www.nseindia.com/nse-mcp
 
 ## 3. Official NSE/BSE reports
