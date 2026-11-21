@@ -14,3 +14,9 @@ References:
 - SEBI retail algorithmic trading circular (4 February 2025): https://www.sebi.gov.in/legal/circulars/feb-2025/safer-participation-of-retail-investors-in-algorithmic-trading_91614.html
 
 This is an engineering control, not legal advice. Recheck official circulars and provider agreements before release.
+
+## TejHQ personal EOD research adapter
+
+The TejHQ adapter is restricted by the provider's published terms to one individual's personal research. Do not expose its raw responses or derived data through a public/multi-user Quant product or use it inside a business without the required TejHQ plan and applicable exchange rights. Keyless EOD OHLCV/snapshot/actions have a documented 120 requests/minute per-IP limit; the free key has 1,000 requests/day and 300/minute. Store `TEJHQ_API_KEY` server-side only. The adjusted endpoint returns raw OHLC plus `adj_close` and `adj_factor_cumulative`; do not mistake raw OHLC for adjusted OHLC. Adjusted open/high/low are calculated by multiplying raw values by the factor; volume remains as traded. Re-fetch adjusted history after corporate-action ex dates.
+
+NSE MCP is for informational/educational use under NSE's published terms. Do not wire its feed into a public Quant product, use it for commercial deployment, or use it for AI training/fine-tuning. The approximate 1–3-minute delayed stream is not tick data and is not a licensed trading feed.
