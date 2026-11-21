@@ -195,3 +195,50 @@ def test_sse_ignores_unrelated_notification_and_matches_request_id():
             return await client.list_tools()
 
     assert asyncio.run(run())[0]["name"] == "get_quote"
+
+
+
+def test_tool_catalog_paginates_and_carries_session():
+    requests = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        requests.append((body, dict(request.headers)))
+        if body["method"] == "initialize":
+            return _response(request, {
+                "jsonrpc": "2.0", "id": body["id"],
+                "result": {"protocolVersion": "2025-03-26", "capabilities": {}, "serverInfo": {}},
+            })
+        if body["method"] == "notifications/initialized":
+            return httpx.Response(202)
+        if body["method"] == "tools/list":
+            if body.get("params", {}).get("cursor") == "page-2":
+                tools = [{"name": "get_second"}]
+                result = {"tools": tools}
+            else:
+                result = {"tools": [{"name": "get_first"}], "nextCursor": "page-2"}
+            return _response(request, {"jsonrpc": "2.0", "id": body["id"], "result": result})
+        raise AssertionError(body["method"])
+
+    async def run():
+        async with NseMcpClient("bhavcopy", transport=httpx.MockTransport(handler)) as client:
+            return await client.list_tools()
+
+    tools = asyncio.run(run())
+    assert [tool["name"] for tool in tools] == ["get_first", "get_second"]
+    assert requests[-1][0]["params"]["cursor"] == "page-2"
+    assert requests[-1][1].get("mcp-session-id") == "sess-1"
+
+
+def test_http_timeout_is_retryable():
+    def handler(_request):
+        raise httpx.ReadTimeout("upstream timeout")
+
+    async def run():
+        async with NseMcpClient("cmmkt", transport=httpx.MockTransport(handler)):
+            pass
+
+    with pytest.raises(NseMcpError) as error:
+        asyncio.run(run())
+    assert error.value.retryable is True
+    assert "timeout" in str(error.value).lower()
