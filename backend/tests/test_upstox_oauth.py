@@ -1,10 +1,9 @@
-import os
-
 from cryptography.fernet import Fernet
 import pytest
 from fastapi.testclient import TestClient
 
 from rovexquant.market_data import upstox_credentials as vault
+from rovexquant.api.main import app
 
 
 def configure(monkeypatch, tmp_path):
@@ -47,7 +46,7 @@ def test_invalid_or_missing_encryption_key_fails_closed(monkeypatch, tmp_path):
 def test_admin_endpoint_stores_token_without_returning_it(monkeypatch, tmp_path):
     configure(monkeypatch, tmp_path)
     monkeypatch.setenv("QUANT_ADMIN_GATEWAY_TOKEN", "server-admin-secret")
-    client = TestClient(__import__("rovexquant.api.main", fromlist=["app"]).app)
+    client = TestClient(app)
     token = "sensitive-analytics-token-value-123456"
     denied = client.post(
         "/api/v1/integrations/upstox/analytics-token", json={"token": token}
