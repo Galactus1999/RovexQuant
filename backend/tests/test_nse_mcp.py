@@ -185,8 +185,8 @@ def test_sse_ignores_unrelated_notification_and_matches_request_id():
         if body["method"] == "tools/list":
             notification = {"jsonrpc": "2.0", "method": "notifications/progress", "params": {"progress": 1}}
             result = {"jsonrpc": "2.0", "id": body["id"], "result": {"tools": [{"name": "get_quote"}]}}
-            stream = "event: message\\ndata: " + json.dumps(notification) + "\\n\\n"
-            stream += "event: message\\ndata: " + json.dumps(result) + "\\n\\n"
+            stream = "event: message\ndata: " + json.dumps(notification) + "\n\n"
+            stream += "event: message\ndata: " + json.dumps(result) + "\n\n"
             return httpx.Response(200, headers={"content-type": "text/event-stream"}, text=stream)
         raise AssertionError(body["method"])
 
