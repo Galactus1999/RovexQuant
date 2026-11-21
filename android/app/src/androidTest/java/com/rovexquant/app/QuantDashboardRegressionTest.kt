@@ -14,8 +14,8 @@ class QuantDashboardRegressionTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun dashboardRendersProductIdentityAndCoreSections() {
-        composeRule.onNodeWithText("RovexQuant").assertIsDisplayed()
+    fun dashboardRendersQuantIdentityAndCoreSections() {
+        composeRule.onNodeWithText("Quant").assertIsDisplayed()
         composeRule.onNodeWithText("Quantitative research • Paper trading • Signals only").assertIsDisplayed()
         composeRule.onNodeWithText("Data: Local / not connected").assertIsDisplayed()
         composeRule.onNodeWithText("Broker connections: Not configured").assertIsDisplayed()
