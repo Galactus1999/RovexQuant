@@ -136,6 +136,10 @@ def run_long_only_backtest(
                 entry_fee = entry_notional * commission
                 stop_price = fill - stop_distance
                 cash -= entry_notional + entry_fee
+                # Entry occurs at the open; a later low through the stop must be counted.
+                if bar.low <= stop_price:
+                    close_position(min(bar.open, stop_price), bar.timestamp, "STOP")
+                    stopped = True
 
         equity_curve.append(cash + quantity * bar.close)
 
