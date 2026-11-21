@@ -41,3 +41,9 @@ def test_donchian_excludes_current_bar_from_channel():
 def test_indicator_rejects_misaligned_inputs():
     with pytest.raises(ValueError):
         atr([10, 11], [9], [9.5, 10], period=1)
+
+def test_opening_range_emits_only_first_breakout_crossing():
+    signals = opening_range_breakout(
+        [10, 11, 12, 13, 14], [9, 10, 10, 11, 12], [9.5, 10.5, 10.5, 12.5, 13.5], ["A"] * 5, 2
+    )
+    assert signals == ["NO_SIGNAL", "NO_SIGNAL", "NO_SIGNAL", "BULLISH_BREAKOUT", "NO_SIGNAL"]
