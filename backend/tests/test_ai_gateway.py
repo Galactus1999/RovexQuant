@@ -80,6 +80,7 @@ def test_chat_completion_uses_server_credential_and_returns_normalized_result(cl
 
 def test_provider_fallback_on_rate_limit_does_not_rotate_same_provider_keys(client, monkeypatch):
     monkeypatch.setenv("GROQ_API_KEYS_JSON", json.dumps({"primary": "groq-one", "secondary": "groq-two"}))
+    monkeypatch.setenv("DEEPSEEK_FALLBACK_MODEL", "deepseek-flash")
     FakeAsyncClient.responses = [
         FakeResponse(429, {"error": "rate limited"}),
         FakeResponse(200, {"choices": [{"message": {"content": "Fallback response"}}]}),
