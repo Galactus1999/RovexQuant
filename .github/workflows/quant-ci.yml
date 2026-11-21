@@ -11,6 +11,11 @@ on:
         required: false
         default: false
         type: boolean
+      run_nse_live_smoke:
+        description: 'Connect to official NSE MCP servers and list available tools'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
