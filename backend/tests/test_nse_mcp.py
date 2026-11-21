@@ -56,6 +56,8 @@ def test_streamable_http_initializes_lists_and_calls_read_only_tool():
             return tools, result
     tools, result = asyncio.run(run())
     assert tools[0]["name"] == "get_bhavcopy"
+    assert "mcp-protocol-version" not in seen[0][1]
+    assert seen[2][1]["mcp-protocol-version"] == "2025-03-26"
     assert result["structured_content"]["rows"][0]["close"] == 10
     assert any(headers.get("mcp-session-id") == "sess-1" for _, headers in seen[2:])
     assert seen[-1][0]["method"] == "tools/call"
