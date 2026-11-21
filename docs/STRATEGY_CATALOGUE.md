@@ -5,9 +5,9 @@ Strategies are isolated, versioned research hypotheses—not guaranteed edges or
 ## Implemented research prototypes
 - Trend: SMA crossover, EMA alignment.
 - Momentum: RSI regime context (not a standalone entry).
-- Breakout: prior-window Donchian breakout; relative-volume-confirmed Donchian breakout.
+- Breakout: prior-window Donchian breakout; relative-volume-confirmed Donchian breakout; Bollinger re-entry.
 - Intraday: session-reset HLC3 VWAP cross; opening-range breakout after configured opening bars.
-- Indicators: SMA, EMA, RSI, MACD, ATR, ADX, session VWAP, OBV and prior-window relative volume.
+- Indicators: SMA, EMA, RSI, MACD, ATR, ADX, session VWAP, OBV, prior-window relative volume and Bollinger Bands.
 
 ## Planned research candidates
 - Trend: Supertrend, Ichimoku, multi-timeframe ADX.
