@@ -6,11 +6,11 @@ EOD data as EOD and never upgrades it to live/delayed quote semantics.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date
 import math
 import os
 import re
-from typing import Any, Sequence
+from typing import Any
 
 import httpx
 
@@ -99,14 +99,16 @@ def _normalize_bars(payload: Any) -> list[TejHqDailyBar]:
             raise TejHqError("TejHQ returned invalid volume", 502)
         if low > min(opening, close) or high < max(opening, close) or low > high:
             raise TejHqError("TejHQ returned inconsistent OHLC values", 502)
+        trades_value = _finite_number(row["trades"], "trades") if row.get("trades") is not None else None
+        if trades_value is not None and (trades_value < 0 or not trades_value.is_integer()):
+            raise TejHqError("TejHQ returned invalid trade count", 502)
         normalized.append(TejHqDailyBar(
             date=day, open=opening, high=high, low=low, close=close,
             volume=int(volume_value),
             last=_optional_number(row.get("last"), "last"),
             previous_close=_optional_number(row.get("prev_close"), "prev_close"),
             turnover=_optional_number(row.get("turnover"), "turnover"),
-            trades=int(_finite_number(row["trades"], "trades"))
-            if row.get("trades") is not None else None,
+            trades=int(trades_value) if trades_value is not None else None,
         ))
     normalized.sort(key=lambda item: item.date)
     return normalized
