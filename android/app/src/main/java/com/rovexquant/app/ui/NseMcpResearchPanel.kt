@@ -61,7 +61,7 @@ fun NseMcpResearchPanel(session: QuantSession) {
                 val selected = loaded.firstOrNull { it.server == selectedServer }?.tools?.firstOrNull { it.readOnly }
                 selectedTool = selected
                 arguments = "{}"
-                if (selected == null) error = "NSE did not publish any eligible read-only tools for this source."
+                if (selected == null) error = loaded.firstOrNull { it.server == selectedServer }?.failure\n                    ?: "NSE did not publish any eligible read-only tools for this source."
             } catch (failure: Exception) {
                 error = failure.message ?: "Could not discover NSE research tools."
             } finally {
