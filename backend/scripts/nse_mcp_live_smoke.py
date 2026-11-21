@@ -60,6 +60,20 @@ def _summarize(value: Any) -> dict[str, Any]:
         summary = {"type": "array", "count": len(value)}
         if value and isinstance(value[0], dict):
             summary["first_item_keys"] = sorted(str(k) for k in value[0].keys())[:80]
+            # MCP text blocks frequently wrap JSON payloads. Decode locally and
+            # report only schema/shape metadata, never actual market values.
+            text_blocks = [
+                item.get("text") for item in value
+                if isinstance(item, dict) and isinstance(item.get("text"), str)
+            ]
+            if text_blocks:
+                nested_shapes = []
+                for block in text_blocks[:3]:
+                    try:
+                        nested_shapes.append(_summarize(json.loads(block)))
+                    except ValueError:
+                        nested_shapes.append({"type": "text", "characters": len(block)})
+                summary["text_payload_shapes"] = nested_shapes
         return summary
     if isinstance(value, str):
         try:
