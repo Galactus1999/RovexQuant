@@ -75,6 +75,9 @@ object QuantApi {
         masterHttp.newCall(request).execute().use { response ->
             val text = response.body?.string().orEmpty()
             if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            require(text.toByteArray(Charsets.UTF_8).size <= 2 * 1024 * 1024) {
+                "NSE tool catalogue exceeds the 2 MB mobile safety limit."
+            }
             val responseJson = JSONObject(text)
             val catalog = responseJson.optJSONObject("catalog")
                 ?: throw IllegalStateException("NSE MCP returned no tool catalogue.")
