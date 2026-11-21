@@ -15,7 +15,7 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 fun ResearchLabScreen() {
-    var capital by rememberSaveable { mutableStateOf("100000") }
+    var capital by rememberSaveable { mutableStateOf("") }
     var risk by rememberSaveable { mutableStateOf("1.0") }
     var preview by remember { mutableStateOf("Enter assumptions to preview your research configuration.") }
     LazyColumn(contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -24,7 +24,7 @@ fun ResearchLabScreen() {
             TerminalCard {
                 Eyebrow("Backtest assumptions")
                 Spacer(Modifier.height(10.dp))
-                OutlinedTextField(value = capital, onValueChange = { capital = it.filter(Char::isDigit).take(12) }, label = { Text("Starting capital · INR") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = capital, onValueChange = { capital = it.filter(Char::isDigit).take(12) }, label = { Text("Starting capital · INR") }, placeholder = { Text("Enter amount in INR") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(9.dp))
                 OutlinedTextField(value = risk, onValueChange = { risk = it.filter { char -> char.isDigit() || char == '.' }.take(5) }, label = { Text("Risk per trade · %") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(12.dp))
