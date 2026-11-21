@@ -168,3 +168,29 @@ def test_unsupported_protocol_version_fails_closed():
             pass
     with pytest.raises(NseMcpError, match="unsupported protocol"):
         asyncio.run(run())
+
+
+
+def test_sse_ignores_unrelated_notification_and_matches_request_id():
+    def handler(request):
+        body = json.loads(request.content)
+        if body["method"] == "initialize":
+            return _response(request, {
+                "jsonrpc": "2.0", "id": body["id"],
+                "result": {"protocolVersion": "2025-03-26", "capabilities": {}, "serverInfo": {}},
+            })
+        if body["method"] == "notifications/initialized":
+            return httpx.Response(202)
+        if body["method"] == "tools/list":
+            notification = {"jsonrpc": "2.0", "method": "notifications/progress", "params": {"progress": 1}}
+            result = {"jsonrpc": "2.0", "id": body["id"], "result": {"tools": [{"name": "get_quote"}]}}
+            stream = "event: message\\ndata: " + json.dumps(notification) + "\\n\\n"
+            stream += "event: message\\ndata: " + json.dumps(result) + "\\n\\n"
+            return httpx.Response(200, headers={"content-type": "text/event-stream"}, text=stream)
+        raise AssertionError(body["method"])
+
+    async def run():
+        async with NseMcpClient("bhavcopy", transport=httpx.MockTransport(handler)) as client:
+            return await client.list_tools()
+
+    assert asyncio.run(run())[0]["name"] == "get_quote"
