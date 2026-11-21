@@ -118,3 +118,13 @@ def test_safe_catalog_hides_mutating_tools():
     ])
     assert catalog[0]["read_only"] is True
     assert catalog[1]["read_only"] is False
+
+
+
+def test_extract_source_timestamp_only_uses_explicit_source_fields():
+    from rovexquant.market_data.nse_mcp import extract_source_timestamp
+
+    assert extract_source_timestamp({
+        "structured_content": {"meta": {"source_timestamp": "2026-11-22T10:15:00+05:30"}}
+    }) == "2026-11-22T10:15:00+05:30"
+    assert extract_source_timestamp({"structured_content": {"retrieved_at": "now"}}) is None
