@@ -50,9 +50,13 @@ def test_adjusted_history_requires_free_key_and_sends_bearer_header():
         return httpx.Response(200, json=sample_payload())
 
     keyed = TejHqEodProvider("free-key", transport=httpx.MockTransport(handler))
-    assert len(asyncio.run(keyed.get_ohlcv(
-        "NSE", "RELIANCE", date(2025, 1, 1), date(2025, 1, 2), adjusted=True
-    ))) == 1
+    adjusted_bars = asyncio.run(keyed.get_ohlcv(
+        "NSE", "RELIANCE", date(2025, 5, 28), date(2025, 5, 28), adjusted=True
+    ))
+    assert len(adjusted_bars) == 1
+    assert adjusted_bars[0].close == 1412.9
+    assert adjusted_bars[0].adjusted_close == 1400.8
+    assert adjusted_bars[0].adjustment_factor == 0.991438
 
 
 def test_delivery_requires_key_but_snapshot_and_actions_are_keyless():
@@ -127,3 +131,13 @@ def test_safe_status_never_exposes_free_key():
     assert status["configured"] is True
     assert status["free_key_configured"] is True
     assert "secret-key" not in str(status)
+
+
+def test_rejects_rows_outside_requested_history_window():
+    provider = TejHqEodProvider(transport=httpx.MockTransport(
+        lambda _request: httpx.Response(200, json=sample_payload())
+    ))
+    with pytest.raises(TejHqError, match="outside the requested date range"):
+        asyncio.run(provider.get_ohlcv(
+            "NSE", "RELIANCE", date(2025, 1, 1), date(2025, 1, 2)
+        ))
