@@ -13,6 +13,7 @@ def sample_payload():
         "low": 1410.7, "close": 1412.9, "last": 1412.8,
         "prev_close": 1422.1, "volume": 5944611,
         "turnover": 8411575745.5, "trades": 169185,
+        "adj_factor_cumulative": 0.991438, "adj_close": 1400.8,
     }], "meta": {"exchange": "NSE", "symbol": "RELIANCE", "count": 1}}
 
 
@@ -39,7 +40,7 @@ def test_adjusted_history_requires_free_key_and_sends_bearer_header():
     provider = TejHqEodProvider()
     with pytest.raises(TejHqError, match="optional free API key") as error:
         asyncio.run(provider.get_ohlcv(
-            "NSE", "RELIANCE", date(2025, 1, 1), date(2025, 1, 2), adjusted=True
+            "NSE", "RELIANCE", date(2025, 5, 28), date(2025, 5, 28), adjusted=True
         ))
     assert error.value.status_code == 503
 
