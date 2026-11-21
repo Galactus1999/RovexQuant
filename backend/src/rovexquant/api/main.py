@@ -519,14 +519,21 @@ async def app_nse_mcp_tools(
     try:
         bearer_claims(authorization)
         selected = ["bhavcopy", "cmmkt"] if server == "both" else [server]
-        catalog: dict[str, Any] = {}
-        failures: dict[str, str] = {}
-        for server_name in selected:
+        async def discover(server_name: str) -> tuple[str, list[dict[str, Any]] | None, str | None]:
             try:
                 async with NseMcpClient(server_name) as client:
-                    catalog[server_name] = safe_tool_catalog(await client.list_tools())
+                    return server_name, safe_tool_catalog(await client.list_tools()), None
             except NseMcpError as error:
-                failures[server_name] = str(error)
+                return server_name, None, str(error)
+
+        discoveries = await asyncio.gather(*(discover(server_name) for server_name in selected))
+        catalog: dict[str, Any] = {}
+        failures: dict[str, str] = {}
+        for server_name, tools, failure in discoveries:
+            if tools is not None:
+                catalog[server_name] = tools
+            if failure is not None:
+                failures[server_name] = failure
         if not catalog:
             raise HTTPException(status_code=502, detail={"message": "NSE MCP tool discovery failed", "servers": failures})
         return {
