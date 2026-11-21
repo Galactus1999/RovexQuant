@@ -5,6 +5,7 @@ The mobile client never receives the Upstox access token or client secret.
 from __future__ import annotations
 
 import base64
+from contextlib import contextmanager
 import hashlib
 import hmac
 import json
@@ -13,6 +14,7 @@ import secrets
 import sqlite3
 import time
 from pathlib import Path
+from collections.abc import Iterator
 from urllib.parse import urlencode
 
 import httpx
@@ -42,21 +44,25 @@ def _db_path() -> Path:
     return Path(os.getenv("QUANT_TOKEN_DB_PATH", "./quant-secrets.sqlite3"))
 
 
-def _connect() -> sqlite3.Connection:
+@contextmanager
+def _connect() -> Iterator[sqlite3.Connection]:
     path = _db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(path, timeout=10)
-    connection.execute("PRAGMA journal_mode=WAL")
-    connection.execute(
-        "CREATE TABLE IF NOT EXISTS oauth_nonces "
-        "(nonce TEXT PRIMARY KEY, created_at INTEGER NOT NULL)"
-    )
-    connection.execute(
-        "CREATE TABLE IF NOT EXISTS provider_tokens "
-        "(provider TEXT PRIMARY KEY, encrypted_token BLOB NOT NULL, updated_at INTEGER NOT NULL)"
-    )
-    connection.commit()
-    return connection
+    try:
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS oauth_nonces "
+            "(nonce TEXT PRIMARY KEY, created_at INTEGER NOT NULL)"
+        )
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS provider_tokens "
+            "(provider TEXT PRIMARY KEY, encrypted_token BLOB NOT NULL, updated_at INTEGER NOT NULL)"
+        )
+        connection.commit()
+        yield connection
+    finally:
+        connection.close()
 
 
 def _fernet(key: str) -> Fernet:
