@@ -73,6 +73,7 @@ class NseMcpClient:
         self._request_id = 0
         self._client: httpx.AsyncClient | None = None
         self._initialized = False
+        self._protocol_version = _PROTOCOL_VERSION
 
     async def __aenter__(self) -> "NseMcpClient":
         self._client = httpx.AsyncClient(
@@ -96,7 +97,7 @@ class NseMcpClient:
     async def _post(self, message: dict[str, Any], *, expect_response: bool = True) -> dict[str, Any] | None:
         if self._client is None:
             raise NseMcpError("NSE MCP client is not initialized", 500)
-        headers = {"MCP-Protocol-Version": _PROTOCOL_VERSION}
+        headers = {"MCP-Protocol-Version": self._protocol_version}
         if self._session_id:
             headers["Mcp-Session-Id"] = self._session_id
         try:
@@ -115,8 +116,10 @@ class NseMcpClient:
         session_id = response.headers.get("Mcp-Session-Id")
         if session_id:
             self._session_id = session_id
-        if not expect_response or response.status_code == 202:
+        if not expect_response:
             return None
+        if response.status_code == 202:
+            raise NseMcpError("NSE MCP accepted a request without returning its JSON-RPC response", 502)
         payload = _decode_response(response)
         if payload.get("jsonrpc") != "2.0":
             raise NseMcpError("NSE MCP returned an invalid JSON-RPC version", 502)
@@ -143,6 +146,7 @@ class NseMcpClient:
         negotiated = payload["result"].get("protocolVersion")
         if not isinstance(negotiated, str) or not negotiated:
             raise NseMcpError("NSE MCP did not return a protocol version", 502)
+        self._protocol_version = negotiated
         self._initialized = True
         await self._post({"jsonrpc": "2.0", "method": "notifications/initialized"}, expect_response=False)
 
@@ -204,7 +208,6 @@ class NseMcpClient:
             "tool": name,
             "content": result.get("content", []),
             "structured_content": result.get("structuredContent"),
-            "provider_metadata": result.get("_meta"),
         }
 
 
