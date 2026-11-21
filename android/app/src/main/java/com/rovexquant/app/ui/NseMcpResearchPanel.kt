@@ -24,6 +24,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -33,6 +35,7 @@ import kotlinx.coroutines.withContext
 
 @Composable
 fun NseMcpResearchPanel(session: QuantSession) {
+    val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     var server by remember { mutableStateOf("bhavcopy") }
     var catalogs by remember { mutableStateOf<List<NseMcpCatalog>>(emptyList()) }
@@ -177,6 +180,9 @@ fun NseMcpResearchPanel(session: QuantSession) {
                         (response.expectedDelay?.let { " · Expected delay: $it" } ?: ""),
                     color = Muted, fontSize = 10.sp, lineHeight = 15.sp
                 )
+                TextButton(onClick = { clipboard.setText(AnnotatedString(response.resultJson)) }) {
+                    Text("Copy full response")
+                }
                 Spacer(Modifier.height(7.dp))
                 Text(response.resultJson.take(16000), color = MaterialTheme.colorScheme.onBackground, fontSize = 9.sp, lineHeight = 13.sp)
                 if (response.resultJson.length > 16000) {
