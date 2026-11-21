@@ -1,0 +1,37 @@
+name: Quant NSE MCP Live Connectivity
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_nse_live_smoke:
+        description: 'Initialize both official NSE MCP servers and list their tools'
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quant-nse-mcp-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quant-nse-mcp-live-smoke:
+    name: Quant Official NSE MCP Live Connectivity
+    if: ${{ inputs.run_nse_live_smoke == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout selected Quant branch
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend
+        working-directory: backend
+        run: python -m pip install .
+      - name: Verify official NSE MCP initialization and tool discovery
+        working-directory: backend
+        run: python scripts/nse_mcp_live_smoke.py
