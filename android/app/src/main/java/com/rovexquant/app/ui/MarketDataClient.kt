@@ -75,9 +75,10 @@ object QuantApi {
         masterHttp.newCall(request).execute().use { response ->
             val text = response.body?.string().orEmpty()
             if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
-            val catalog = JSONObject(text).optJSONObject("catalog")
+            val responseJson = JSONObject(text)
+            val catalog = responseJson.optJSONObject("catalog")
                 ?: throw IllegalStateException("NSE MCP returned no tool catalogue.")
-            return buildList {
+            val discovered = buildList {
                 for (serverName in listOf("bhavcopy", "cmmkt")) {
                     val records = catalog.optJSONArray(serverName) ?: continue
                     val tools = buildList {
@@ -96,6 +97,12 @@ object QuantApi {
                     add(NseMcpCatalog(serverName, tools))
                 }
             }
+            if (server != "both" && discovered.none { it.server == server }) {
+                val failures = responseJson.optJSONObject("failures")
+                throw IllegalStateException(failures?.optString(server)?.takeIf { it.isNotBlank() }
+                    ?: "NSE $server tool discovery returned no catalogue.")
+            }
+            return discovered
         }
     }
 
