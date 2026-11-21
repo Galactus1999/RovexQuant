@@ -89,12 +89,16 @@ jobs:
           test "$ready" = true
           UNAUTH_CODE="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8765/api/v1/app/market/providers)"
           test "$UNAUTH_CODE" = "401"
+          UNAUTH_NSE_CODE="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8765/api/v1/app/research/nse-mcp/tools)"
+          test "$UNAUTH_NSE_CODE" = "401"
           SESSION="$(curl -fsS -X POST http://127.0.0.1:8765/api/v1/auth/session \
             -H 'Content-Type: application/json' \
             --data '{"username":"quant-ci","password":"quant-ci-password"}' \
             | python -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')"
           curl -fsS http://127.0.0.1:8765/api/v1/app/market/providers \
             -H "Authorization: Bearer $SESSION" >/dev/null
+          curl -fsS http://127.0.0.1:8765/api/v1/app/research/nse-mcp/providers \
+            -H "Authorization: Bearer $SESSION" | grep -q '"nse_mcp_bhavcopy"'
           PROVISION="$(curl -fsS -X POST http://127.0.0.1:8765/api/v1/integrations/upstox/analytics-token \
             -H "X-Quant-Admin-Key: $ADMIN_KEY" \
             -H 'Content-Type: application/json' \
