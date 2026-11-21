@@ -4,7 +4,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -78,8 +78,7 @@ fun StrategyScannerScreen() {
                 }
             }
         }
-        items(items.size) { index ->
-            val strategy = items[index]
+        items(items) { strategy ->
             TerminalCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(Modifier.weight(1f)) {
@@ -88,7 +87,7 @@ fun StrategyScannerScreen() {
                         Text(strategy.detail, color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
                     }
                     Spacer(Modifier.width(8.dp))
-                    StatusPill(if (strategy.implemented) "Engine" else "Planned", if (strategy.implemented) Mint else Gold)
+                    StatusPill(if (strategy.implemented) "Backend" else "Planned", if (strategy.implemented) Mint else Gold)
                 }
                 Spacer(Modifier.height(10.dp))
                 Text(strategy.status.uppercase(), color = if (strategy.implemented) Mint else Muted, fontSize = 8.sp, letterSpacing = 1.sp, fontWeight = FontWeight.Bold)
