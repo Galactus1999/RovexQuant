@@ -84,7 +84,7 @@ class NseMcpClient:
         )
         try:
             await self._initialize()
-        except Exception:
+        except BaseException:
             await self._client.aclose()
             self._client = None
             raise
