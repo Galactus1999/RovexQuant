@@ -17,7 +17,7 @@ import httpx
 
 _SYMBOL = re.compile(r"^[A-Z0-9][A-Z0-9-&]{0,29}$")
 _EXCHANGES = {"nse", "bse"}
-_MAX_RANGE_DAYS = 3660
+_MAX_RANGE_DAYS = 6200
 _MAX_ROWS = 5000
 
 
@@ -191,7 +191,7 @@ class TejHqEodProvider:
         if from_date > to_date:
             raise TejHqError("from_date must be on or before to_date", 422)
         if (to_date - from_date).days > _MAX_RANGE_DAYS:
-            raise TejHqError("Requested history range exceeds ten years", 422)
+            raise TejHqError("Requested history range exceeds supported full-history window", 422)
         endpoint = "adjusted" if adjusted else "ohlcv"
         payload = await self._get(
             f"/v1/{endpoint}/{exchange_value}/{symbol_value}",
