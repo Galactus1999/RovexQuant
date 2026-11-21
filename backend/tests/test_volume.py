@@ -11,5 +11,5 @@ def test_relative_volume_uses_prior_bars_only():
 
 def test_volume_confirmed_breakout_rejects_low_relative_volume():
     strategy = VolumeConfirmedBreakout(channel_period=2, volume_period=2, minimum_relative_volume=1.5)
-    signals = strategy.evaluate([10, 11, 12, 13], [8, 9, 10, 11], [9, 10, 11, 12], [100, 100, 100, 100])
+    signals = strategy.evaluate([10, 11, 12, 13], [8, 9, 10, 11], [9, 10, 11, 13], [100, 100, 100, 100])
     assert signals[-1] == "BREAKOUT_UNCONFIRMED"
