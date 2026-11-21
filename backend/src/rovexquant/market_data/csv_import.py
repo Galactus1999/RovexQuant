@@ -51,6 +51,8 @@ def import_ohlcv_csv(
             raise ValueError(f"invalid CSV row {row_number}: {error}") from error
         if not volume_decimal.is_finite() or volume_decimal < 0 or volume_decimal != volume_decimal.to_integral_value():
             raise ValueError(f"invalid volume at CSV row {row_number}")
+        if previous_start is not None and start_at <= previous_start:
+            raise ValueError("CSV timestamps must be strictly increasing without duplicates")
         quality = DataQuality.VALID
         if previous_start is not None and start_at.date() == previous_start.date() and timeframe in {"1m", "5m", "15m", "30m", "1h"}:
             interval = _TIMEFRAMES[timeframe]
@@ -77,8 +79,6 @@ def import_ohlcv_csv(
         )
         if not bar.valid_ohlc():
             raise ValueError(f"invalid OHLC values at CSV row {row_number}")
-        if previous_start is not None and start_at <= previous_start:
-            raise ValueError("CSV timestamps must be strictly increasing without duplicates")
         previous_start = start_at
         result.append(bar)
     if not result:
