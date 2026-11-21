@@ -50,6 +50,10 @@ def _connect() -> Iterator[sqlite3.Connection]:
             connection.execute("ALTER TABLE provider_tokens ADD COLUMN expires_at INTEGER")
         connection.commit()
         yield connection
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
     finally:
         connection.close()
 
