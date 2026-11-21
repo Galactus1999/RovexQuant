@@ -263,15 +263,18 @@ def provider_status() -> list[dict[str, Any]]:
 
 
 def extract_source_timestamp(result: dict[str, Any]) -> str | int | float | None:
-    """Extract only explicitly named source-time fields; never infer from retrieval time."""
+    """Read explicit feed-level timestamps, never timestamps from individual data rows."""
     timestamp_keys = {
         "source_timestamp", "as_of", "asof", "last_updated",
         "lastupdated", "market_time", "exchange_timestamp",
     }
-    pending: list[tuple[Any, int]] = [(result.get("structured_content"), 0)]
+    metadata_keys = {"meta", "metadata", "freshness", "feed_status", "market_status"}
+    roots: list[Any] = [result.get("structured_content")]
     content = result.get("content")
     if isinstance(content, list):
-        pending.extend((item.get("text"), 0) for item in content if isinstance(item, dict))
+        roots.extend(item.get("text") for item in content if isinstance(item, dict))
+
+    pending: list[tuple[Any, int]] = [(value, 0) for value in roots]
     while pending:
         value, depth = pending.pop()
         if depth > 4:
@@ -281,12 +284,12 @@ def extract_source_timestamp(result: dict[str, Any]) -> str | int | float | None
                 value = json.loads(value)
             except ValueError:
                 continue
-        if isinstance(value, dict):
-            for key, item in value.items():
-                if key.lower() in timestamp_keys and isinstance(item, (str, int, float)) and not isinstance(item, bool):
-                    return item
-                if isinstance(item, (dict, list)):
-                    pending.append((item, depth + 1))
-        elif isinstance(value, list):
-            pending.extend((item, depth + 1) for item in value[:100] if isinstance(item, (dict, list, str)))
+        if not isinstance(value, dict):
+            continue
+        for key, item in value.items():
+            if key.lower() in timestamp_keys and isinstance(item, (str, int, float)) and not isinstance(item, bool):
+                return item
+        for key, item in value.items():
+            if key.lower() in metadata_keys and isinstance(item, dict):
+                pending.append((item, depth + 1))
     return None
