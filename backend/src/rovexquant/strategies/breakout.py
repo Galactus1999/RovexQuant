@@ -17,7 +17,7 @@ class DonchianBreakout:
             if not all(isfinite(value) for value in (high, low, close)) or low <= 0 or not low <= close <= high:
                 raise ValueError("OHLC inputs must be finite, positive and ordered")
         out = ["INSUFFICIENT_HISTORY"] * len(closes)
-        for index in range(self.period, len(closes)):
+        for index in range(self.period + 1, len(closes)):
             upper = max(highs[index - self.period:index])
             lower = min(lows[index - self.period:index])
             prior_start = max(0, index - self.period - 1)
