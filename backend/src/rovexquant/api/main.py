@@ -1,13 +1,14 @@
 from datetime import datetime
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
+from rovexquant.ai.gateway import GatewayError, authorize_gateway, complete_chat, configured_providers
 from rovexquant.backtesting.engine import BacktestBar, BacktestConfig, run_long_only_backtest
 from rovexquant.indicators.momentum import rsi
 from rovexquant.indicators.trend import adx, macd
 from rovexquant.indicators.volatility import atr
 from rovexquant.strategies.registry import default_registry
 
-app = FastAPI(title="RovexQuant API", version="0.2.0", description="Evidence-based market research and backtesting. No order execution.")
+app = FastAPI(title="Quant API", version="0.3.0", description="Evidence-based market research. No order execution.")
 
 class IndicatorRequest(BaseModel):
     close: list[float] = Field(min_length=1)
@@ -34,9 +35,22 @@ class BacktestRequest(BaseModel):
     commission_bps: float = Field(default=5, ge=0)
     slippage_bps: float = Field(default=5, ge=0)
 
+class AIMessage(BaseModel):
+    role: str
+    content: str = Field(min_length=1, max_length=12000)
+
+class AIChatRequest(BaseModel):
+    provider_id: str
+    model: str = Field(min_length=1, max_length=160)
+    messages: list[AIMessage] = Field(min_length=1, max_length=32)
+    credential_id: str | None = Field(default=None, min_length=1, max_length=80)
+    fallback_providers: list[str] = Field(default_factory=list, max_length=3)
+    max_tokens: int = Field(default=1200, ge=1, le=4096)
+    temperature: float = Field(default=0.2, ge=0, le=2)
+
 @app.get("/api/v1/health")
 def health():
-    return {"status": "ok", "application": "RovexQuant", "mode": "research-only"}
+    return {"status": "ok", "application": "Quant", "mode": "research-only"}
 
 @app.get("/api/v1/strategies")
 def strategies():
@@ -46,6 +60,30 @@ def strategies():
          "description": item.metadata.description}
         for item in default_registry().all()
     ]
+
+@app.get("/api/v1/ai/providers")
+def ai_providers(x_quant_ai_gateway_key: str | None = Header(default=None)):
+    try:
+        authorize_gateway(x_quant_ai_gateway_key)
+        return {"providers": configured_providers()}
+    except GatewayError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+@app.post("/api/v1/ai/chat")
+async def ai_chat(request: AIChatRequest, x_quant_ai_gateway_key: str | None = Header(default=None)):
+    try:
+        authorize_gateway(x_quant_ai_gateway_key)
+        return await complete_chat(
+            provider_id=request.provider_id,
+            model=request.model,
+            messages=[message.model_dump() for message in request.messages],
+            max_tokens=request.max_tokens,
+            temperature=request.temperature,
+            credential_id=request.credential_id,
+            fallback_providers=request.fallback_providers,
+        )
+    except GatewayError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
 @app.post("/api/v1/research/indicators")
 def calculate_indicators(request: IndicatorRequest):

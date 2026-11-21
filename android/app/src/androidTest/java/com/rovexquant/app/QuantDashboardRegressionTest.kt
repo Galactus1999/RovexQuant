@@ -1,9 +1,11 @@
 package com.rovexquant.app
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -43,7 +45,7 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithText("Maximum capital allocation · %").performTextInput("100")
         composeRule.onNodeWithText("Planned entry price · ₹").performTextInput("250")
         composeRule.onNodeWithText("Stop-loss price · ₹").performTextInput("244")
-        composeRule.onNodeWithText("8 shares").assertIsDisplayed()
-        composeRule.onNodeWithText("Planned loss at stop  ₹48.00").assertIsDisplayed()
+        composeRule.onNodeWithTag("portfolio.quantity").assertTextEquals("8 shares")
+        composeRule.onNodeWithTag("portfolio.stopLoss").assertTextEquals("Planned loss at stop  ₹48.00")
     }
 }

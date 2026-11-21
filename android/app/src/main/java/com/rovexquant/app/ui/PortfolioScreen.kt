@@ -8,6 +8,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,9 +52,9 @@ fun PortfolioScreen() {
                 } else if (sizing.quantity == 0) {
                     Text("Risk/allocation budget is too small to buy one share at this entry price.", color = Gold, fontSize = 12.sp, lineHeight = 18.sp)
                 } else {
-                    Text(sizing.quantity.toString() + " shares", color = Mint, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                    Text(sizing.quantity.toString() + " shares", color = Mint, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("portfolio.quantity"))
                     Text("Estimated investment  " + String.format(Locale.US, "₹%,.2f", sizing.investment), color = MaterialTheme.colorScheme.onBackground, fontSize = 12.sp)
-                    Text("Planned loss at stop  " + String.format(Locale.US, "₹%,.2f", sizing.plannedStopLoss), color = Coral, fontSize = 12.sp)
+                    Text("Planned loss at stop  " + String.format(Locale.US, "₹%,.2f", sizing.plannedStopLoss), color = Coral, fontSize = 12.sp, modifier = Modifier.testTag("portfolio.stopLoss"))
                     Text("Risk budget  " + String.format(Locale.US, "₹%,.2f", sizing.riskBudget) + " · Risk/share " + String.format(Locale.US, "₹%.2f", sizing.riskPerShare), color = Muted, fontSize = 10.sp, lineHeight = 16.sp)
                 }
                 Spacer(Modifier.height(8.dp))
