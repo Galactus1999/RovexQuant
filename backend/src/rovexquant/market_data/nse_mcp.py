@@ -257,8 +257,8 @@ def provider_status() -> list[dict[str, Any]]:
 def extract_source_timestamp(result: dict[str, Any]) -> str | int | float | None:
     """Extract only explicitly named source-time fields; never infer from retrieval time."""
     timestamp_keys = {
-        "timestamp", "source_timestamp", "as_of", "asof", "last_updated",
-        "lastupdated", "market_time", "trade_time", "exchange_timestamp",
+        "source_timestamp", "as_of", "asof", "last_updated",
+        "lastupdated", "market_time", "exchange_timestamp",
     }
     pending: list[tuple[Any, int]] = [(result.get("structured_content"), 0)]
     content = result.get("content")
