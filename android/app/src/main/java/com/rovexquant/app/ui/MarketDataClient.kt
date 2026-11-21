@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit
 data class QuantSession(val baseUrl: String, val accessToken: String)
 data class MarketIndexInstrument(val instrumentKey: String, val name: String, val tradingSymbol: String)
 data class NseMcpTool(val name: String, val description: String, val inputSchema: JSONObject, val readOnly: Boolean)
-data class NseMcpCatalog(val server: String, val tools: List<NseMcpTool>)
+data class NseMcpCatalog(val server: String, val tools: List<NseMcpTool>, val failure: String? = null)
 data class NseMcpResult(val provider: String, val dataMode: String, val expectedDelay: String?, val sourceTimestamp: String?, val resultJson: String)
 
 data class MarketTick(
@@ -78,12 +78,14 @@ object QuantApi {
             val responseJson = JSONObject(text)
             val catalog = responseJson.optJSONObject("catalog")
                 ?: throw IllegalStateException("NSE MCP returned no tool catalogue.")
+            val failures = responseJson.optJSONObject("failures")
+            val requestedServers = if (server == "both") listOf("bhavcopy", "cmmkt") else listOf(server)
             val discovered = buildList {
-                for (serverName in listOf("bhavcopy", "cmmkt")) {
-                    val records = catalog.optJSONArray(serverName) ?: continue
+                for (serverName in requestedServers) {
+                    val records = catalog.optJSONArray(serverName)
                     val tools = buildList {
-                        for (index in 0 until records.length()) {
-                            val item = records.optJSONObject(index) ?: continue
+                        for (index in 0 until (records?.length() ?: 0)) {
+                            val item = records?.optJSONObject(index) ?: continue
                             val name = item.optString("name")
                             val schema = item.optJSONObject("input_schema") ?: JSONObject()
                             if (name.isNotBlank()) add(NseMcpTool(
@@ -94,13 +96,9 @@ object QuantApi {
                             ))
                         }
                     }
-                    add(NseMcpCatalog(serverName, tools))
+                    val failure = failures?.optString(serverName)?.takeIf { it.isNotBlank() && it != "null" }
+                    add(NseMcpCatalog(serverName, tools, failure))
                 }
-            }
-            if (server != "both" && discovered.none { it.server == server }) {
-                val failures = responseJson.optJSONObject("failures")
-                throw IllegalStateException(failures?.optString(server)?.takeIf { it.isNotBlank() }
-                    ?: "NSE $server tool discovery returned no catalogue.")
             }
             return discovered
         }
