@@ -51,6 +51,14 @@ def import_ohlcv_csv(
             raise ValueError(f"invalid CSV row {row_number}: {error}") from error
         if not volume_decimal.is_finite() or volume_decimal < 0 or volume_decimal != volume_decimal.to_integral_value():
             raise ValueError(f"invalid volume at CSV row {row_number}")
+        quality = DataQuality.VALID
+        if previous_start is not None and start_at.date() == previous_start.date() and timeframe in {"1m", "5m", "15m", "30m", "1h"}:
+            interval = _TIMEFRAMES[timeframe]
+            elapsed = start_at - previous_start
+            if elapsed < interval:
+                raise ValueError(f"overlapping or irregular intraday candles at CSV row {row_number}")
+            if elapsed > interval:
+                quality = DataQuality.GAP_DETECTED
         bar = MarketBar(
             instrument_id=instrument_id,
             timeframe=timeframe,
@@ -65,7 +73,7 @@ def import_ohlcv_csv(
             exchange_timestamp=start_at + _TIMEFRAMES[timeframe],
             received_at=received_at,
             is_complete=True,
-            quality=DataQuality.VALID,
+            quality=quality,
         )
         if not bar.valid_ohlc():
             raise ValueError(f"invalid OHLC values at CSV row {row_number}")
