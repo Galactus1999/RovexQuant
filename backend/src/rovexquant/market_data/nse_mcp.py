@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 import json
 import re
 from typing import Any, Literal
-from uuid import uuid4
 
 import httpx
 
@@ -104,7 +103,9 @@ class NseMcpClient:
     async def _post(self, message: dict[str, Any], *, expect_response: bool = True) -> dict[str, Any] | None:
         if self._client is None:
             raise NseMcpError("NSE MCP client is not initialized", 500)
-        headers = {"MCP-Protocol-Version": self._protocol_version}
+        headers: dict[str, str] = {}
+        if message.get("method") != "initialize":
+            headers["MCP-Protocol-Version"] = self._protocol_version
         if self._session_id:
             headers["Mcp-Session-Id"] = self._session_id
         try:
@@ -178,6 +179,8 @@ class NseMcpClient:
                 raise NseMcpError("NSE MCP returned an invalid tool definition", 502)
             tools.extend(page)
             cursor = result.get("nextCursor")
+            if cursor is not None and not isinstance(cursor, str):
+                raise NseMcpError("NSE MCP returned an invalid pagination cursor", 502)
             if not cursor:
                 return tools
         if cursor:
@@ -245,7 +248,6 @@ def provider_status() -> list[dict[str, Any]]:
             "expected_delay": None if server == "bhavcopy" else "approximately 1–3 minutes",
             "connection_status": "not_checked",
             "authentication": "No API key documented by NSE",
-            "received_at": datetime.now(timezone.utc).isoformat(),
             "retention": "No raw response persistence",
             "usage": "Authenticated owner's private educational research only",
         }
