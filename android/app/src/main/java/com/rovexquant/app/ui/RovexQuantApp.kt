@@ -131,7 +131,7 @@ fun RovexQuantApp() {
                     TerminalSection.PULSE -> MarketPulseScreen(ticks = ticks, indexKeys = indexKeys, streamStatus = streamStatus)
                     TerminalSection.SCANNER -> StrategyScannerScreen()
                     TerminalSection.SIGNALS -> SignalsScreen()
-                    TerminalSection.LAB -> ResearchLabScreen()
+                    TerminalSection.LAB -> ResearchLabScreen(session = activeSession)
                     TerminalSection.PORTFOLIO -> PortfolioScreen()
                 }
             }
