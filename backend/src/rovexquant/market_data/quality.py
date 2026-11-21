@@ -35,6 +35,10 @@ def validate_bar(
         return False, "timezone_missing"
     if bar.start_at >= bar.end_at:
         return False, "bar_time_range_invalid"
+    if bar.exchange_timestamp < bar.start_at - max_future_skew or bar.exchange_timestamp > bar.end_at + max_future_skew:
+        return False, "exchange_timestamp_outside_bar"
+    if bar.end_at > now + max_future_skew:
+        return False, "future_bar"
     if bar.exchange_timestamp > bar.received_at + max_future_skew:
         return False, "exchange_timestamp_ahead_of_receipt"
     if bar.received_at > now + max_future_skew or bar.exchange_timestamp > now + max_future_skew:
