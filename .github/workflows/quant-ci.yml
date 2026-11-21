@@ -2,7 +2,7 @@ name: Quant Build, Regression & Integrity CI
 
 on:
   push:
-    branches: [main, develop, "fix/**", "feat/**"]
+    branches: [main, develop]
   pull_request:
   workflow_dispatch:
 
