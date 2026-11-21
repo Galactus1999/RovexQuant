@@ -21,11 +21,10 @@ fun PortfolioScreen() {
     var entry by rememberSaveable { mutableStateOf("") }
     var stop by rememberSaveable { mutableStateOf("") }
     var allocation by rememberSaveable { mutableStateOf("25") }
+    val capitalValue = capital.toDoubleOrNull()
     val sizing = PositionSizingCalculator.calculate(
-        capital.toDoubleOrNull() ?: Double.NaN,
-        risk.toDoubleOrNull() ?: Double.NaN,
-        entry.toDoubleOrNull() ?: Double.NaN,
-        stop.toDoubleOrNull() ?: Double.NaN,
+        capitalValue ?: Double.NaN, risk.toDoubleOrNull() ?: Double.NaN,
+        entry.toDoubleOrNull() ?: Double.NaN, stop.toDoubleOrNull() ?: Double.NaN,
         allocation.toDoubleOrNull() ?: Double.NaN
     )
     LazyColumn(contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -45,7 +44,9 @@ fun PortfolioScreen() {
                 OutlinedTextField(value = stop, onValueChange = { stop = it.filter { c -> c.isDigit() || c == '.' }.take(12) }, label = { Text("Stop-loss price · ₹") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(14.dp))
                 Text("Position sizing result", color = Muted, fontSize = 10.sp)
-                if (sizing == null) {
+                if (capitalValue != null && capitalValue < 5_000.0) {
+                    Text("Capital must be ₹5,000 or more.", color = Gold, fontSize = 12.sp, lineHeight = 18.sp)
+                } else if (sizing == null) {
                     Text("Enter valid capital, risk, allocation, entry and a stop below entry.", color = Gold, fontSize = 12.sp, lineHeight = 18.sp)
                 } else if (sizing.quantity == 0) {
                     Text("Risk/allocation budget is too small to buy one share at this entry price.", color = Gold, fontSize = 12.sp, lineHeight = 18.sp)

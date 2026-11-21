@@ -28,6 +28,22 @@ class OhlcvCsvResearchTest {
         assertEquals(129.5, summary.sma50!!, 0.0001)
         assertEquals(100.0, summary.rsi14!!, 0.0001)
         assertEquals("Bullish trend alignment", summary.trend)
+        assertEquals("No 20-bar breakout", summary.donchian20)
+        assertEquals(1.0, summary.relativeVolume20!!, 0.0001)
+    }
+
+    @Test fun detectsDonchianBreakoutAndRelativeVolumeExpansion() {
+        val start = OffsetDateTime.parse("2025-01-01T09:15:00Z")
+        val csv = buildString {
+            append("timestamp,open,high,low,close,volume\n")
+            repeat(20) { index ->
+                append(start.plusMinutes(index.toLong()).toString()).append(",100,110,90,100,1000\n")
+            }
+            append(start.plusMinutes(20).toString()).append(",110,122,109,121,3000")
+        }
+        val summary = OhlcvCsvResearch.summarize(OhlcvCsvResearch.parse(csv))
+        assertEquals("Bullish breakout", summary.donchian20)
+        assertEquals(3.0, summary.relativeVolume20!!, 0.0001)
     }
 
     @Test fun rejectsTimezoneNaiveTimestamps() {
@@ -48,5 +64,7 @@ class OhlcvCsvResearchTest {
         assertNull(summary.sma20)
         assertNull(summary.sma50)
         assertNull(summary.rsi14)
+        assertEquals("Warming up", summary.donchian20)
+        assertNull(summary.relativeVolume20)
     }
 }

@@ -3,28 +3,15 @@ package com.rovexquant.app.domain
 import java.time.OffsetDateTime
 import kotlin.math.max
 
-data class OhlcvBar(
-    val timestamp: OffsetDateTime,
-    val open: Double,
-    val high: Double,
-    val low: Double,
-    val close: Double,
-    val volume: Long
-)
-
+data class OhlcvBar(val timestamp: OffsetDateTime, val open: Double, val high: Double, val low: Double, val close: Double, val volume: Long)
 data class OhlcvResearchSummary(
-    val rows: Int,
-    val firstTimestamp: OffsetDateTime,
-    val lastTimestamp: OffsetDateTime,
-    val latestClose: Double,
-    val latestVolume: Long,
-    val sma20: Double?,
-    val sma50: Double?,
-    val rsi14: Double?,
-    val trend: String
+    val rows: Int, val firstTimestamp: OffsetDateTime, val lastTimestamp: OffsetDateTime,
+    val latestClose: Double, val latestVolume: Long, val sma20: Double?, val sma50: Double?,
+    val rsi14: Double?, val trend: String, val donchian20: String, val relativeVolume20: Double?
 )
 
 object OhlcvCsvResearch {
+    const val STORAGE_FILE_NAME = "quant_local_research.csv"
     private val required = listOf("timestamp", "open", "high", "low", "close", "volume")
 
     /** Strict offline CSV import. Timestamps must be ISO-8601 with an explicit UTC offset. */
@@ -91,18 +78,24 @@ object OhlcvCsvResearch {
             sma20 != null && sma50 != null && latest < sma20 && sma20 < sma50 -> "Bearish trend alignment"
             else -> "Mixed / insufficient trend alignment"
         }
+        val prior = bars.dropLast(1).takeLast(20)
+        val donchian = if (prior.size < 20) "Warming up" else when {
+            bars.last().close > prior.maxOf { it.high } -> "Bullish breakout"
+            bars.last().close < prior.minOf { it.low } -> "Bearish breakdown"
+            else -> "No 20-bar breakout"
+        }
+        val averageVolume = prior.takeIf { it.size == 20 }?.map { it.volume.toDouble() }?.average()
+        val relativeVolume = averageVolume?.takeIf { it > 0.0 }?.let { bars.last().volume / it }
         val last = bars.last()
         return OhlcvResearchSummary(
             rows = bars.size, firstTimestamp = bars.first().timestamp, lastTimestamp = last.timestamp,
             latestClose = latest, latestVolume = last.volume, sma20 = sma20, sma50 = sma50,
-            rsi14 = rsi, trend = trend
+            rsi14 = rsi, trend = trend, donchian20 = donchian, relativeVolume20 = relativeVolume
         )
     }
 
-    private fun simpleMovingAverage(values: List<Double>, period: Int): Double? {
-        if (values.size < period) return null
-        return values.takeLast(period).average()
-    }
+    private fun simpleMovingAverage(values: List<Double>, period: Int): Double? =
+        if (values.size < period) null else values.takeLast(period).average()
 
     /** Wilder-smoothed RSI, seeded with the first full period of gains and losses. */
     private fun relativeStrengthIndex(values: List<Double>, period: Int): Double? {
@@ -129,15 +122,9 @@ object OhlcvCsvResearch {
         while (index < line.length) {
             val char = line[index]
             when {
-                char == '"' && quoted && index + 1 < line.length && line[index + 1] == '"' -> {
-                    field.append('"')
-                    index++
-                }
+                char == '"' && quoted && index + 1 < line.length && line[index + 1] == '"' -> { field.append('"'); index++ }
                 char == '"' -> quoted = !quoted
-                char == ',' && !quoted -> {
-                    fields += field.toString()
-                    field.setLength(0)
-                }
+                char == ',' && !quoted -> { fields += field.toString(); field.setLength(0) }
                 else -> field.append(char)
             }
             index++

@@ -25,7 +25,8 @@ class PositionSizingTest {
         requireNotNull(result)
         assertEquals(10, result.quantity)
     }
-    @Test fun rejectsInvalidStopsAndRiskAssumptions() {
+    @Test fun rejectsCapitalBelowFiveThousandAndInvalidStops() {
+        assertNull(PositionSizingCalculator.calculate(4_999.0, 1.0, 100.0, 90.0))
         assertNull(PositionSizingCalculator.calculate(10_000.0, 1.0, 100.0, 100.0))
         assertNull(PositionSizingCalculator.calculate(10_000.0, 5.1, 100.0, 90.0))
         assertNull(PositionSizingCalculator.calculate(10_000.0, 1.0, 90.0, 100.0))

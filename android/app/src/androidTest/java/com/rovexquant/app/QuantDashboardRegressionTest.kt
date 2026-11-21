@@ -25,6 +25,7 @@ class QuantDashboardRegressionTest {
     @Test fun bottomNavigationOpensAllWorkspaces() {
         composeRule.onNodeWithText("Scan").performClick()
         composeRule.onNodeWithText("FIND SETUPS, NOT STORIES").assertIsDisplayed()
+        composeRule.onNodeWithText("No local dataset loaded").assertIsDisplayed()
         composeRule.onNodeWithText("Signals").performClick()
         composeRule.onNodeWithText("Signal centre.").assertIsDisplayed()
         composeRule.onNodeWithText("Lab").performClick()

@@ -29,7 +29,6 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.Locale
 
-private const val LOCAL_DATASET_FILE = "quant_local_research.csv"
 private const val MAX_CSV_BYTES = 20 * 1024 * 1024
 
 @Composable
@@ -50,8 +49,8 @@ fun ResearchLabScreen() {
                     val csv = context.contentResolver.openInputStream(uri)?.use { it.readUtf8Limited() }
                         ?: throw IllegalArgumentException("Could not open the selected file")
                     val bars = OhlcvCsvResearch.parse(csv)
-                    val temporary = File(context.filesDir, "$LOCAL_DATASET_FILE.tmp")
-                    val destination = File(context.filesDir, LOCAL_DATASET_FILE)
+                    val temporary = File(context.filesDir, OhlcvCsvResearch.STORAGE_FILE_NAME + ".tmp")
+                    val destination = File(context.filesDir, OhlcvCsvResearch.STORAGE_FILE_NAME)
                     temporary.writeText(csv, Charsets.UTF_8)
                     try {
                         Files.move(temporary.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
@@ -75,11 +74,11 @@ fun ResearchLabScreen() {
     }
 
     LaunchedEffect(context) {
-        if (context.fileList().contains(LOCAL_DATASET_FILE)) {
+        if (context.fileList().contains(OhlcvCsvResearch.STORAGE_FILE_NAME)) {
             loading = true
             try {
                 val restored = withContext(Dispatchers.IO) {
-                    context.openFileInput(LOCAL_DATASET_FILE).bufferedReader().use { reader ->
+                    context.openFileInput(OhlcvCsvResearch.STORAGE_FILE_NAME).bufferedReader().use { reader ->
                         OhlcvCsvResearch.summarize(OhlcvCsvResearch.parse(reader.readText()))
                     }
                 }
@@ -103,12 +102,12 @@ fun ResearchLabScreen() {
                 Spacer(Modifier.height(5.dp))
                 Text("CSV columns required: timestamp, open, high, low, close, volume. Timestamps must include an ISO-8601 timezone offset. Maximum file size: 20 MB.", color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
                 Spacer(Modifier.height(12.dp))
-                Button(onClick = { picker.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel")) }, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = { picker.launch(arrayOf("text/*", "text/csv", "application/csv", "application/vnd.ms-excel", "*/*")) }, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
                     Text(if (loading) "Importing…" else "Import OHLCV CSV")
                 }
                 if (summary != null) {
                     TextButton(onClick = {
-                        context.deleteFile(LOCAL_DATASET_FILE)
+                        context.deleteFile(OhlcvCsvResearch.STORAGE_FILE_NAME)
                         summary = null
                         datasetName = "No dataset loaded"
                         error = null
@@ -145,12 +144,14 @@ fun ResearchLabScreen() {
                     IndicatorLine("SMA 20", report.sma20?.let { String.format(Locale.US, "₹%,.2f", it) } ?: "Warming up")
                     IndicatorLine("SMA 50", report.sma50?.let { String.format(Locale.US, "₹%,.2f", it) } ?: "Warming up")
                     IndicatorLine("RSI 14", report.rsi14?.let { String.format(Locale.US, "%.1f", it) } ?: "Warming up")
+                    IndicatorLine("Donchian 20", report.donchian20)
+                    IndicatorLine("Relative volume 20", report.relativeVolume20?.let { String.format(Locale.US, "%.2fx", it) } ?: "Warming up")
                     Spacer(Modifier.height(8.dp))
                     Text("These are descriptive indicators from the imported file, not a live quote, validated strategy, or buy/sell recommendation.", color = Muted, fontSize = 10.sp, lineHeight = 16.sp)
                 }
             }
         } else {
-            item { EmptyPanel("No historical dataset loaded", "Import a licensed OHLCV CSV to calculate trend and momentum indicators on-device. Your imported dataset is stored privately on this device.") }
+            item { EmptyPanel("No historical dataset loaded", "Import a licensed OHLCV CSV to calculate trend, momentum and breakout conditions on-device. Your imported dataset is stored privately on this device.") }
         }
         item { EmptyPanel("Data integrity first", "Naive timestamps, duplicate or unordered rows, invalid OHLC ranges, negative volume and oversized files are rejected. Imported data is never labelled live.") }
     }
