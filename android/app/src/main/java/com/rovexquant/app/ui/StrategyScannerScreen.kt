@@ -30,8 +30,8 @@ fun StrategyScannerScreen() {
     var horizon by rememberSaveable { mutableStateOf(Horizon.INTRADAY) }
     val items = when (horizon) {
         Horizon.SCALP -> listOf(
-            StrategyItem("VWAP reclaim", "Session VWAP cross with spread and liquidity gates", "Prototype logic", true),
-            StrategyItem("Opening impulse", "Opening range plus volume expansion confirmation", "Prototype logic", true),
+            StrategyItem("VWAP reclaim", "Session VWAP reclaim; spread and liquidity filters still pending", "Prototype logic", true),
+            StrategyItem("Opening impulse", "Opening-range breakout; volume confirmation still pending", "Prototype logic", true),
             StrategyItem("Micro pullback", "Trend continuation after controlled retracement", "Research candidate", false)
         )
         Horizon.INTRADAY -> listOf(
