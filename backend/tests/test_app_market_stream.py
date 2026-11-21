@@ -1,9 +1,12 @@
+import asyncio
+import json
 import time
 
 import pytest
 from fastapi.testclient import TestClient
 
 from rovexquant.auth import AppAuthError, issue_app_session, verify_app_session
+from rovexquant.api import main as api_main
 from rovexquant.api.main import app
 from rovexquant.market_data import upstox_market_data_pb2
 from rovexquant.market_data.streaming import decode_feed_message
@@ -64,3 +67,134 @@ def test_protobuf_market_feed_decodes_to_normalized_json():
     assert quote["last_price"] == 24100.5
     assert quote["net_change"] == 100.5
     assert quote["quality"] == "VALID"
+
+
+
+def test_app_index_master_requires_session_and_returns_verified_keys(monkeypatch):
+    configure(monkeypatch)
+
+    async def fake_master():
+        return [{
+            "instrument_key": "NSE_INDEX|Nifty 50",
+            "name": "Nifty 50",
+            "trading_symbol": "Nifty 50",
+        }]
+
+    monkeypatch.setattr(api_main, "get_nse_index_instruments", fake_master)
+    client = TestClient(app)
+    assert client.get("/api/v1/app/market/index-instruments").status_code == 401
+    token, _ = issue_app_session("quant-user", "long-test-password")
+    response = client.get("/api/v1/app/market/index-instruments", headers={
+        "Authorization": f"Bearer {token}"
+    })
+    assert response.status_code == 200
+    assert response.json()["instruments"][0]["instrument_key"] == "NSE_INDEX|Nifty 50"
+
+
+def test_websocket_route_authenticates_and_forwards_market_ticks(monkeypatch):
+    configure(monkeypatch)
+    token, _ = issue_app_session("quant-user", "long-test-password")
+
+    async def fake_stream(websocket, keys, mode):
+        assert keys == ["NSE_INDEX|Nifty 50"]
+        assert mode == "full"
+        await websocket.send_json({"type": "live_feed", "quotes": [{
+            "instrument_key": "NSE_INDEX|Nifty 50", "last_price": 24000.0
+        }]})
+        await websocket.close(code=1000)
+
+    monkeypatch.setattr(api_main, "stream_upstox_market_data", fake_stream)
+    client = TestClient(app)
+    with client.websocket_connect(
+        "/api/v1/app/market/stream",
+        headers={"Authorization": f"Bearer {token}"},
+    ) as websocket:
+        websocket.send_json({"instrument_keys": ["NSE_INDEX|Nifty 50"], "mode": "full"})
+        message = websocket.receive_json()
+        assert message["type"] == "live_feed"
+        assert message["quotes"][0]["last_price"] == 24000.0
+
+
+def test_websocket_route_rejects_missing_session():
+    client = TestClient(app)
+    with pytest.raises(Exception):
+        with client.websocket_connect("/api/v1/app/market/stream"):
+            pass
+
+
+def test_stream_bridge_performs_authorized_v3_subscription_and_decodes_tick(monkeypatch):
+    from rovexquant.market_data import streaming
+    from rovexquant.market_data import upstox_credentials
+
+    response = upstox_market_data_pb2.FeedResponse()
+    response.type = upstox_market_data_pb2.live_feed
+    response.currentTs = int(time.time() * 1000)
+    ltpc = response.feeds["NSE_INDEX|Nifty 50"].fullFeed.indexFF.ltpc
+    ltpc.ltp = 24000.0
+    ltpc.cp = 23900.0
+    ltpc.ltt = int(time.time() * 1000)
+    payload = response.SerializeToString()
+
+    class FakeHttpResponse:
+        status_code = 200
+        def json(self):
+            return {"data": {"authorized_redirect_uri": "wss://stream.upstox.test/one-time"}}
+
+    class FakeHttpClient:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *_args):
+            return None
+        async def get(self, url, headers):
+            assert url.endswith("/v3/feed/market-data-feed/authorize")
+            assert headers["Authorization"] == "Bearer fake-analytics-token"
+            return FakeHttpResponse()
+
+    class FakeUpstream:
+        def __init__(self):
+            self.sent = []
+        async def send(self, message):
+            self.sent.append(message)
+        def __aiter__(self):
+            async def messages():
+                yield payload
+            return messages()
+
+    class FakeUpstreamContext:
+        def __init__(self):
+            self.connection = FakeUpstream()
+        async def __aenter__(self):
+            return self.connection
+        async def __aexit__(self, *_args):
+            return None
+
+    class FakeClientWebSocket:
+        def __init__(self):
+            self.messages = []
+        async def send_json(self, message):
+            self.messages.append(message)
+        async def receive(self):
+            await asyncio.Future()
+
+    context = FakeUpstreamContext()
+    monkeypatch.setattr(upstox_credentials, "get_upstox_analytics_token", lambda: "fake-analytics-token")
+    monkeypatch.setattr(streaming.httpx, "AsyncClient", lambda **_kwargs: FakeHttpClient())
+    monkeypatch.setattr(streaming.websockets, "connect", lambda *_args, **_kwargs: context)
+    client_socket = FakeClientWebSocket()
+
+    asyncio.run(streaming.stream_upstox_market_data(
+        client_socket, ["NSE_INDEX|Nifty 50"], "full"
+    ))
+    subscription = json.loads(context.connection.sent[0])
+    assert subscription["method"] == "sub"
+    assert subscription["data"] == {"mode": "full", "instrumentKeys": ["NSE_INDEX|Nifty 50"]}
+    assert client_socket.messages[0]["quotes"][0]["last_price"] == 24000.0
+
+
+def test_stream_bridge_rejects_unapproved_instrument_keys_before_network(monkeypatch):
+    from rovexquant.market_data import upstox_credentials
+    from rovexquant.market_data.streaming import StreamError, stream_upstox_market_data
+
+    monkeypatch.setattr(upstox_credentials, "get_upstox_analytics_token", lambda: "fake-analytics-token")
+    with pytest.raises(StreamError, match="Only NSE index"):
+        asyncio.run(stream_upstox_market_data(object(), ["BSE_INDEX|SENSEX"], "full"))

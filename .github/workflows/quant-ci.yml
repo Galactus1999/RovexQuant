@@ -41,8 +41,8 @@ jobs:
         run: ruff check src tests --select E4,E9,F
       - name: Python syntax compilation
         run: python -m compileall -q src
-      - name: Upstox credential vault and market adapter tests
-        run: pytest -q tests/test_upstox_oauth.py tests/test_market_data.py tests/test_app_market_stream.py tests/test_market_instruments.py
+      - name: Full backend regression suite
+        run: pytest -q
 
   quant-android-build:
     name: Quant Android Compile, Lint & APK Integrity
@@ -70,7 +70,7 @@ jobs:
           test -f android/app/src/main/AndroidManifest.xml
           test -f android/app/src/main/java/com/rovexquant/app/MainActivity.kt
       - name: Compile Quant APK and run Android lint
-        run: gradle -p android clean :app:assembleDebug :app:lintDebug --no-daemon --stacktrace
+        run: gradle -p android clean :app:assembleDebug :app:lintDebug :app:testDebugUnitTest --no-daemon --stacktrace
       - name: Verify APK identity, contents and archive integrity
         shell: bash
         run: |

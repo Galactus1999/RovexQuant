@@ -30,6 +30,15 @@ object QuantApi {
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .callTimeout(20, TimeUnit.SECONDS)
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .build()
+    private val masterHttp = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(35, TimeUnit.SECONDS)
+        .callTimeout(45, TimeUnit.SECONDS)
+        .followRedirects(false)
+        .followSslRedirects(false)
         .build()
 
     fun login(baseUrl: String, username: String, password: String): QuantSession {
@@ -63,6 +72,8 @@ class MarketStreamController(
         .pingInterval(20, TimeUnit.SECONDS)
         .connectTimeout(12, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS)
+        .followRedirects(false)
+        .followSslRedirects(false)
         .build()
     private val handler = Handler(Looper.getMainLooper())
     private var socket: WebSocket? = null
@@ -136,11 +147,20 @@ class MarketStreamController(
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                if (response?.code == 401 || response?.code == 403) {
+                    emitStatus("Sign in again · session rejected")
+                    return
+                }
                 emitStatus("Stream unavailable")
                 scheduleRetry()
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                if (code == 4401) {
+                    emitStatus("Session expired · sign in again")
+                    return
+                }
+                if (code == 4400) return
                 scheduleRetry()
             }
         })

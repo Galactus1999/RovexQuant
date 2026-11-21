@@ -77,9 +77,17 @@ fun MarketPulseScreen(ticks: Map<String, MarketTick> = emptyMap(), streamStatus:
                 Spacer(Modifier.height(5.dp))
                 Text("No placeholder prices or synthetic candles. Connect an authorised feed or load a permitted historical dataset to render a chart.", color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
                 Spacer(Modifier.height(16.dp))
-                Box(Modifier.fillMaxWidth().height(92.dp).clip(RoundedCornerShape(14.dp)).background(PanelRaised)
-                    .testTag("market.feed.status"), contentAlignment = androidx.compose.ui.Alignment.Center) {
-                    Text("UPSTOX V3 · $streamStatus", color = Muted, fontSize = 9.sp, letterSpacing = 1.0.sp, fontWeight = FontWeight.Bold)
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(PanelRaised)
+                        .testTag("market.feed.status").padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Text("SOURCE · UPSTOX V3 · $streamStatus", color = Muted, fontSize = 9.sp, letterSpacing = .5.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "EXCHANGE · ${utcClock(latestTick?.exchangeTimestamp)} UTC    RECEIVED · ${utcClock(latestTick?.receivedAt)} UTC",
+                        color = Muted, fontSize = 8.sp
+                    )
+                    Text("TICK QUALITY · ${latestTick?.quality ?: "NO VERIFIED TICK"}", color = latestTick?.let { if (it.quality == "VALID") Mint else Gold } ?: Muted, fontSize = 8.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

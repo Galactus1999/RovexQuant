@@ -1,10 +1,13 @@
 """Resolve official NSE index instrument keys from Upstox's daily BOD master."""
 from __future__ import annotations
 
+import asyncio
+from io import BytesIO
 import gzip
 import json
 import re
 import time
+import zlib
 
 import httpx
 
@@ -12,8 +15,10 @@ import httpx
 _MASTER_URL = "https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz"
 _KEY_PATTERN = re.compile(r"^NSE_INDEX\|[A-Za-z0-9 _&()./-]{1,80}$")
 _CACHE_TTL_SECONDS = 6 * 60 * 60
+_MAX_MASTER_BYTES = 100 * 1024 * 1024
 _cache: list[dict[str, str]] = []
 _cache_expires = 0.0
+_cache_lock = asyncio.Lock()
 
 
 class InstrumentMasterError(Exception):
@@ -23,10 +28,20 @@ class InstrumentMasterError(Exception):
 
 
 def normalize_nse_index_master(raw: bytes) -> list[dict[str, str]]:
+    if len(raw) > _MAX_MASTER_BYTES:
+        raise InstrumentMasterError("Upstox NSE instrument master exceeds the size limit")
     try:
-        content = gzip.decompress(raw) if raw[:2] == b"\x1f\x8b" else raw
+        if raw[:2] == b"\x1f\x8b":
+            with gzip.GzipFile(fileobj=BytesIO(raw)) as compressed:
+                content = compressed.read(_MAX_MASTER_BYTES + 1)
+            if len(content) > _MAX_MASTER_BYTES:
+                raise InstrumentMasterError("Decompressed Upstox instrument master exceeds the size limit")
+        else:
+            content = raw
         records = json.loads(content)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+    except InstrumentMasterError:
+        raise
+    except (OSError, EOFError, zlib.error, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise InstrumentMasterError("Upstox NSE instrument master is unreadable") from error
     if not isinstance(records, list):
         raise InstrumentMasterError("Upstox NSE instrument master has an invalid shape")
@@ -59,19 +74,33 @@ def normalize_nse_index_master(raw: bytes) -> list[dict[str, str]]:
 
 async def get_nse_index_instruments(*, force_refresh: bool = False) -> list[dict[str, str]]:
     global _cache, _cache_expires
-    now = time.monotonic()
-    if not force_refresh and _cache and now < _cache_expires:
-        return list(_cache)
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=8.0), follow_redirects=True) as client:
-            response = await client.get(_MASTER_URL, headers={"Accept": "application/gzip, application/json"})
-        if response.status_code != 200:
-            raise InstrumentMasterError(f"Upstox instrument master request failed (HTTP {response.status_code})")
-        resolved = normalize_nse_index_master(response.content)
-    except httpx.HTTPError as error:
-        if _cache:
+    async with _cache_lock:
+        now = time.monotonic()
+        if not force_refresh and _cache and now < _cache_expires:
             return list(_cache)
-        raise InstrumentMasterError("Upstox instrument master is temporarily unavailable") from error
-    _cache = resolved
-    _cache_expires = time.monotonic() + _CACHE_TTL_SECONDS
-    return list(_cache)
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(30.0, connect=8.0), follow_redirects=True
+            ) as client:
+                async with client.stream(
+                    "GET", _MASTER_URL, headers={"Accept": "application/gzip, application/json"}
+                ) as response:
+                    if response.status_code != 200:
+                        raise InstrumentMasterError(
+                            f"Upstox instrument master request failed (HTTP {response.status_code})"
+                        )
+                    chunks: list[bytes] = []
+                    total = 0
+                    async for chunk in response.aiter_raw():
+                        total += len(chunk)
+                        if total > _MAX_MASTER_BYTES:
+                            raise InstrumentMasterError("Upstox NSE instrument master exceeds the size limit")
+                        chunks.append(chunk)
+            resolved = normalize_nse_index_master(b"".join(chunks))
+        except InstrumentMasterError:
+            raise
+        except httpx.HTTPError as error:
+            raise InstrumentMasterError("Upstox instrument master is temporarily unavailable") from error
+        _cache = resolved
+        _cache_expires = time.monotonic() + _CACHE_TTL_SECONDS
+        return list(_cache)
