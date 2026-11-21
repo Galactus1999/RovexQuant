@@ -31,3 +31,21 @@ def atr(highs: Sequence[float], lows: Sequence[float], closes: Sequence[float], 
         previous = ((period - 1) * previous + current) / period
         out[index] = previous
     return out
+
+def bollinger_bands(closes: Sequence[float], period: int = 20, deviations: float = 2.0) -> tuple[list[float | None], list[float | None], list[float | None]]:
+    if period <= 1 or not isfinite(deviations) or deviations <= 0:
+        raise ValueError("period must exceed one and deviations must be finite and positive")
+    if any(not isfinite(value) or value <= 0 for value in closes):
+        raise ValueError("prices must be finite and positive")
+    upper: list[float | None] = [None] * len(closes)
+    middle: list[float | None] = [None] * len(closes)
+    lower: list[float | None] = [None] * len(closes)
+    for index in range(period - 1, len(closes)):
+        window = closes[index - period + 1:index + 1]
+        mean = sum(window) / period
+        variance = sum((value - mean) ** 2 for value in window) / period
+        width = deviations * variance ** 0.5
+        middle[index] = mean
+        upper[index] = mean + width
+        lower[index] = mean - width
+    return upper, middle, lower
