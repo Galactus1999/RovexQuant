@@ -35,8 +35,8 @@ def test_opening_range_uses_only_completed_opening_bars():
 
 def test_donchian_excludes_current_bar_from_channel():
     strategy = DonchianBreakout(period=2)
-    signals = strategy.evaluate([10, 11, 13], [8, 9, 11], [9, 10, 12])
-    assert signals == ["INSUFFICIENT_HISTORY", "INSUFFICIENT_HISTORY", "BULLISH_BREAKOUT"]
+    signals = strategy.evaluate([10, 11, 12, 13], [8, 9, 10, 11], [9, 10, 11, 13])
+    assert signals == ["INSUFFICIENT_HISTORY", "INSUFFICIENT_HISTORY", "INSUFFICIENT_HISTORY", "BULLISH_BREAKOUT"]
 
 def test_indicator_rejects_misaligned_inputs():
     with pytest.raises(ValueError):
