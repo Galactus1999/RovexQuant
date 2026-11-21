@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from math import isfinite
 from rovexquant.indicators.volume import relative_volume
 from rovexquant.strategies.base import StrategyMetadata
 from rovexquant.strategies.breakout import DonchianBreakout
@@ -7,7 +8,7 @@ class VolumeConfirmedBreakout:
     metadata = StrategyMetadata("breakout.volume_confirmed", "Volume-confirmed breakout", "1.0.0", "swing", "Prior-channel breakout confirmed by relative volume.")
 
     def __init__(self, channel_period: int = 20, volume_period: int = 20, minimum_relative_volume: float = 1.5):
-        if not 0 < minimum_relative_volume:
+        if not isfinite(minimum_relative_volume) or not 0 < minimum_relative_volume:
             raise ValueError("minimum_relative_volume must be positive")
         self.channel = DonchianBreakout(channel_period)
         self.volume_period = volume_period
