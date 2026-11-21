@@ -16,10 +16,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Locale
 
-private data class SectorIndex(val sector: String, val benchmark: String)
+private data class SectorIndex(val sector: String, val benchmark: String, val instrumentKey: String? = null)
 
 private val coreSectorIndices = listOf(
-    SectorIndex("Banking", "NIFTY BANK"),
+    SectorIndex("Banking", "NIFTY BANK", "NSE_INDEX|Nifty Bank"),
     SectorIndex("Financial Services", "NIFTY FINANCIAL SERVICES"),
     SectorIndex("Information Technology", "NIFTY IT"),
     SectorIndex("Automobiles", "NIFTY AUTO"),
@@ -41,9 +41,9 @@ private val coreSectorIndices = listOf(
 )
 
 @Composable
-fun MarketPulseScreen(ticks: Map<String, MarketTick> = emptyMap(), indexKeys: Map<String, String> = emptyMap(), streamStatus: String = "Not connected") {
-    val nifty = indexKeys["NIFTY 50"]?.let { ticks[it] }
-    val bank = indexKeys["NIFTY BANK"]?.let { ticks[it] }
+fun MarketPulseScreen(ticks: Map<String, MarketTick> = emptyMap(), streamStatus: String = "Not connected") {
+    val nifty = ticks["NSE_INDEX|Nifty 50"]
+    val bank = ticks["NSE_INDEX|Nifty Bank"]
     LazyColumn(contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item { SectionHeading("The market, without the noise", "Market pulse.", "A clean overview of indices, breadth, sectors and your tracked universe.") }
         item {
@@ -91,8 +91,7 @@ fun MarketPulseScreen(ticks: Map<String, MarketTick> = emptyMap(), indexKeys: Ma
             }
         }
         items(coreSectorIndices, key = { it.benchmark }) { sector ->
-            val instrumentKey = indexKeys[sector.benchmark]
-            val quote = instrumentKey?.let { ticks[it] }
+            val quote = sector.instrumentKey?.let { ticks[it] }
             TerminalCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -100,7 +99,7 @@ fun MarketPulseScreen(ticks: Map<String, MarketTick> = emptyMap(), indexKeys: Ma
                         Spacer(Modifier.height(3.dp))
                         Text(sector.benchmark, color = Muted, fontSize = 9.sp, letterSpacing = .5.sp, modifier = Modifier.testTag("sector.index.${sector.benchmark}"))
                     }
-                    StatusPill(if (quote?.quality == "VALID") "Live" else if (instrumentKey == null) "Not listed" else "No tick", if (quote?.quality == "VALID") Mint else Gold)
+                    StatusPill(if (quote?.quality == "VALID") "Live" else if (sector.instrumentKey == null) "Key pending" else "No tick", if (quote?.quality == "VALID") Mint else Gold)
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
