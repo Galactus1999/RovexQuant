@@ -10,11 +10,10 @@ def true_range(highs: Sequence[float], lows: Sequence[float], closes: Sequence[f
         raise ValueError("high, low and close lengths must match")
     out: list[float | None] = [None] * len(closes)
     for i, (high, low, close) in enumerate(zip(highs, lows, closes, strict=True)):
-        if not all(isfinite(x) for x in (high, low, close)) or low <= 0 or high < low:
+        if not all(isfinite(value) for value in (high, low, close)) or low <= 0 or not low <= close <= high:
             raise ValueError("OHLC inputs must be finite, positive and ordered")
         if i:
-            previous = closes[i - 1]
-            out[i] = max(high - low, abs(high - previous), abs(low - previous))
+            out[i] = max(high - low, abs(high - closes[i - 1]), abs(low - closes[i - 1]))
     return out
 
 def atr(highs: Sequence[float], lows: Sequence[float], closes: Sequence[float], period: int = 14) -> list[float | None]:
@@ -24,12 +23,11 @@ def atr(highs: Sequence[float], lows: Sequence[float], closes: Sequence[float], 
     valid = [value for value in ranges[1:] if value is not None]
     if len(valid) < period:
         return out
-    seed_index = period
     previous = sum(valid[:period]) / period
-    out[seed_index] = previous
-    for i in range(seed_index + 1, len(closes)):
-        current = ranges[i]
+    out[period] = previous
+    for index in range(period + 1, len(closes)):
+        current = ranges[index]
         assert current is not None
         previous = ((period - 1) * previous + current) / period
-        out[i] = previous
+        out[index] = previous
     return out
