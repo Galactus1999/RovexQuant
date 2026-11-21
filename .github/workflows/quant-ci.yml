@@ -42,7 +42,7 @@ jobs:
       - name: Python syntax compilation
         run: python -m compileall -q src
       - name: Upstox credential vault and market adapter tests
-        run: pytest -q tests/test_upstox_oauth.py tests/test_market_data.py
+        run: pytest -q tests/test_upstox_oauth.py tests/test_market_data.py tests/test_app_market_stream.py
 
   quant-android-build:
     name: Quant Android Compile, Lint & APK Integrity
