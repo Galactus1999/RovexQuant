@@ -27,7 +27,7 @@ fun SignalsScreen() {
             TerminalCard {
                 Eyebrow("Signal lifecycle")
                 Spacer(Modifier.height(7.dp))
-                Text("No signals generated", color = MaterialTheme.colorScheme.onBackground, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                Text(if (filter == "All") "No signals generated" else "No $filter signals", color = MaterialTheme.colorScheme.onBackground, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(5.dp))
                 Text("This is expected while the market-data provider is disconnected. RovexQuant will not fabricate entries, stop-losses, targets or confidence scores.", color = Muted, fontSize = 11.sp, lineHeight = 18.sp)
             }
