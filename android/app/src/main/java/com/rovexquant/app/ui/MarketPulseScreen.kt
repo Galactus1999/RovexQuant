@@ -15,10 +15,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private data class SectorIndex(val sector: String, val benchmark: String)
+private data class SectorIndex(val sector: String, val benchmark: String, val instrumentKey: String? = null)
 
 private val coreSectorIndices = listOf(
-    SectorIndex("Banking", "NIFTY BANK"),
+    SectorIndex("Banking", "NIFTY BANK", "NSE_INDEX|Nifty Bank"),
     SectorIndex("Financial Services", "NIFTY FINANCIAL SERVICES"),
     SectorIndex("Information Technology", "NIFTY IT"),
     SectorIndex("Automobiles", "NIFTY AUTO"),
@@ -45,8 +45,8 @@ fun MarketPulseScreen() {
         item { SectionHeading("The market, without the noise", "Market pulse.", "A clean overview of indices, breadth, sectors and your tracked universe.") }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MetricTile("NIFTY 50", "—", "Feed not connected", modifier = Modifier.weight(1f))
-                MetricTile("SENSEX", "—", "Feed not connected", accent = Cyan, modifier = Modifier.weight(1f))
+                MetricTile("NIFTY 50", nifty?.lastPrice?.let { String.format(java.util.Locale.US, "%.2f", it) } ?: "—", nifty?.quality ?: "Awaiting verified tick", modifier = Modifier.weight(1f))
+                MetricTile("NIFTY BANK", bank?.lastPrice?.let { String.format(java.util.Locale.US, "%.2f", it) } ?: "—", bank?.quality ?: "Awaiting verified tick", accent = Cyan, modifier = Modifier.weight(1f))
             }
         }
         item {
@@ -65,7 +65,7 @@ fun MarketPulseScreen() {
                 Spacer(Modifier.height(16.dp))
                 Box(Modifier.fillMaxWidth().height(92.dp).clip(RoundedCornerShape(14.dp)).background(PanelRaised)
                     .testTag("market.feed.status"), contentAlignment = androidx.compose.ui.Alignment.Center) {
-                    Text("MARKET DATA NOT CONNECTED", color = Muted, fontSize = 9.sp, letterSpacing = 1.3.sp, fontWeight = FontWeight.Bold)
+                    Text("UPSTOX V3 · $streamStatus", color = Muted, fontSize = 9.sp, letterSpacing = 1.0.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -84,13 +84,13 @@ fun MarketPulseScreen() {
                         Spacer(Modifier.height(3.dp))
                         Text(sector.benchmark, color = Muted, fontSize = 9.sp, letterSpacing = .5.sp, modifier = Modifier.testTag("sector.index.${sector.benchmark}"))
                     }
-                    StatusPill("No feed", Gold)
+                    StatusPill(if (sector.instrumentKey != null && ticks[sector.instrumentKey]?.quality == "VALID") "Live" else if (sector.instrumentKey == null) "Key pending" else "No tick", if (sector.instrumentKey != null && ticks[sector.instrumentKey]?.quality == "VALID") Mint else Gold)
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    SectorMetric("CHANGE", "—")
-                    SectorMetric("ADV / DEC", "— / —")
-                    SectorMetric("REL. VOL.", "—")
+                    SectorMetric("LTP", sector.instrumentKey?.let { ticks[it]?.lastPrice?.let { price -> String.format(java.util.Locale.US, "%.2f", price) } } ?: "—")
+                    SectorMetric("CHANGE", sector.instrumentKey?.let { ticks[it]?.changePercent?.let { pct -> String.format(java.util.Locale.US, "%+.2f%%", pct) } } ?: "—")
+                    SectorMetric("QUALITY", sector.instrumentKey?.let { ticks[it]?.quality } ?: "—")
                 }
             }
         }
