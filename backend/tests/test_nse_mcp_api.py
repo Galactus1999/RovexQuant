@@ -57,7 +57,7 @@ def test_nse_mcp_call_labels_delayed_mode_and_does_not_claim_source_timestamp(mo
             assert name == "get_quote"
             assert arguments == {"symbol": "RELIANCE"}
             return {"tool": name, "content": [{"type": "text", "text": "quote"}],
-                    "structured_content": {"price": 100}}
+                    "structured_content": {"price": 100, "source_timestamp": "2026-11-22T10:15:00+05:30"}}
 
     monkeypatch.setattr(api, "NseMcpClient", FakeClient)
     response = TestClient(api.app).post(
@@ -68,5 +68,5 @@ def test_nse_mcp_call_labels_delayed_mode_and_does_not_claim_source_timestamp(mo
     assert response.status_code == 200
     body = response.json()
     assert body["data_mode"] == "DELAYED"
-    assert body["source_timestamp"] is None
+    assert body["source_timestamp"] == "2026-11-22T10:15:00+05:30"
     assert body["result"]["structured_content"]["price"] == 100
