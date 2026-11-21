@@ -32,7 +32,7 @@ import java.util.Locale
 private const val MAX_CSV_BYTES = 20 * 1024 * 1024
 
 @Composable
-fun ResearchLabScreen() {
+fun ResearchLabScreen(session: QuantSession? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var summary by remember { mutableStateOf<OhlcvResearchSummary?>(null) }
@@ -93,7 +93,8 @@ fun ResearchLabScreen() {
     }
 
     LazyColumn(contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { SectionHeading("Test the idea before risking capital", "Research lab.", "Import permitted historical OHLCV data and run transparent local indicator analysis. No server or live feed is required.") }
+        item { SectionHeading("Test the idea before risking capital", "Research lab.", "Use official NSE research tools on demand or import permitted historical OHLCV data for transparent local analysis.") }
+        if (session != null) item { NseMcpResearchPanel(session) }
         item {
             TerminalCard {
                 Eyebrow("Offline dataset")
