@@ -44,7 +44,7 @@ fun MarketPulseScreen() {
             }
         }
         item {
-            Text("Your universe", color = MaterialTheme.colorScheme.onBackground, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("Starter universe · editable controls pending", color = MaterialTheme.colorScheme.onBackground, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
         items(listOf("NIFTY 50" to "Index", "NIFTY BANK" to "Index", "RELIANCE" to "Energy", "HDFCBANK" to "Banking", "INFY" to "Technology")) { item ->
             TerminalCard {
