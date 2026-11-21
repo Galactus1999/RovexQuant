@@ -28,7 +28,7 @@ private data class StrategyItem(val name: String, val detail: String, val status
 @Composable
 fun StrategyScannerScreen() {
     var horizon by rememberSaveable { mutableStateOf(Horizon.INTRADAY) }
-    val items = when (horizon) {
+    val strategyItems = when (horizon) {
         Horizon.SCALP -> listOf(
             StrategyItem("VWAP reclaim", "Session VWAP reclaim; spread and liquidity filters still pending", "Prototype logic", true),
             StrategyItem("Opening impulse", "Opening-range breakout; volume confirmation still pending", "Prototype logic", true),
@@ -79,7 +79,7 @@ fun StrategyScannerScreen() {
                 }
             }
         }
-        items(items) { strategy ->
+        items(strategyItems) { strategy ->
             TerminalCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(Modifier.weight(1f)) {
