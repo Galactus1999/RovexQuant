@@ -28,26 +28,34 @@ class NseMcpError(Exception):
         self.retryable = retryable
 
 
-def _decode_response(response: httpx.Response) -> dict[str, Any]:
+def _decode_response(response: httpx.Response, expected_id: int) -> dict[str, Any]:
     content_type = response.headers.get("content-type", "").lower()
     body = response.text
     if len(body.encode("utf-8", errors="replace")) > 10_000_000:
         raise NseMcpError("NSE MCP response exceeded the 10 MB safety limit", 502)
     if "text/event-stream" in content_type:
-        messages: list[str] = []
+        candidates: list[dict[str, Any]] = []
         for event in body.replace("\r\n", "\n").split("\n\n"):
             data = "\n".join(
                 line[5:].lstrip() for line in event.splitlines() if line.startswith("data:")
             )
-            if data and data != "[DONE]":
-                messages.append(data)
-        if not messages:
-            raise NseMcpError("NSE MCP returned an empty event stream", 502)
-        body = messages[-1]
-    try:
-        payload = json.loads(body)
-    except (TypeError, ValueError) as error:
-        raise NseMcpError("NSE MCP returned an invalid JSON-RPC response", 502) from error
+            if not data or data == "[DONE]":
+                continue
+            try:
+                item = json.loads(data)
+            except ValueError:
+                continue
+            if isinstance(item, dict):
+                candidates.append(item)
+        matching = [item for item in candidates if item.get("id") == expected_id]
+        if not matching:
+            raise NseMcpError("NSE MCP event stream contained no matching JSON-RPC response", 502)
+        payload = matching[-1]
+    else:
+        try:
+            payload = json.loads(body)
+        except (TypeError, ValueError) as error:
+            raise NseMcpError("NSE MCP returned an invalid JSON-RPC response", 502) from error
     if not isinstance(payload, dict):
         raise NseMcpError("NSE MCP returned an invalid response envelope", 502)
     return payload
@@ -127,7 +135,7 @@ class NseMcpClient:
             return None
         if response.status_code == 202:
             raise NseMcpError("NSE MCP accepted a request without returning its JSON-RPC response", 502)
-        payload = _decode_response(response)
+        payload = _decode_response(response, message.get("id"))
         if payload.get("jsonrpc") != "2.0":
             raise NseMcpError("NSE MCP returned an invalid JSON-RPC version", 502)
         if "error" in payload:
