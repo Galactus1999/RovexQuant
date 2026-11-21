@@ -19,6 +19,46 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+
+private val dashboardIndexAliases = mapOf(
+    "NIFTY 50" to listOf("NIFTY 50"),
+    "NIFTY BANK" to listOf("NIFTY BANK"),
+    "NIFTY FINANCIAL SERVICES" to listOf("NIFTY FINANCIAL SERVICES", "NIFTY FIN SERVICE"),
+    "NIFTY IT" to listOf("NIFTY IT"),
+    "NIFTY AUTO" to listOf("NIFTY AUTO"),
+    "NIFTY PHARMA" to listOf("NIFTY PHARMA"),
+    "NIFTY HEALTHCARE" to listOf("NIFTY HEALTHCARE"),
+    "NIFTY FMCG" to listOf("NIFTY FMCG"),
+    "NIFTY METAL" to listOf("NIFTY METAL"),
+    "NIFTY OIL & GAS" to listOf("NIFTY OIL & GAS", "NIFTY OIL AND GAS"),
+    "NIFTY REALTY" to listOf("NIFTY REALTY"),
+    "NIFTY POWER" to listOf("NIFTY POWER"),
+    "NIFTY MEDIA" to listOf("NIFTY MEDIA"),
+    "NIFTY PSU BANK" to listOf("NIFTY PSU BANK"),
+    "NIFTY PRIVATE BANK" to listOf("NIFTY PRIVATE BANK"),
+    "NIFTY CONSUMER DURABLES" to listOf("NIFTY CONSUMER DURABLES"),
+    "NIFTY CAPITAL GOODS" to listOf("NIFTY CAPITAL GOODS"),
+    "NIFTY CHEMICALS" to listOf("NIFTY CHEMICALS"),
+    "NIFTY CEMENT" to listOf("NIFTY CEMENT"),
+    "NIFTY TELECOMMUNICATIONS" to listOf("NIFTY TELECOMMUNICATIONS", "NIFTY TELECOM")
+)
+
+private fun normalizeIndexName(value: String): String =
+    value.uppercase().filter { it.isLetterOrDigit() }
+
+private fun resolveDashboardIndices(master: List<MarketIndexInstrument>): Map<String, String> {
+    val result = linkedMapOf<String, String>()
+    for ((dashboardName, aliases) in dashboardIndexAliases) {
+        val normalizedAliases = aliases.map(::normalizeIndexName).toSet()
+        val match = master.firstOrNull { instrument ->
+            normalizeIndexName(instrument.name) in normalizedAliases ||
+                normalizeIndexName(instrument.tradingSymbol) in normalizedAliases
+        }
+        if (match != null) result[dashboardName] = match.instrumentKey
+    }
+    return result
+}
+
 private enum class TerminalSection(val label: String, val glyph: String) {
     PULSE("Pulse", "◈"),
     SCANNER("Scan", "⌕"),
@@ -32,6 +72,7 @@ fun RovexQuantApp() {
     var session by remember { mutableStateOf<QuantSession?>(null) }
     var selected by remember { mutableStateOf(TerminalSection.PULSE) }
     val ticks = remember { mutableStateMapOf<String, MarketTick>() }
+    val indexKeys = remember { mutableStateMapOf<String, String>() }
     var streamStatus by remember { mutableStateOf("Not connected") }
 
     if (session == null) {
@@ -40,17 +81,39 @@ fun RovexQuantApp() {
     }
 
     val activeSession = session ?: return
-    DisposableEffect(activeSession) {
-        val controller = MarketStreamController(
+    val controller = remember(activeSession) {
+        MarketStreamController(
             session = activeSession,
             onStatus = { streamStatus = it },
             onTick = { tick -> ticks[tick.instrumentKey] = tick }
         )
-        controller.start()
+    }
+    DisposableEffect(controller) {
         onDispose {
             controller.stop()
             ticks.clear()
+            indexKeys.clear()
             streamStatus = "Not connected"
+        }
+    }
+    LaunchedEffect(activeSession) {
+        streamStatus = "Loading official NSE index master"
+        try {
+            val master = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                QuantApi.fetchIndexInstruments(activeSession)
+            }
+            val resolved = resolveDashboardIndices(master)
+            indexKeys.clear()
+            indexKeys.putAll(resolved)
+            if (resolved.isEmpty()) throw IllegalStateException("No dashboard indices matched the official master.")
+            controller.start(resolved.values.toList())
+            streamStatus = "Connecting · ${resolved.size} indices"
+        } catch (failure: Exception) {
+            indexKeys.clear()
+            indexKeys["NIFTY 50"] = "NSE_INDEX|Nifty 50"
+            indexKeys["NIFTY BANK"] = "NSE_INDEX|Nifty Bank"
+            streamStatus = "Instrument master unavailable · limited feed"
+            controller.start(listOf("NSE_INDEX|Nifty 50", "NSE_INDEX|Nifty Bank"))
         }
     }
 
@@ -64,7 +127,7 @@ fun RovexQuantApp() {
         Box(Modifier.weight(1f).fillMaxWidth()) {
             AnimatedContent(targetState = selected, label = "workspaceTransition") { destination ->
                 when (destination) {
-                    TerminalSection.PULSE -> MarketPulseScreen(ticks = ticks, streamStatus = streamStatus)
+                    TerminalSection.PULSE -> MarketPulseScreen(ticks = ticks, indexKeys = indexKeys, streamStatus = streamStatus)
                     TerminalSection.SCANNER -> StrategyScannerScreen()
                     TerminalSection.SIGNALS -> SignalsScreen()
                     TerminalSection.LAB -> ResearchLabScreen()
