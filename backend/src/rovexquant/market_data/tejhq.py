@@ -40,6 +40,8 @@ class TejHqDailyBar:
     previous_close: float | None = None
     turnover: float | None = None
     trades: int | None = None
+    adjusted_close: float | None = None
+    adjustment_factor: float | None = None
 
 
 def _finite_number(value: Any, field: str, *, positive: bool = False) -> float:
@@ -79,7 +81,7 @@ def _rows(payload: Any) -> list[dict[str, Any]]:
     return rows
 
 
-def _normalize_bars(payload: Any) -> list[TejHqDailyBar]:
+def _normalize_bars(payload: Any, *, require_adjusted: bool = False) -> list[TejHqDailyBar]:
     normalized: list[TejHqDailyBar] = []
     seen: set[date] = set()
     for row in _rows(payload):
@@ -102,6 +104,10 @@ def _normalize_bars(payload: Any) -> list[TejHqDailyBar]:
         trades_value = _finite_number(row["trades"], "trades") if row.get("trades") is not None else None
         if trades_value is not None and (trades_value < 0 or not trades_value.is_integer()):
             raise TejHqError("TejHQ returned invalid trade count", 502)
+        adjusted_close = _optional_number(row.get("adj_close"), "adj_close")
+        adjustment_factor = _optional_number(row.get("adj_factor_cumulative"), "adj_factor_cumulative")
+        if require_adjusted and (adjusted_close is None or adjustment_factor is None or adjustment_factor <= 0):
+            raise TejHqError("Adjusted TejHQ row is missing a valid adjusted close/factor", 502)
         normalized.append(TejHqDailyBar(
             date=day, open=opening, high=high, low=low, close=close,
             volume=int(volume_value),
@@ -109,6 +115,8 @@ def _normalize_bars(payload: Any) -> list[TejHqDailyBar]:
             previous_close=_optional_number(row.get("prev_close"), "prev_close"),
             turnover=_optional_number(row.get("turnover"), "turnover"),
             trades=int(trades_value) if trades_value is not None else None,
+            adjusted_close=adjusted_close,
+            adjustment_factor=adjustment_factor,
         ))
     normalized.sort(key=lambda item: item.date)
     return normalized
@@ -190,7 +198,10 @@ class TejHqEodProvider:
             {"from": from_date.isoformat(), "to": to_date.isoformat()},
             requires_key=adjusted,
         )
-        return _normalize_bars(payload)
+        bars = _normalize_bars(payload, require_adjusted=adjusted)
+        if any(item.date < from_date or item.date > to_date for item in bars):
+            raise TejHqError("TejHQ returned a row outside the requested date range", 502)
+        return bars
 
     async def get_delivery(self, exchange: str, symbol: str, from_date: date, to_date: date) -> list[dict[str, Any]]:
         exchange_value, symbol_value = _validate_exchange_symbol(exchange, symbol)
