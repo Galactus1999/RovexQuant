@@ -16,7 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.sp\nimport androidx.compose.material3.Button\nimport androidx.compose.material3.OutlinedTextField\nimport androidx.compose.runtime.mutableStateMapOf\nimport androidx.compose.ui.platform.LocalContext
 
 private enum class TerminalSection(val label: String, val glyph: String) {
     PULSE("Pulse", "◈"),
@@ -34,7 +34,7 @@ fun RovexQuantApp() {
         Box(Modifier.weight(1f).fillMaxWidth()) {
             AnimatedContent(targetState = selected, label = "workspaceTransition") { destination ->
                 when (destination) {
-                    TerminalSection.PULSE -> MarketPulseScreen()
+                    TerminalSection.PULSE -> MarketPulseScreen(ticks = ticks, streamStatus = streamStatus)
                     TerminalSection.SCANNER -> StrategyScannerScreen()
                     TerminalSection.SIGNALS -> SignalsScreen()
                     TerminalSection.LAB -> ResearchLabScreen()
