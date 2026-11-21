@@ -44,6 +44,7 @@ fun StrategyScannerScreen() {
             StrategyItem("Donchian breakout", "Close beyond the prior N-bar channel", "Prototype logic", true),
             StrategyItem("EMA alignment", "Fast/slow trend regime", "Prototype logic", true),
             StrategyItem("RSI regime", "Momentum context; not a standalone entry", "Prototype logic", true),
+            StrategyItem("Bollinger re-entry", "Close re-enters a prior outside-band region", "Prototype logic", true),
             StrategyItem("Volatility contraction", "Compression followed by range expansion", "Research candidate", false)
         )
         Horizon.POSITIONAL -> listOf(
