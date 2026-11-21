@@ -3,6 +3,11 @@ name: Quant NSE MCP Live Connectivity
 on:
   workflow_dispatch:
     inputs:
+      target_branch:
+        description: 'Quant source branch to test'
+        required: true
+        default: 'feat/quant-tejhq-eod-research'
+        type: string
       run_nse_live_smoke:
         description: 'Initialize both official NSE MCP servers and list their tools'
         required: true
@@ -25,6 +30,8 @@ jobs:
     steps:
       - name: Checkout selected Quant branch
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target_branch }}
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
