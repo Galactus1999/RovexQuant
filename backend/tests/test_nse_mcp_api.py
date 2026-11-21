@@ -70,3 +70,14 @@ def test_nse_mcp_call_labels_delayed_mode_and_does_not_claim_source_timestamp(mo
     assert body["data_mode"] == "DELAYED"
     assert body["source_timestamp"] == "2026-11-22T10:15:00+05:30"
     assert body["result"]["structured_content"]["price"] == 100
+
+
+
+def test_nse_mcp_arguments_are_size_bounded(monkeypatch):
+    token = _session(monkeypatch)
+    response = TestClient(api.app).post(
+        "/api/v1/app/research/nse-mcp/call",
+        json={"server": "bhavcopy", "tool": "get_history", "arguments": {"payload": "x" * 40000}},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 422
