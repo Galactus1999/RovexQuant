@@ -28,11 +28,11 @@ def test_rejects_invalid_ohlc():
         import_ohlcv_csv(content, uuid4(), "1m")
 
 def test_flags_missing_intraday_candle_intervals():
-    content = "timestamp,open,high,low,close,volume\\n2025-01-01T09:15:00+05:30,100,102,99,101,1000\\n2025-01-01T09:17:00+05:30,101,103,100,102,900\\n"
+    content = "timestamp,open,high,low,close,volume\n2025-01-01T09:15:00+05:30,100,102,99,101,1000\n2025-01-01T09:17:00+05:30,101,103,100,102,900\n"
     bars = import_ohlcv_csv(content, uuid4(), "1m")
     assert bars[1].quality == DataQuality.GAP_DETECTED
 
 def test_does_not_treat_next_trading_day_as_intraday_gap():
-    content = "timestamp,open,high,low,close,volume\\n2025-01-01T09:15:00+05:30,100,102,99,101,1000\\n2025-01-02T09:15:00+05:30,101,103,100,102,900\\n"
+    content = "timestamp,open,high,low,close,volume\n2025-01-01T09:15:00+05:30,100,102,99,101,1000\n2025-01-02T09:15:00+05:30,101,103,100,102,900\n"
     bars = import_ohlcv_csv(content, uuid4(), "1m")
     assert bars[1].quality == DataQuality.VALID
