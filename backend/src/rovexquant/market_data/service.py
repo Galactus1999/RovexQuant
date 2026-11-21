@@ -9,6 +9,7 @@ from rovexquant.market_data.providers import (
     DhanQuoteProvider, MarketQuote, ProviderError, QuoteInstrument,
     QuoteProvider, UpstoxV3QuoteProvider,
 )
+from rovexquant.market_data.upstox_oauth import get_upstox_access_token
 
 
 class MarketGatewayError(Exception):
@@ -28,8 +29,10 @@ def authorize_market_gateway(supplied_token: str | None) -> None:
 
 
 def build_providers() -> dict[str, QuoteProvider]:
+    # OAuth-managed encrypted token takes precedence; env token remains for local development.
+    upstox_token = get_upstox_access_token() or os.getenv("UPSTOX_ANALYTICS_TOKEN", "")
     return {
-        "upstox": UpstoxV3QuoteProvider(os.getenv("UPSTOX_ANALYTICS_TOKEN", "")),
+        "upstox": UpstoxV3QuoteProvider(upstox_token),
         "dhan": DhanQuoteProvider(
             os.getenv("DHAN_CLIENT_ID", ""), os.getenv("DHAN_ACCESS_TOKEN", "")
         ),
@@ -63,7 +66,6 @@ async def fetch_quotes(
             return name, await provider.get_quotes(instruments), index > 0
         except ProviderError as error:
             last_error = error
-            # Do not silently switch accounts/providers after invalid credentials or bad requests.
             if not error.retryable:
                 raise MarketGatewayError(str(error), error.status_code) from error
     raise MarketGatewayError(
