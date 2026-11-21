@@ -33,6 +33,8 @@ class NseMcpError(Exception):
 def _decode_response(response: httpx.Response) -> dict[str, Any]:
     content_type = response.headers.get("content-type", "").lower()
     body = response.text
+    if len(body.encode("utf-8", errors="replace")) > 10_000_000:
+        raise NseMcpError("NSE MCP response exceeded the 10 MB safety limit", 502)
     if "text/event-stream" in content_type:
         messages: list[str] = []
         for event in body.replace("\r\n", "\n").split("\n\n"):
@@ -82,7 +84,12 @@ class NseMcpClient:
             transport=self._transport,
             headers={"Accept": "application/json, text/event-stream", "Content-Type": "application/json"},
         )
-        await self._initialize()
+        try:
+            await self._initialize()
+        except Exception:
+            await self._client.aclose()
+            self._client = None
+            raise
         return self
 
     async def __aexit__(self, *_: object) -> None:
@@ -244,3 +251,33 @@ def provider_status() -> list[dict[str, Any]]:
         }
         for server, endpoint in NSE_MCP_ENDPOINTS.items()
     ]
+
+
+def extract_source_timestamp(result: dict[str, Any]) -> str | int | float | None:
+    """Extract only explicitly named source-time fields; never infer from retrieval time."""
+    timestamp_keys = {
+        "timestamp", "source_timestamp", "as_of", "asof", "last_updated",
+        "lastupdated", "market_time", "trade_time", "exchange_timestamp",
+    }
+    pending: list[tuple[Any, int]] = [(result.get("structured_content"), 0)]
+    content = result.get("content")
+    if isinstance(content, list):
+        pending.extend((item.get("text"), 0) for item in content if isinstance(item, dict))
+    while pending:
+        value, depth = pending.pop()
+        if depth > 4:
+            continue
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except ValueError:
+                continue
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key.lower() in timestamp_keys and isinstance(item, (str, int, float)) and not isinstance(item, bool):
+                    return item
+                if isinstance(item, (dict, list)):
+                    pending.append((item, depth + 1))
+        elif isinstance(value, list):
+            pending.extend((item, depth + 1) for item in value[:100] if isinstance(item, (dict, list, str)))
+    return None
