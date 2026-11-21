@@ -1,11 +1,12 @@
-name: RovexQuant Backend CI
+name: RovexQuant CI
 on:
   push:
     branches: [main, develop]
   pull_request:
   workflow_dispatch:
+
 jobs:
-  test:
+  backend:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -20,3 +21,17 @@ jobs:
       - run: python -m pip install -e ".[dev]"
       - run: ruff check src tests --select F
       - run: pytest -q
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Assemble debug APK
+        run: gradle -p android :app:assembleDebug --no-daemon
