@@ -28,7 +28,7 @@ def authorize_quant_admin(supplied_key: str | None) -> None:
     if not expected:
         raise UpstoxCredentialError("Quant admin endpoints are disabled until configured", 503)
     if not supplied_key or not hmac.compare_digest(expected, supplied_key):
-        raise UpstoxOAuthError("Invalid Quant admin credential", 401)
+        raise UpstoxCredentialError("Invalid Quant admin credential", 401)
 
 
 class MarketInstrumentInput(BaseModel):
