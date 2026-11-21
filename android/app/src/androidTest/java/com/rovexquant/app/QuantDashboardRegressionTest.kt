@@ -1,11 +1,13 @@
 package com.rovexquant.app
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -20,7 +22,7 @@ class QuantDashboardRegressionTest {
     @Test fun appStartsWithQuantMarketPulseAndHonestOfflineState() {
         composeRule.onNodeWithText("QUANT").assertIsDisplayed()
         composeRule.onNodeWithText("Market pulse.").assertIsDisplayed()
-        composeRule.onNodeWithText("Feed not connected").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Feed not connected").assertCountEquals(2)
         composeRule.onNodeWithText("MARKET DATA NOT CONNECTED").assertIsDisplayed()
     }
 
@@ -35,16 +37,16 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithText("Import OHLCV CSV").assertIsDisplayed()
         composeRule.onNodeWithText("Portfolio").performClick()
         composeRule.onNodeWithText("Portfolio & risk.").assertIsDisplayed()
-        composeRule.onNodeWithText("Planned entry price · ₹").assertIsDisplayed()
+        composeRule.onNodeWithTag("portfolio.entry").assertIsDisplayed()
     }
 
     @Test fun portfolioCalculatesRiskBasedShareQuantity() {
         composeRule.onNodeWithText("Portfolio").performClick()
-        composeRule.onNodeWithText("Capital · INR").performTextInput("5000")
-        composeRule.onNodeWithText("Maximum capital allocation · %").performTextClearance()
-        composeRule.onNodeWithText("Maximum capital allocation · %").performTextInput("100")
-        composeRule.onNodeWithText("Planned entry price · ₹").performTextInput("250")
-        composeRule.onNodeWithText("Stop-loss price · ₹").performTextInput("244")
+        composeRule.onNodeWithTag("portfolio.capital").performTextInput("5000")
+        composeRule.onNodeWithTag("portfolio.allocation").performTextClearance()
+        composeRule.onNodeWithTag("portfolio.allocation").performTextInput("100")
+        composeRule.onNodeWithTag("portfolio.entry").performTextInput("250")
+        composeRule.onNodeWithTag("portfolio.stop").performTextInput("244")
         composeRule.onNodeWithTag("portfolio.quantity").assertTextEquals("8 shares")
         composeRule.onNodeWithTag("portfolio.stopLoss").assertTextEquals("Planned loss at stop  ₹48.00")
     }
