@@ -9,7 +9,7 @@ from rovexquant.market_data.providers import (
     DhanQuoteProvider, MarketQuote, ProviderError, QuoteInstrument,
     QuoteProvider, UpstoxV3QuoteProvider,
 )
-from rovexquant.market_data.upstox_oauth import get_upstox_access_token
+from rovexquant.market_data.upstox_credentials import get_upstox_analytics_token
 
 
 class MarketGatewayError(Exception):
@@ -29,8 +29,8 @@ def authorize_market_gateway(supplied_token: str | None) -> None:
 
 
 def build_providers() -> dict[str, QuoteProvider]:
-    # OAuth-managed encrypted token takes precedence; env token remains for local development.
-    upstox_token = get_upstox_access_token() or os.getenv("UPSTOX_ANALYTICS_TOKEN", "")
+    # Encrypted Analytics Token takes precedence; env token remains for local development.
+    upstox_token = get_upstox_analytics_token() or os.getenv("UPSTOX_ANALYTICS_TOKEN", "")
     return {
         "upstox": UpstoxV3QuoteProvider(upstox_token),
         "dhan": DhanQuoteProvider(
