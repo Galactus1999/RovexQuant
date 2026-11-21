@@ -1,10 +1,10 @@
 from dataclasses import asdict
 import asyncio
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import hmac
 import os
 
-from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field, model_validator
 
 from rovexquant.ai.gateway import GatewayError, authorize_gateway, complete_chat, configured_providers
@@ -19,6 +19,7 @@ from rovexquant.market_data.service import (
 )
 from rovexquant.auth import AppAuthError, bearer_claims, issue_app_session
 from rovexquant.market_data.streaming import StreamError, stream_upstox_market_data
+from rovexquant.market_data.tejhq import TejHqEodProvider, TejHqError
 from rovexquant.market_data.upstox_credentials import (
     UpstoxCredentialError, store_upstox_analytics_token, upstox_analytics_status,
 )
@@ -347,12 +348,6 @@ def backtest(request: BacktestRequest):
         }
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-
-
-# TejHQ is an EOD research source, not a live quote provider.
-from datetime import date
-from fastapi import Query
-from rovexquant.market_data.tejhq import TejHqEodProvider, TejHqError
 
 
 def _tejhq_or_http_error(error: TejHqError) -> HTTPException:
