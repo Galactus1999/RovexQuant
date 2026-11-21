@@ -53,6 +53,8 @@ fun NseMcpResearchPanel(session: QuantSession) {
         loadingCatalog = true
         error = null
         result = null
+        selectedTool = null
+        arguments = "{}"
         scope.launch {
             try {
                 val loaded = withContext(Dispatchers.IO) { QuantApi.fetchNseMcpTools(session, targetServer) }
@@ -115,6 +117,7 @@ fun NseMcpResearchPanel(session: QuantSession) {
                     readOnlyTools.forEach { tool ->
                         FilterChip(
                             selected = selectedTool?.name == tool.name,
+                            enabled = !loadingCatalog && !calling,
                             onClick = {
                                 selectedTool = tool
                                 arguments = "{}"
