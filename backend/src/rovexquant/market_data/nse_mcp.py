@@ -151,8 +151,8 @@ class NseMcpClient:
         if not payload or payload.get("id") != request_id or not isinstance(payload.get("result"), dict):
             raise NseMcpError("NSE MCP initialization response did not match the request", 502)
         negotiated = payload["result"].get("protocolVersion")
-        if not isinstance(negotiated, str) or not negotiated:
-            raise NseMcpError("NSE MCP did not return a protocol version", 502)
+        if negotiated != _PROTOCOL_VERSION:
+            raise NseMcpError("NSE MCP negotiated an unsupported protocol version", 502)
         self._protocol_version = negotiated
         self._initialized = True
         await self._post({"jsonrpc": "2.0", "method": "notifications/initialized"}, expect_response=False)
