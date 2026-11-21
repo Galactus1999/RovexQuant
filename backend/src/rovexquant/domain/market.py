@@ -31,4 +31,13 @@ class MarketBar:
     quality: DataQuality
 
     def valid_ohlc(self) -> bool:
-        return self.low <= min(self.open, self.close) and self.high >= max(self.open, self.close) and self.low <= self.high and self.volume >= 0
+        prices = (self.open, self.high, self.low, self.close)
+        return (
+            all(value.is_finite() and value > 0 for value in prices)
+            and self.low <= min(self.open, self.close)
+            and self.high >= max(self.open, self.close)
+            and self.low <= self.high
+            and isinstance(self.volume, int)
+            and not isinstance(self.volume, bool)
+            and self.volume >= 0
+        )
