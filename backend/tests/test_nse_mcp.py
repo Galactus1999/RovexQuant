@@ -153,3 +153,18 @@ def test_http_rate_limit_is_retryable():
         asyncio.run(run())
     assert error.value.retryable is True
     assert "rate limited" not in str(error.value)
+
+
+
+def test_unsupported_protocol_version_fails_closed():
+    def handler(request):
+        body = json.loads(request.content)
+        return httpx.Response(200, json={
+            "jsonrpc": "2.0", "id": body["id"],
+            "result": {"protocolVersion": "2099-01-01", "capabilities": {}, "serverInfo": {}},
+        })
+    async def run():
+        async with NseMcpClient("bhavcopy", transport=httpx.MockTransport(handler)):
+            pass
+    with pytest.raises(NseMcpError, match="unsupported protocol"):
+        asyncio.run(run())
