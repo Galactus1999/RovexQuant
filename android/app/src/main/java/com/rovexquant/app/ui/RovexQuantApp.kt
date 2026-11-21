@@ -30,7 +30,7 @@ private enum class TerminalSection(val label: String, val glyph: String) {
 fun RovexQuantApp() {
     var selected by remember { mutableStateOf(TerminalSection.PULSE) }
     Column(Modifier.fillMaxSize().background(Ink)) {
-        Column(Modifier.padding(horizontal = 17.dp)) { TerminalHeader() }
+        Column(Modifier.padding(horizontal = 17.dp)) { TerminalHeader(status = if (streamStatus.startsWith("Live")) "Live data" else "Backend", onSignOut = { session = null }) }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             AnimatedContent(targetState = selected, label = "workspaceTransition") { destination ->
                 when (destination) {

@@ -1,6 +1,7 @@
 package com.rovexquant.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -63,7 +64,7 @@ fun EmptyPanel(title: String, body: String, accent: Color = Cyan) {
     }
 }
 @Composable
-fun TerminalHeader() {
+fun TerminalHeader(status: String = "Research · Offline", onSignOut: (() -> Unit)? = null) {
     Row(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(40.dp).clip(RoundedCornerShape(13.dp)).background(PanelRaised), contentAlignment = Alignment.Center) { Text("Q", color = Mint, fontSize = 24.sp, fontWeight = FontWeight.Black) }
         Spacer(Modifier.width(10.dp))
@@ -71,6 +72,9 @@ fun TerminalHeader() {
             Text("QUANT", color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp, fontWeight = FontWeight.Black, letterSpacing = 1.8.sp, modifier = Modifier.testTag("quant.header"))
             Text("INDIAN MARKET INTELLIGENCE", color = Muted, fontSize = 8.sp, letterSpacing = 1.25.sp)
         }
-        StatusPill("Research · Offline")
+        if (onSignOut != null) {
+            Text("Sign out", color = Muted, fontSize = 9.sp, modifier = Modifier.clickable { onSignOut() }.padding(horizontal = 6.dp))
+        }
+        StatusPill(status)
     }
 }

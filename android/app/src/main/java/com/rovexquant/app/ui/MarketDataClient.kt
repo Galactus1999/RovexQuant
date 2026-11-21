@@ -5,6 +5,8 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
@@ -83,9 +85,13 @@ class MarketStreamController(
         client.connectionPool.evictAll()
     }
 
+    private fun emitStatus(value: String) { handler.post { if (!stopped) onStatus(value) } }
+
+    private fun emitTick(value: MarketTick) { handler.post { if (!stopped) onTick(value) } }
+
     private fun connect() {
         if (stopped) return
-        onStatus(if (attempts == 0) "Connecting" else "Reconnecting $attempts")
+        emitStatus(if (attempts == 0) "Connecting" else "Reconnecting $attempts")
         val wsUrl = session.baseUrl.replaceFirst("https://", "wss://")
             .replaceFirst("http://", "ws://") + "/api/v1/app/market/stream"
         val request = Request.Builder().url(wsUrl)
@@ -93,7 +99,7 @@ class MarketStreamController(
         socket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 attempts = 0
-                onStatus("Connected · awaiting ticks")
+                emitStatus("Connected · awaiting ticks")
                 val subscription = JSONObject()
                     .put("instrument_keys", JSONArray(keys))
                     .put("mode", "full")
@@ -104,7 +110,7 @@ class MarketStreamController(
                 runCatching {
                     val json = JSONObject(text)
                     if (json.optString("type") == "error") {
-                        onStatus(json.optString("message", "Stream error"))
+                        emitStatus(json.optString("message", "Stream error"))
                         return
                     }
                     val quotes = json.optJSONArray("quotes") ?: return
@@ -113,7 +119,7 @@ class MarketStreamController(
                         val key = quote.optString("instrument_key")
                         val ltp = quote.optDouble("last_price", Double.NaN)
                         if (key.isBlank() || !ltp.isFinite() || ltp <= 0.0) continue
-                        onTick(MarketTick(
+                        emitTick(MarketTick(
                             instrumentKey = key,
                             lastPrice = ltp,
                             previousClose = quote.optDouble("previous_close").takeIf { it.isFinite() && it > 0 },
@@ -124,13 +130,13 @@ class MarketStreamController(
                         ))
                     }
                     if (json.optString("type") == "initial_feed" || json.optString("type") == "live_feed") {
-                        onStatus("Live · Upstox V3")
+                        emitStatus("Live · Upstox V3")
                     }
-                }.onFailure { onStatus("Invalid market message") }
+                }.onFailure { emitStatus("Invalid market message") }
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                onStatus("Stream unavailable")
+                emitStatus("Stream unavailable")
                 scheduleRetry()
             }
 
