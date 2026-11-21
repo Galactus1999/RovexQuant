@@ -347,3 +347,143 @@ def backtest(request: BacktestRequest):
         }
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+# TejHQ is an EOD research source, not a live quote provider.
+from datetime import date
+from fastapi import Query
+from rovexquant.market_data.tejhq import TejHqEodProvider, TejHqError
+
+
+def _tejhq_or_http_error(error: TejHqError) -> HTTPException:
+    return HTTPException(status_code=error.status_code, detail=str(error))
+
+
+@app.get("/api/v1/app/research/market-data/providers")
+def app_research_data_providers(authorization: str | None = Header(default=None)):
+    try:
+        bearer_claims(authorization)
+        return {"providers": [TejHqEodProvider.from_environment().safe_status()]}
+    except AppAuthError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+@app.get("/api/v1/app/research/market-data/ohlcv/{exchange}/{symbol}")
+async def app_research_eod_ohlcv(
+    exchange: str,
+    symbol: str,
+    from_date: date = Query(..., alias="from"),
+    to_date: date = Query(..., alias="to"),
+    adjusted: bool = False,
+    authorization: str | None = Header(default=None),
+):
+    try:
+        bearer_claims(authorization)
+        provider = TejHqEodProvider.from_environment()
+        bars = await provider.get_ohlcv(exchange, symbol, from_date, to_date, adjusted=adjusted)
+        return {
+            "provider": provider.provider_id,
+            "data_mode": "END_OF_DAY",
+            "adjusted": adjusted,
+            "exchange": exchange.upper(),
+            "symbol": symbol.upper(),
+            "from": from_date,
+            "to": to_date,
+            "received_at": datetime.now(timezone.utc),
+            "timestamp_semantics": "Trading date only; not an intraday or live timestamp",
+            "bars": [asdict(item) for item in bars],
+        }
+    except AppAuthError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+    except TejHqError as error:
+        raise _tejhq_or_http_error(error) from error
+
+
+@app.get("/api/v1/app/research/market-data/delivery/{exchange}/{symbol}")
+async def app_research_eod_delivery(
+    exchange: str,
+    symbol: str,
+    from_date: date = Query(..., alias="from"),
+    to_date: date = Query(..., alias="to"),
+    authorization: str | None = Header(default=None),
+):
+    try:
+        bearer_claims(authorization)
+        provider = TejHqEodProvider.from_environment()
+        rows = await provider.get_delivery(exchange, symbol, from_date, to_date)
+        return {
+            "provider": provider.provider_id,
+            "data_mode": "END_OF_DAY",
+            "exchange": exchange.upper(),
+            "symbol": symbol.upper(),
+            "received_at": datetime.now(timezone.utc),
+            "rows": rows,
+        }
+    except AppAuthError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+    except TejHqError as error:
+        raise _tejhq_or_http_error(error) from error
+
+
+@app.get("/api/v1/app/research/market-data/snapshot/{exchange}")
+async def app_research_eod_snapshot(
+    exchange: str,
+    trading_date: date,
+    authorization: str | None = Header(default=None),
+):
+    try:
+        bearer_claims(authorization)
+        provider = TejHqEodProvider.from_environment()
+        rows = await provider.get_snapshot(exchange, trading_date)
+        return {
+            "provider": provider.provider_id,
+            "data_mode": "END_OF_DAY",
+            "exchange": exchange.upper(),
+            "trading_date": trading_date,
+            "received_at": datetime.now(timezone.utc),
+            "rows": rows,
+        }
+    except AppAuthError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+    except TejHqError as error:
+        raise _tejhq_or_http_error(error) from error
+
+
+@app.get("/api/v1/app/research/market-data/actions/{symbol}")
+async def app_research_corporate_actions(
+    symbol: str,
+    authorization: str | None = Header(default=None),
+):
+    try:
+        bearer_claims(authorization)
+        provider = TejHqEodProvider.from_environment()
+        rows = await provider.get_actions(symbol)
+        return {
+            "provider": provider.provider_id,
+            "data_mode": "CORPORATE_ACTIONS",
+            "symbol": symbol.upper(),
+            "received_at": datetime.now(timezone.utc),
+            "rows": rows,
+        }
+    except AppAuthError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+    except TejHqError as error:
+        raise _tejhq_or_http_error(error) from error
+
+
+@app.get("/api/v1/app/research/market-data/status")
+async def app_research_eod_status(authorization: str | None = Header(default=None)):
+    try:
+        bearer_claims(authorization)
+        provider = TejHqEodProvider.from_environment()
+        status = await provider.get_status()
+        return {
+            "provider": provider.provider_id,
+            "data_mode": "END_OF_DAY",
+            "received_at": datetime.now(timezone.utc),
+            "status": status,
+        }
+    except AppAuthError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+    except TejHqError as error:
+        raise _tejhq_or_http_error(error) from error
