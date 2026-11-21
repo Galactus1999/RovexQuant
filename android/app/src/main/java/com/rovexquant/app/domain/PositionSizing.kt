@@ -27,9 +27,13 @@ object PositionSizingCalculator {
         val riskBudget = capital * riskPercent / 100.0
         val riskPerShare = entryPrice - stopPrice
         val allocationBudget = capital * maxAllocationPercent / 100.0
-        val quantityByRisk = floor(riskBudget / riskPerShare).toInt()
-        val quantityByAllocation = floor(allocationBudget / entryPrice).toInt()
+        if (!riskBudget.isFinite() || !allocationBudget.isFinite() || !riskPerShare.isFinite()) return null
+        val quantityByRisk = floor(riskBudget / riskPerShare).coerceAtMost(Int.MAX_VALUE.toDouble()).toInt()
+        val quantityByAllocation = floor(allocationBudget / entryPrice).coerceAtMost(Int.MAX_VALUE.toDouble()).toInt()
         val quantity = minOf(quantityByRisk, quantityByAllocation).coerceAtLeast(0)
-        return PositionSizeResult(riskBudget, riskPerShare, quantity, quantity * entryPrice, quantity * riskPerShare)
+        val investment = quantity * entryPrice
+        val plannedLoss = quantity * riskPerShare
+        if (!investment.isFinite() || !plannedLoss.isFinite()) return null
+        return PositionSizeResult(riskBudget, riskPerShare, quantity, investment, plannedLoss)
     }
 }
