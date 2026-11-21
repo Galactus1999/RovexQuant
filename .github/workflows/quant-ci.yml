@@ -1,0 +1,110 @@
+name: Quant Build, Regression & Integrity CI
+
+on:
+  push:
+    branches: [main, develop, "fix/**", "feat/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quant-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quant-backend:
+    name: Quant Backend Regression
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout Quant source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Install backend and test dependencies
+        run: python -m pip install -e ".[dev]"
+      - name: Ruff correctness checks
+        run: ruff check src tests
+      - name: Backend regression suite
+        run: pytest -q
+
+  quant-android:
+    name: Quant Android Build, APK Integrity & UI Regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Quant source
+        uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Validate Android project structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f android/settings.gradle.kts
+          test -f android/build.gradle.kts
+          test -f android/app/build.gradle.kts
+          test -f android/app/src/main/AndroidManifest.xml
+          test -f android/app/src/main/java/com/rovexquant/app/MainActivity.kt
+      - name: Build Quant debug APK and run static Android checks
+        run: gradle -p android clean :app:assembleDebug :app:lintDebug :app:testDebugUnitTest --no-daemon --stacktrace
+      - name: Verify APK identity, contents and archive integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          python - "$APK" <<'PY'
+          import hashlib, pathlib, sys, zipfile
+          apk = pathlib.Path(sys.argv[1])
+          assert apk.stat().st_size > 100_000, f"APK unexpectedly small: {apk.stat().st_size}"
+          with zipfile.ZipFile(apk) as archive:
+              bad = archive.testzip()
+              assert bad is None, f"Corrupt APK entry: {bad}"
+              names = set(archive.namelist())
+              assert "AndroidManifest.xml" in names, "APK manifest missing"
+              assert "classes.dex" in names, "DEX bytecode missing"
+              assert "resources.arsc" in names, "Compiled resources missing"
+          digest = hashlib.sha256(apk.read_bytes()).hexdigest()
+          print(f"APK={apk}")
+          print(f"APK_SIZE_BYTES={apk.stat().st_size}")
+          print(f"APK_SHA256={digest}")
+          PY
+          ANALYZER="$(find "$ANDROID_HOME" -type f -name apkanalyzer -perm -u+x -print -quit)"
+          test -n "$ANALYZER"
+          APP_ID="$("$ANALYZER" manifest application-id "$APK")"
+          VERSION="$("$ANALYZER" manifest version-name "$APK")"
+          echo "APK_APPLICATION_ID=$APP_ID"
+          echo "APK_VERSION_NAME=$VERSION"
+          test "$APP_ID" = "com.rovexquant.app"
+      - name: Upload Quant debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Quant-Android-Debug-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Run Quant UI regression tests on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: gradle -p android :app:connectedDebugAndroidTest --no-daemon --stacktrace
