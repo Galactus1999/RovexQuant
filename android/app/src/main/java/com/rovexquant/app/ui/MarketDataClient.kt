@@ -15,6 +15,10 @@ import java.util.concurrent.TimeUnit
 
 data class QuantSession(val baseUrl: String, val accessToken: String)
 data class MarketIndexInstrument(val instrumentKey: String, val name: String, val tradingSymbol: String)
+data class NseMcpTool(val name: String, val description: String, val inputSchema: JSONObject, val readOnly: Boolean)
+data class NseMcpCatalog(val server: String, val tools: List<NseMcpTool>)
+data class NseMcpResult(val provider: String, val dataMode: String, val expectedDelay: String?, val sourceTimestamp: String?, val resultJson: String)
+
 data class MarketTick(
     val instrumentKey: String,
     val lastPrice: Double,
@@ -58,6 +62,85 @@ object QuantApi {
             val token = JSONObject(text).optString("access_token")
             require(token.isNotBlank()) { "Backend returned no session token." }
             return QuantSession(normalized, token)
+        }
+    }
+
+    fun fetchNseMcpTools(session: QuantSession, server: String = "both"): List<NseMcpCatalog> {
+        require(server in setOf("bhavcopy", "cmmkt", "both")) { "Invalid NSE MCP server." }
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/research/nse-mcp/tools?server=$server")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            val catalog = JSONObject(text).optJSONObject("catalog")
+                ?: throw IllegalStateException("NSE MCP returned no tool catalogue.")
+            return buildList {
+                for (serverName in listOf("bhavcopy", "cmmkt")) {
+                    val records = catalog.optJSONArray(serverName) ?: continue
+                    val tools = buildList {
+                        for (index in 0 until records.length()) {
+                            val item = records.optJSONObject(index) ?: continue
+                            val name = item.optString("name")
+                            val schema = item.optJSONObject("input_schema") ?: JSONObject()
+                            if (name.isNotBlank()) add(NseMcpTool(
+                                name = name,
+                                description = item.optString("description"),
+                                inputSchema = schema,
+                                readOnly = item.optBoolean("read_only", false)
+                            ))
+                        }
+                    }
+                    add(NseMcpCatalog(serverName, tools))
+                }
+            }
+        }
+    }
+
+    fun callNseMcpTool(
+        session: QuantSession,
+        server: String,
+        tool: String,
+        argumentsJson: String
+    ): NseMcpResult {
+        require(server in setOf("bhavcopy", "cmmkt")) { "Invalid NSE MCP server." }
+        require(argumentsJson.toByteArray(Charsets.UTF_8).size <= 32 * 1024) { "Arguments exceed 32 KB." }
+        val arguments = try { JSONObject(argumentsJson) } catch (_: Exception) {
+            throw IllegalArgumentException("Arguments must be a valid JSON object.")
+        }
+        val body = JSONObject()
+            .put("server", server)
+            .put("tool", tool)
+            .put("arguments", arguments)
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/research/nse-mcp/call")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .post(body.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            val json = JSONObject(text)
+            val result = json.optJSONObject("result") ?: JSONObject()
+            return NseMcpResult(
+                provider = json.optString("provider"),
+                dataMode = json.optString("data_mode"),
+                expectedDelay = json.optString("expected_delay").takeIf { it.isNotBlank() && it != "null" },
+                sourceTimestamp = json.optString("source_timestamp").takeIf { it.isNotBlank() && it != "null" },
+                resultJson = result.toString(2)
+            )
+        }
+    }
+
+    private fun apiError(body: String, code: Int): String {
+        val detail = runCatching { JSONObject(body).opt("detail") }.getOrNull()
+        return when (detail) {
+            is String -> detail.take(400)
+            is JSONObject -> detail.optString("message").takeIf { it.isNotBlank() }
+                ?: "NSE research request failed (HTTP $code)."
+            else -> "NSE research request failed (HTTP $code)."
         }
     }
 
