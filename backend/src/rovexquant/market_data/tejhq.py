@@ -239,6 +239,7 @@ class TejHqEodProvider:
             "provider_id": self.provider_id,
             "configured": True,
             "mode": "END_OF_DAY",
+            "connection_status": "not_checked",
             "free_key_configured": self.free_key_configured,
             "keyless_endpoints": ["ohlcv", "snapshot", "actions"],
             "free_key_endpoints": ["adjusted", "delivery", "symbols"],
