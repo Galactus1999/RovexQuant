@@ -49,6 +49,6 @@ fun ResearchLabScreen() {
                 Text("Reports must include expectancy, profit factor, maximum drawdown, turnover, exposure, trade count and tail losses. Win rate alone is not sufficient.", color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
             }
         }
-        item { EmptyPanel("No dataset loaded", "Import permitted historical OHLCV data to run the event-driven backtest engine. Costs and next-bar execution assumptions must be explicit.") }
+        item { EmptyPanel("No dataset loaded", "Backend CSV parsing is implemented, including intraday gap flags. Android file picker, local persistence and the dataset-to-backtest workflow are still pending.") }
     }
 }
