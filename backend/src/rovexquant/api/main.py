@@ -1,14 +1,42 @@
+from dataclasses import asdict
 from datetime import datetime, timezone
 from fastapi import FastAPI, Header, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from rovexquant.ai.gateway import GatewayError, authorize_gateway, complete_chat, configured_providers
 from rovexquant.backtesting.engine import BacktestBar, BacktestConfig, run_long_only_backtest
 from rovexquant.indicators.momentum import rsi
 from rovexquant.indicators.trend import adx, macd
 from rovexquant.indicators.volatility import atr
+from rovexquant.market_data.providers import QuoteInstrument
+from rovexquant.market_data.service import (
+    MarketGatewayError, authorize_market_gateway, fetch_quotes, provider_status,
+)
 from rovexquant.strategies.registry import default_registry
 
 app = FastAPI(title="Quant API", version="0.3.0", description="Evidence-based market research. No order execution.")
+
+
+class MarketInstrumentInput(BaseModel):
+    symbol: str = Field(min_length=1, max_length=80)
+    upstox_instrument_key: str | None = Field(default=None, max_length=120)
+    dhan_exchange_segment: str | None = Field(default=None, max_length=30)
+    dhan_security_id: str | None = Field(default=None, max_length=30)
+
+
+class MarketQuotesRequest(BaseModel):
+    instruments: list[MarketInstrumentInput] = Field(min_length=1, max_length=500)
+    provider_order: list[str] = Field(
+        default_factory=lambda: ["upstox", "dhan"], min_length=1, max_length=2
+    )
+
+    @model_validator(mode="after")
+    def unique_symbols(self):
+        symbols = [item.symbol for item in self.instruments]
+        if len(symbols) != len(set(symbols)):
+            raise ValueError("Instrument symbols must be unique within a quote request")
+        if len(self.provider_order) != len(set(self.provider_order)):
+            raise ValueError("Provider order must not contain duplicates")
+        return self
 
 class IndicatorRequest(BaseModel):
     close: list[float] = Field(min_length=1)
@@ -47,6 +75,50 @@ class AIChatRequest(BaseModel):
     fallback_providers: list[str] = Field(default_factory=list, max_length=3)
     max_tokens: int = Field(default=1200, ge=1, le=4096)
     temperature: float = Field(default=0.2, ge=0, le=2)
+
+
+@app.get("/api/v1/market/providers")
+def market_providers(x_quant_market_gateway_key: str | None = Header(default=None)):
+    try:
+        authorize_market_gateway(x_quant_market_gateway_key)
+        return {"providers": provider_status()}
+    except MarketGatewayError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+@app.post("/api/v1/market/quotes")
+async def market_quotes(
+    request: MarketQuotesRequest,
+    x_quant_market_gateway_key: str | None = Header(default=None),
+):
+    try:
+        authorize_market_gateway(x_quant_market_gateway_key)
+        instruments = [
+            QuoteInstrument(
+                symbol=item.symbol,
+                upstox_instrument_key=item.upstox_instrument_key,
+                dhan_exchange_segment=item.dhan_exchange_segment,
+                dhan_security_id=item.dhan_security_id,
+            )
+            for item in request.instruments
+        ]
+        provider, quotes, fallback_used = await fetch_quotes(
+            instruments, request.provider_order
+        )
+        quoted_symbols = {item.symbol for item in quotes}
+        return {
+            "provider": provider,
+            "fallback_used": fallback_used,
+            "received_at": datetime.now(timezone.utc),
+            "complete": len(quoted_symbols) == len(instruments),
+            "missing_symbols": [
+                item.symbol for item in instruments if item.symbol not in quoted_symbols
+            ],
+            "quotes": [asdict(item) for item in quotes],
+        }
+    except MarketGatewayError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
 
 @app.get("/api/v1/health")
 def health():

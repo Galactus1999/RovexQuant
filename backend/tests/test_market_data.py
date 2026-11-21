@@ -125,3 +125,64 @@ def test_provider_status_never_exposes_credentials():
         {"provider_id": "dhan", "configured": True},
     ]
     assert "secret" not in str(status)
+
+
+def test_market_provider_status_requires_server_gateway_token(monkeypatch):
+    from fastapi.testclient import TestClient
+    from rovexquant.api.main import app
+
+    monkeypatch.setenv("QUANT_MARKET_GATEWAY_TOKEN", "server-only-token")
+    response = TestClient(app).get("/api/v1/market/providers")
+    assert response.status_code == 401
+
+
+def test_market_provider_status_is_safe_and_reports_unconfigured(monkeypatch):
+    from fastapi.testclient import TestClient
+    from rovexquant.api.main import app
+
+    monkeypatch.setenv("QUANT_MARKET_GATEWAY_TOKEN", "server-only-token")
+    monkeypatch.delenv("UPSTOX_ANALYTICS_TOKEN", raising=False)
+    monkeypatch.delenv("DHAN_CLIENT_ID", raising=False)
+    monkeypatch.delenv("DHAN_ACCESS_TOKEN", raising=False)
+    response = TestClient(app).get(
+        "/api/v1/market/providers",
+        headers={"x-quant-market-gateway-key": "server-only-token"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"providers": [
+        {"provider_id": "upstox", "configured": False},
+        {"provider_id": "dhan", "configured": False},
+    ]}
+
+
+def test_market_quotes_endpoint_returns_normalized_quote(monkeypatch):
+    from fastapi.testclient import TestClient
+    from rovexquant.api.main import app
+    from rovexquant.market_data import service
+
+    class FakeProvider:
+        provider_id = "upstox"
+        configured = True
+        async def get_quotes(self, instruments):
+            now = datetime.now(timezone.utc)
+            return [MarketQuote(
+                symbol=instruments[0].symbol, provider="upstox", last_price=51000.0,
+                previous_close=50000.0, net_change=1000.0, change_percent=2.0,
+                volume=10, exchange_timestamp=now, received_at=now, quality="VALID",
+            )]
+
+    monkeypatch.setenv("QUANT_MARKET_GATEWAY_TOKEN", "server-only-token")
+    monkeypatch.setattr(service, "build_providers", lambda: {"upstox": FakeProvider()})
+    response = TestClient(app).post(
+        "/api/v1/market/quotes",
+        headers={"x-quant-market-gateway-key": "server-only-token"},
+        json={"provider_order": ["upstox"], "instruments": [{
+            "symbol": "NIFTY BANK", "upstox_instrument_key": "NSE_INDEX|Nifty Bank"
+        }]},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "upstox"
+    assert body["complete"] is True
+    assert body["quotes"][0]["change_percent"] == 2.0
+    assert body["quotes"][0]["quality"] == "VALID"
