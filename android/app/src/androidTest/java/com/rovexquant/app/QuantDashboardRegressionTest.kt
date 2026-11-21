@@ -4,6 +4,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Rule
 import org.junit.Test
@@ -22,13 +24,24 @@ class QuantDashboardRegressionTest {
 
     @Test fun bottomNavigationOpensAllWorkspaces() {
         composeRule.onNodeWithText("Scan").performClick()
-        composeRule.onNodeWithText("Find setups, not stories").assertIsDisplayed()
+        composeRule.onNodeWithText("STRATEGY SCANNER.").assertIsDisplayed()
         composeRule.onNodeWithText("Signals").performClick()
         composeRule.onNodeWithText("Signal centre.").assertIsDisplayed()
         composeRule.onNodeWithText("Lab").performClick()
-        composeRule.onNodeWithText("Test the idea before risking capital").assertIsDisplayed()
+        composeRule.onNodeWithText("Research lab.").assertIsDisplayed()
         composeRule.onNodeWithText("Portfolio").performClick()
         composeRule.onNodeWithText("Portfolio & risk.").assertIsDisplayed()
         composeRule.onNodeWithText("Planned entry price · ₹").assertIsDisplayed()
+    }
+
+    @Test fun portfolioCalculatesRiskBasedShareQuantity() {
+        composeRule.onNodeWithText("Portfolio").performClick()
+        composeRule.onNodeWithText("Capital · INR").performTextInput("5000")
+        composeRule.onNodeWithText("Maximum capital allocation · %").performTextClearance()
+        composeRule.onNodeWithText("Maximum capital allocation · %").performTextInput("100")
+        composeRule.onNodeWithText("Planned entry price · ₹").performTextInput("250")
+        composeRule.onNodeWithText("Stop-loss price · ₹").performTextInput("244")
+        composeRule.onNodeWithText("8 shares").assertIsDisplayed()
+        composeRule.onNodeWithText("Planned loss at stop  ₹48.00").assertIsDisplayed()
     }
 }
