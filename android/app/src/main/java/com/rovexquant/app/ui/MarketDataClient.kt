@@ -129,6 +129,9 @@ object QuantApi {
         masterHttp.newCall(request).execute().use { response ->
             val text = response.body?.string().orEmpty()
             if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            require(text.toByteArray(Charsets.UTF_8).size <= 2 * 1024 * 1024) {
+                "NSE response exceeds the 2 MB mobile research limit. Narrow the query and try again."
+            }
             val json = JSONObject(text)
             val result = json.optJSONObject("result") ?: JSONObject()
             return NseMcpResult(
