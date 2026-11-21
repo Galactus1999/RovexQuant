@@ -241,4 +241,4 @@ def test_http_timeout_is_retryable():
     with pytest.raises(NseMcpError) as error:
         asyncio.run(run())
     assert error.value.retryable is True
-    assert "timeout" in str(error.value).lower()
+    assert "timed out" in str(error.value).lower()
