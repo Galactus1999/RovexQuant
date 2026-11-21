@@ -495,6 +495,12 @@ class NseMcpToolCallRequest(BaseModel):
     tool: str = Field(min_length=1, max_length=128)
     arguments: dict[str, Any] = Field(default_factory=dict)
 
+    @model_validator(mode="after")
+    def bound_arguments(self):
+        if len(str(self.arguments).encode("utf-8")) > 32 * 1024:
+            raise ValueError("NSE MCP arguments must not exceed 32 KB")
+        return self
+
 
 @app.get("/api/v1/app/research/nse-mcp/providers")
 def app_nse_mcp_providers(authorization: str | None = Header(default=None)):
