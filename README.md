@@ -21,6 +21,11 @@ For a personal development setup, configure `QUANT_MARKET_GATEWAY_TOKEN` and `UP
 
 **This is a REST snapshot integration, not yet the persistent Upstox V3 WebSocket streaming service.** The Android client is not yet connected to these endpoints. Do not embed the market gateway token or provider credentials in the APK. Before public multi-user access, add per-user authentication, tenant-isolated encrypted credential storage, account ownership checks, quotas, audit controls and provider/exchange data licensing approval.
 
+## Personal EOD research data
+The backend now includes an authenticated TejHQ EOD research adapter. Keyless endpoints provide daily OHLCV, full-market snapshots and corporate actions; an optional free TejHQ key enables adjusted prices and delivery history. Configure `TEJHQ_API_KEY` only in the backend environment. The API marks all price responses `END_OF_DAY`; this is not a live quote or streaming provider. See [Research data sources](docs/RESEARCH_DATA_SOURCES.md).
+
+TejHQ's published data terms limit its free data to one person's personal research and prohibit using it in a product for other people or a business, and prohibit raw-data redistribution. This integration is therefore for the owner's private research only. Do not expose or redistribute TejHQ responses through a public Quant service without the required data rights. NSE MCP is a separate informational/educational research tool, not a backend market-data feed.
+
 ## AI gateway status
 The backend has a server-side chat-completions gateway, safe provider catalogue, named credential selection, provider-level fallback, bounded requests and credential redaction. Configure server environment secrets using `.env.example`; do not add keys to the APK or Git. The gateway stays disabled until `QUANT_AI_GATEWAY_TOKEN` is configured.
 
