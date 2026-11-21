@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
+import json
 import os
 import re
 import uuid
@@ -13,7 +14,7 @@ import websockets
 from rovexquant.market_data import upstox_market_data_pb2
 
 
-_INSTRUMENT_KEY = re.compile(r"^NSE_INDEX\\|[A-Za-z0-9 ]{1,80}$")
+_INSTRUMENT_KEY = re.compile(r"^NSE_INDEX\|[A-Za-z0-9 ]{1,80}$")
 
 
 class StreamError(Exception):
@@ -71,7 +72,6 @@ def decode_feed_message(payload: bytes) -> dict[str, object]:
 
 
 async def stream_upstox_market_data(client_websocket, instrument_keys: list[str], mode: str = "full") -> None:
-    token = None
     from rovexquant.market_data.upstox_credentials import get_upstox_analytics_token
     token = get_upstox_analytics_token() or os.getenv("UPSTOX_ANALYTICS_TOKEN", "").strip()
     if not token:
@@ -101,7 +101,7 @@ async def stream_upstox_market_data(client_websocket, instrument_keys: list[str]
         authorized_uri, open_timeout=12, ping_interval=20, ping_timeout=20,
         close_timeout=5, max_size=1_048_576,
     ) as upstream:
-        await upstream.send(__import__("json").dumps({
+        await upstream.send(json.dumps({
             "guid": uuid.uuid4().hex,
             "method": "sub",
             "data": {"mode": mode, "instrumentKeys": instrument_keys},

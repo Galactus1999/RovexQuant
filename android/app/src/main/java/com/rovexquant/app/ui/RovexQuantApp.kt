@@ -11,12 +11,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp\nimport androidx.compose.material3.Button\nimport androidx.compose.material3.OutlinedTextField\nimport androidx.compose.runtime.mutableStateMapOf\nimport androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.sp
 
 private enum class TerminalSection(val label: String, val glyph: String) {
     PULSE("Pulse", "◈"),
@@ -28,9 +29,38 @@ private enum class TerminalSection(val label: String, val glyph: String) {
 
 @Composable
 fun RovexQuantApp() {
+    var session by remember { mutableStateOf<QuantSession?>(null) }
     var selected by remember { mutableStateOf(TerminalSection.PULSE) }
+    val ticks = remember { mutableStateMapOf<String, MarketTick>() }
+    var streamStatus by remember { mutableStateOf("Not connected") }
+
+    if (session == null) {
+        QuantLoginScreen(onLogin = { session = it })
+        return
+    }
+
+    val activeSession = session ?: return
+    DisposableEffect(activeSession) {
+        val controller = MarketStreamController(
+            session = activeSession,
+            onStatus = { streamStatus = it },
+            onTick = { tick -> ticks[tick.instrumentKey] = tick }
+        )
+        controller.start()
+        onDispose {
+            controller.stop()
+            ticks.clear()
+            streamStatus = "Not connected"
+        }
+    }
+
     Column(Modifier.fillMaxSize().background(Ink)) {
-        Column(Modifier.padding(horizontal = 17.dp)) { TerminalHeader(status = if (streamStatus.startsWith("Live")) "Live data" else "Backend", onSignOut = { session = null }) }
+        Column(Modifier.padding(horizontal = 17.dp)) {
+            TerminalHeader(
+                status = if (streamStatus.startsWith("Live")) "Live data" else "Backend",
+                onSignOut = { session = null }
+            )
+        }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             AnimatedContent(targetState = selected, label = "workspaceTransition") { destination ->
                 when (destination) {

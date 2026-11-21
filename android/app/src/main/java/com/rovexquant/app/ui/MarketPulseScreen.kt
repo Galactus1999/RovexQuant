@@ -14,6 +14,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.util.Locale
 
 private data class SectorIndex(val sector: String, val benchmark: String, val instrumentKey: String? = null)
 
@@ -40,13 +41,26 @@ private val coreSectorIndices = listOf(
 )
 
 @Composable
-fun MarketPulseScreen() {
+fun MarketPulseScreen(ticks: Map<String, MarketTick> = emptyMap(), streamStatus: String = "Not connected") {
+    val nifty = ticks["NSE_INDEX|Nifty 50"]
+    val bank = ticks["NSE_INDEX|Nifty Bank"]
     LazyColumn(contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item { SectionHeading("The market, without the noise", "Market pulse.", "A clean overview of indices, breadth, sectors and your tracked universe.") }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MetricTile("NIFTY 50", nifty?.lastPrice?.let { String.format(java.util.Locale.US, "%.2f", it) } ?: "—", nifty?.quality ?: "Awaiting verified tick", modifier = Modifier.weight(1f))
-                MetricTile("NIFTY BANK", bank?.lastPrice?.let { String.format(java.util.Locale.US, "%.2f", it) } ?: "—", bank?.quality ?: "Awaiting verified tick", accent = Cyan, modifier = Modifier.weight(1f))
+                MetricTile(
+                    "NIFTY 50",
+                    nifty?.lastPrice?.let { String.format(Locale.US, "%.2f", it) } ?: "—",
+                    nifty?.quality ?: "Awaiting verified tick",
+                    modifier = Modifier.weight(1f)
+                )
+                MetricTile(
+                    "NIFTY BANK",
+                    bank?.lastPrice?.let { String.format(Locale.US, "%.2f", it) } ?: "—",
+                    bank?.quality ?: "Awaiting verified tick",
+                    accent = Cyan,
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
         item {
@@ -73,10 +87,11 @@ fun MarketPulseScreen() {
             Column {
                 Text("Sector performance", color = MaterialTheme.colorScheme.onBackground, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("market.sector.heading"))
                 Spacer(Modifier.height(4.dp))
-                Text("NSE sector-index watchlist · returns, breadth and relative volume appear when a licensed feed is connected.", color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
+                Text("NSE sector-index watchlist · live values are shown only for instruments actually subscribed and received.", color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
             }
         }
         items(coreSectorIndices, key = { it.benchmark }) { sector ->
+            val quote = sector.instrumentKey?.let { ticks[it] }
             TerminalCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -84,13 +99,13 @@ fun MarketPulseScreen() {
                         Spacer(Modifier.height(3.dp))
                         Text(sector.benchmark, color = Muted, fontSize = 9.sp, letterSpacing = .5.sp, modifier = Modifier.testTag("sector.index.${sector.benchmark}"))
                     }
-                    StatusPill(if (sector.instrumentKey != null && ticks[sector.instrumentKey]?.quality == "VALID") "Live" else if (sector.instrumentKey == null) "Key pending" else "No tick", if (sector.instrumentKey != null && ticks[sector.instrumentKey]?.quality == "VALID") Mint else Gold)
+                    StatusPill(if (quote?.quality == "VALID") "Live" else if (sector.instrumentKey == null) "Key pending" else "No tick", if (quote?.quality == "VALID") Mint else Gold)
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    SectorMetric("LTP", sector.instrumentKey?.let { ticks[it]?.lastPrice?.let { price -> String.format(java.util.Locale.US, "%.2f", price) } } ?: "—")
-                    SectorMetric("CHANGE", sector.instrumentKey?.let { ticks[it]?.changePercent?.let { pct -> String.format(java.util.Locale.US, "%+.2f%%", pct) } } ?: "—")
-                    SectorMetric("QUALITY", sector.instrumentKey?.let { ticks[it]?.quality } ?: "—")
+                    SectorMetric("LTP", quote?.lastPrice?.let { String.format(Locale.US, "%.2f", it) } ?: "—")
+                    SectorMetric("CHANGE", quote?.changePercent?.let { String.format(Locale.US, "%+.2f%%", it) } ?: "—")
+                    SectorMetric("QUALITY", quote?.quality ?: "—")
                 }
             }
         }

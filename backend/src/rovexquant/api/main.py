@@ -1,4 +1,5 @@
 from dataclasses import asdict
+import asyncio
 from datetime import datetime, timezone
 import hmac
 import os
@@ -15,7 +16,9 @@ from rovexquant.market_data.providers import QuoteInstrument
 from rovexquant.market_data.service import (
     MarketGatewayError, authorize_market_gateway, fetch_quotes, provider_status,
 )
-from rovexquant.auth import AppAuthError, bearer_claims, issue_app_session\nfrom rovexquant.market_data.streaming import StreamError, stream_upstox_market_data\nfrom rovexquant.market_data.upstox_credentials import (
+from rovexquant.auth import AppAuthError, bearer_claims, issue_app_session
+from rovexquant.market_data.streaming import StreamError, stream_upstox_market_data
+from rovexquant.market_data.upstox_credentials import (
     UpstoxCredentialError, store_upstox_analytics_token, upstox_analytics_status,
 )
 from rovexquant.strategies.registry import default_registry
@@ -133,7 +136,8 @@ async def app_market_stream(websocket: WebSocket):
         await websocket.send_json({"type": "error", "message": "Market stream disconnected"})
         await websocket.close(code=1011, reason="Market stream unavailable")
 
-\nclass IndicatorRequest(BaseModel):
+
+class IndicatorRequest(BaseModel):
     close: list[float] = Field(min_length=1)
     high: list[float] | None = None
     low: list[float] | None = None
