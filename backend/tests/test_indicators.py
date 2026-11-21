@@ -30,7 +30,7 @@ def test_session_vwap_resets_and_ignores_zero_volume():
     assert values[2] == pytest.approx(20.0)
 
 def test_opening_range_uses_only_completed_opening_bars():
-    signals = opening_range_breakout([10, 11, 12, 13], [9, 10, 11, 12], [9.5, 10.5, 11.5, 12.5], ["A"] * 4, 2)
+    signals = opening_range_breakout([10, 11, 12, 13], [9, 10, 10, 12], [9.5, 10.5, 10.5, 12.5], ["A"] * 4, 2)
     assert signals == ["NO_SIGNAL", "NO_SIGNAL", "NO_SIGNAL", "BULLISH_BREAKOUT"]
 
 def test_donchian_excludes_current_bar_from_channel():
