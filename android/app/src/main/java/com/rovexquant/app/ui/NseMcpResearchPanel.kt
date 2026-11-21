@@ -46,15 +46,16 @@ fun NseMcpResearchPanel(session: QuantSession) {
     val currentCatalog = catalogs.firstOrNull { it.server == server }
     val readOnlyTools = currentCatalog?.tools?.filter { it.readOnly }.orEmpty()
 
-    fun loadCatalog() {
+    fun loadCatalog(targetServer: String = server) {
         loadingCatalog = true
         error = null
         result = null
         scope.launch {
             try {
-                val loaded = withContext(Dispatchers.IO) { QuantApi.fetchNseMcpTools(session, server) }
+                val loaded = withContext(Dispatchers.IO) { QuantApi.fetchNseMcpTools(session, targetServer) }
                 catalogs = catalogs.filterNot { old -> loaded.any { it.server == old.server } } + loaded
-                val selected = loaded.firstOrNull { it.server == server }?.tools?.firstOrNull { it.readOnly }
+                val selectedServer = if (targetServer == "both") server else targetServer
+                val selected = loaded.firstOrNull { it.server == selectedServer }?.tools?.firstOrNull { it.readOnly }
                 selectedTool = selected
                 arguments = "{}"
                 if (selected == null) error = "NSE did not publish any eligible read-only tools for this source."
@@ -66,7 +67,7 @@ fun NseMcpResearchPanel(session: QuantSession) {
         }
     }
 
-    LaunchedEffect(session) { loadCatalog() }
+    LaunchedEffect(session) { loadCatalog("both") }
 
     Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
         TerminalCard {
@@ -80,12 +81,12 @@ fun NseMcpResearchPanel(session: QuantSession) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
                     selected = server == "bhavcopy",
-                    onClick = { if (server != "bhavcopy") { server = "bhavcopy"; loadCatalog() } },
+                    onClick = { if (server != "bhavcopy") { server = "bhavcopy"; loadCatalog("bhavcopy") } },
                     label = { Text("Bhavcopy · EOD") }
                 )
                 FilterChip(
                     selected = server == "cmmkt",
-                    onClick = { if (server != "cmmkt") { server = "cmmkt"; loadCatalog() } },
+                    onClick = { if (server != "cmmkt") { server = "cmmkt"; loadCatalog("cmmkt") } },
                     label = { Text("CM market · delayed") }
                 )
             }
@@ -94,7 +95,7 @@ fun NseMcpResearchPanel(session: QuantSession) {
                     if (loadingCatalog) "Discovering official tools…" else "${readOnlyTools.size} read-only tools available",
                     color = Muted, fontSize = 10.sp
                 )
-                TextButton(onClick = { loadCatalog() }, enabled = !loadingCatalog && !calling) {
+                TextButton(onClick = { loadCatalog("both") }, enabled = !loadingCatalog && !calling) {
                     Text("Refresh tools")
                 }
             }
