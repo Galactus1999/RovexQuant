@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 from rovexquant.ai.gateway import GatewayError, authorize_gateway, complete_chat, configured_providers

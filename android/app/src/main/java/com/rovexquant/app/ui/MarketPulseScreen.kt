@@ -82,7 +82,7 @@ fun MarketPulseScreen() {
                     Column(Modifier.weight(1f)) {
                         Text(sector.sector, color = MaterialTheme.colorScheme.onBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(3.dp))
-                        Text(sector.benchmark, color = Muted, fontSize = 9.sp, letterSpacing = .5.sp)
+                        Text(sector.benchmark, color = Muted, fontSize = 9.sp, letterSpacing = .5.sp, modifier = Modifier.testTag("sector.index.${sector.benchmark}"))
                     }
                     StatusPill("No feed", Gold)
                 }

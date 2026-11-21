@@ -7,6 +7,16 @@
 - Broker tokens must be revocable and follow official OAuth/session requirements.
 - No order-placement scopes or order endpoints in this project.
 
+## Market-data gateway
+
+- `UPSTOX_ANALYTICS_TOKEN`, `DHAN_ACCESS_TOKEN` and `DHAN_CLIENT_ID` are backend-only credentials. Never place them in the APK, source code, CI logs or issue comments.
+- `QUANT_MARKET_GATEWAY_TOKEN` protects the current server-to-server development endpoints. It is not a production mobile authentication system and must never be embedded in the Android client.
+- Upstox Analytics Tokens are read-only and long-lived, but remain sensitive account credentials. Do not share a personal token with other Quant users.
+- Dhan data APIs have separate eligibility/pricing from its free trading API. Confirm the account's data entitlement before enabling the adapter.
+- Provider fallback is only for transient availability failures. Authentication failures and invalid requests fail closed; Quant does not rotate accounts or keys to evade limits.
+- Provider adapters return safe status metadata only; credentials and upstream authorization headers are never returned.
+- Before public multi-user access implement per-user JWT/OAuth, tenant-isolated encrypted credential storage, provider account ownership, revocation, budgets, rate limits, audit events and data licensing/redistribution approval.
+
 ## Quant AI gateway
 
 - Provider credentials are server-side only. The Android APK must never contain provider keys or the gateway service token.

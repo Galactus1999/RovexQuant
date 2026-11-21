@@ -23,7 +23,7 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithText("Market pulse.").assertIsDisplayed()
         composeRule.onNodeWithTag("market.feed.status").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("market.sector.heading").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("NIFTY BANK").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("sector.index.NIFTY BANK").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun bottomNavigationOpensAllWorkspacesAndSectorCoverage() {
