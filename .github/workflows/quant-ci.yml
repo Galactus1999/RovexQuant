@@ -44,6 +44,70 @@ jobs:
       - name: Full backend regression suite
         run: pytest -q
 
+  quant-backend-container:
+    name: Quant Backend Container & Auth Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Quant source
+        uses: actions/checkout@v4
+      - name: Build production backend image
+        run: docker build --pull -t quant-api:ci ./backend
+      - name: Smoke-test container, app auth and encrypted provider vault
+        shell: bash
+        run: |
+          set -euo pipefail
+          DATA_DIR="$RUNNER_TEMP/quant-api-data"
+          mkdir -p "$DATA_DIR"
+          sudo chown 10001:10001 "$DATA_DIR"
+          APP_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          FERNET_KEY="$(python -c 'import base64,os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')"
+          ADMIN_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          docker run -d --name quant-api-ci \
+            -p 127.0.0.1:8765:8000 \
+            -v "$DATA_DIR:/data" \
+            -e PORT=8000 \
+            -e QUANT_TOKEN_DB_PATH=/data/quant-secrets.sqlite3 \
+            -e QUANT_APP_USERNAME=quant-ci \
+            -e QUANT_APP_PASSWORD=quant-ci-password \
+            -e QUANT_APP_SESSION_SIGNING_KEY="$APP_KEY" \
+            -e QUANT_TOKEN_ENCRYPTION_KEY="$FERNET_KEY" \
+            -e QUANT_ADMIN_GATEWAY_TOKEN="$ADMIN_KEY" \
+            quant-api:ci
+          cleanup() {
+            status=$?
+            docker logs quant-api-ci || true
+            docker rm -f quant-api-ci >/dev/null 2>&1 || true
+            exit "$status"
+          }
+          trap cleanup EXIT
+          ready=false
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8765/api/v1/health >/dev/null; then ready=true; break; fi
+            sleep 1
+          done
+          test "$ready" = true
+          UNAUTH_CODE="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8765/api/v1/app/market/providers)"
+          test "$UNAUTH_CODE" = "401"
+          SESSION="$(curl -fsS -X POST http://127.0.0.1:8765/api/v1/auth/session \
+            -H 'Content-Type: application/json' \
+            --data '{"username":"quant-ci","password":"quant-ci-password"}' \
+            | python -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')"
+          curl -fsS http://127.0.0.1:8765/api/v1/app/market/providers \
+            -H "Authorization: Bearer $SESSION" >/dev/null
+          PROVISION="$(curl -fsS -X POST http://127.0.0.1:8765/api/v1/integrations/upstox/analytics-token \
+            -H "X-Quant-Admin-Key: $ADMIN_KEY" \
+            -H 'Content-Type: application/json' \
+            --data '{"token":"fake-analytics-token-for-container-smoke"}')"
+          case "$PROVISION" in *fake-analytics-token-for-container-smoke*) echo "Provider token leaked in response"; exit 1 ;; esac
+          STATUS="$(curl -fsS http://127.0.0.1:8765/api/v1/integrations/upstox/status \
+            -H "X-Quant-Admin-Key: $ADMIN_KEY")"
+          echo "$STATUS" | grep -q '"connected":true'
+          if grep -a -R -q "fake-analytics-token-for-container-smoke" "$DATA_DIR"; then
+            echo "Provider token found in plaintext in persistent storage"
+            exit 1
+          fi
+
   quant-android-build:
     name: Quant Android Compile, Lint & APK Integrity
     runs-on: ubuntu-latest
