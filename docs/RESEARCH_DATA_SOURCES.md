@@ -57,6 +57,8 @@ For this repository's current single-user, non-commercial educational/research u
 
 Quant implements this as an authenticated, on-demand research connector. The backend performs MCP initialize, tools/list and tools/call over the two official Streamable HTTP endpoints. Tool names and JSON input schemas are discovered from NSE at request time; Quant does not assume tool names or scrape the NSE website. Tools with write/trade/order-like names or an explicit `readOnlyHint: false` are blocked. The tool catalogue is not treated as a market-data entitlement, and remote tool results are not cached or persisted by these routes.
 
+Android integration: the signed-in Research Lab calls these routes using the existing in-memory Quant app session. It discovers both server catalogues, shows only tools permitted by the backend read-only guard, displays the current tool's input JSON schema, and submits a user-authored JSON argument object. Results are labelled by source mode and show a source timestamp only when NSE explicitly supplies one. This is an interactive research console, not an unattended scanner or order workflow.
+
 Authenticated app routes:
 - `GET /api/v1/app/research/nse-mcp/providers`
 - `GET /api/v1/app/research/nse-mcp/tools?server=bhavcopy|cmmkt|both`
