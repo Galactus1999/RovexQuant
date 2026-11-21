@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import hmac
 import os
 
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field, model_validator
 
 from rovexquant.ai.gateway import GatewayError, authorize_gateway, complete_chat, configured_providers
@@ -15,19 +15,18 @@ from rovexquant.market_data.providers import QuoteInstrument
 from rovexquant.market_data.service import (
     MarketGatewayError, authorize_market_gateway, fetch_quotes, provider_status,
 )
-from rovexquant.market_data.upstox_oauth import (
-    UpstoxOAuthError, build_authorization_url, exchange_authorization_code,
-    upstox_connection_status,
+from rovexquant.market_data.upstox_credentials import (
+    UpstoxCredentialError, store_upstox_analytics_token, upstox_analytics_status,
 )
 from rovexquant.strategies.registry import default_registry
 
-app = FastAPI(title="Quant API", version="0.4.0", description="Evidence-based market research. No order execution.")
+app = FastAPI(title="Quant API", version="0.5.0", description="Evidence-based market research. No order execution.")
 
 
 def authorize_quant_admin(supplied_key: str | None) -> None:
     expected = os.getenv("QUANT_ADMIN_GATEWAY_TOKEN", "").strip()
     if not expected:
-        raise UpstoxOAuthError("Quant admin endpoints are disabled until configured", 503)
+        raise UpstoxCredentialError("Quant admin endpoints are disabled until configured", 503)
     if not supplied_key or not hmac.compare_digest(expected, supplied_key):
         raise UpstoxOAuthError("Invalid Quant admin credential", 401)
 
@@ -96,37 +95,34 @@ class AIChatRequest(BaseModel):
     temperature: float = Field(default=0.2, ge=0, le=2)
 
 
-@app.get("/api/v1/integrations/upstox/authorize")
-def upstox_authorize(x_quant_admin_key: str | None = Header(default=None)):
+class UpstoxAnalyticsTokenInput(BaseModel):
+    token: str = Field(min_length=20, max_length=4096)
+
+
+@app.post("/api/v1/integrations/upstox/analytics-token")
+def save_upstox_analytics_token(
+    request: UpstoxAnalyticsTokenInput,
+    x_quant_admin_key: str | None = Header(default=None),
+):
     try:
         authorize_quant_admin(x_quant_admin_key)
-        return {"authorization_url": build_authorization_url(), "expires_in_seconds": 600}
-    except UpstoxOAuthError as error:
+        store_upstox_analytics_token(request.token)
+        return {
+            "status": "connected",
+            "provider": "upstox",
+            "credential_type": "analytics_read_only",
+            "message": "Token encrypted and stored on the Quant backend; it is never returned",
+        }
+    except UpstoxCredentialError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
-
-
-@app.get("/api/v1/integrations/upstox/callback")
-async def upstox_callback(
-    code: str | None = Query(default=None, max_length=2048),
-    state: str = Query(min_length=1, max_length=2048),
-    error: str | None = Query(default=None, max_length=200),
-):
-    if error:
-        raise HTTPException(status_code=400, detail="Upstox authorization was declined; restart login")
-    try:
-        await exchange_authorization_code(code or "", state)
-        return {"status": "connected", "provider": "upstox",
-                "message": "Upstox token stored encrypted on the Quant backend"}
-    except UpstoxOAuthError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
 @app.get("/api/v1/integrations/upstox/status")
 def upstox_status(x_quant_admin_key: str | None = Header(default=None)):
     try:
         authorize_quant_admin(x_quant_admin_key)
-        return upstox_connection_status()
-    except UpstoxOAuthError as error:
+        return upstox_analytics_status()
+    except UpstoxCredentialError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
 
