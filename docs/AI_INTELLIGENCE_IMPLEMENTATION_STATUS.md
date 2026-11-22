@@ -1,9 +1,9 @@
 # RovexQuant functional and AI intelligence status
 
-**Reviewed:** 2026-11-23  
-**Working branch:** `main`  
-**Integrated baseline:** `bc6cafe09e2eaf0da7d4b1556696336300836999`  
-**Current integration:** PR #18 is merged to `main`; the evidence-contract and NSE MCP hardening changes are being integrated separately.  
+**Reviewed:** 2026-11-22  
+**Working branch:** `feat/quant-eod-market-pulse`  
+**Reviewed head at time of update:** `4a98d5d3ffa73d0ec2af113df0547ebe587c391f`  
+**Current stacked PR:** [#16 — Add automatic NSE EOD market pulse](https://github.com/Galactus1999/RovexQuant/pull/16)  
 **Authoritative product requirement:** [AI Intelligence Centre build prompt](prompts/ROVEXQUANT_AI_INTELLIGENCE_BUILD_PROMPT.md)
 
 This document distinguishes implemented code from features that still depend on credentials, a deployed backend, or unimplemented ingestion/research services. A visible screen is not evidence of a working provider connection.
@@ -21,17 +21,17 @@ This document distinguishes implemented code from features that still depend on 
 | Signals | Signal lifecycle UI and evidence/risk-gate design. | No populated persistent signal-generation pipeline is currently established; the current screen correctly reports no generated signals. |
 | AI provider gateway | Server-side provider-neutral chat completion gateway for supported providers, bounded inputs/outputs and server-side credentials. | A gateway is not itself an autonomous research system. It requires valid provider credentials and a successful live completion request. |
 | Android AI workspace | Provider discovery, masked credential entry, chat interface and AI strategy-brief request workflow. | Provider configuration and successful model connectivity are separate states. No configured provider or successful production completion is inferred from the presence of the UI. |
-| AI Intelligence Centre | Authenticated on-demand GDELT discovery, deterministic event classification and sector hypotheses; typed Pydantic evidence/entity/event/impact/research-claim contracts and deterministic impact rollups. | Not an autonomous LLM research agent. No scheduled evidence ingestion, graph persistence, verified primary-source adjudication, company/instrument mapping or calibrated stock recommendations. Sector impact remains a hypothesis until company exposure is verified. |
+| AI Intelligence Centre | Authenticated on-demand GDELT article discovery; deterministic event keyword classification and transparent first-order sector exposure hypotheses. | Not an LLM research agent. No scheduled ingestion, durable event store, verified primary-source claim adjudication, company/instrument mapping, RAG, evidence graph, or stock recommendations. Sector impact text is explicitly a hypothesis. |
 | Research Lab | Local OHLCV CSV import/persistence, deterministic summary and on-demand NSE MCP research panel. | NSE MCP use is restricted to the repository's documented private educational/on-demand scope. It must not be repurposed as an automated market scanner or AI training pipeline. |
 | Portfolio | Risk-based position sizing and portfolio/risk UI. | Not yet integrated with continuously refreshed holdings, corporate actions, live exposure or event-impact monitoring. |
 
 ## Important branch integration state
 
-- PR #18 merged the stacked market-data, EOD ingestion and Android intelligence workspace changes into `main`.
-- PR #12 contributes the typed evidence, entity, event, impact-edge and research-claim contracts plus deterministic impact rollups.
-- PR #14 contributes live NSE MCP smoke validation, bounded retry behavior and a reviewed read-only tool allowlist; it remains a separate integration until its exact-head checks and conflicts are resolved.
-- PRs #15–#17 and their prerequisite stack are included in PR #18 and have been closed as superseded.
-- A visible screen or passing compile is not evidence of a live provider connection; runtime and source freshness remain separate acceptance criteria.
+- PR #16 is stacked on PR #15, which is stacked on PR #13 and the earlier Android AI integration foundations.
+- PR #14 (live NSE MCP smoke/acceptance work) is a separate draft branch and is not part of PR #16's current base chain.
+- PR #12 (typed evidence/entity/event/impact contracts and deterministic impact rollup) is also a separate draft branch and is not integrated into the current PR #16 stack.
+- Do not assume that an open PR is part of the app build. Only merged changes or the exact selected branch are included.
+- No PR is to be merged without explicit owner approval.
 
 ## Data-source and licence boundaries
 
@@ -70,7 +70,7 @@ This document distinguishes implemented code from features that still depend on 
 4. Add official NSE RSS and selected primary-source ingestion with provenance and source-health state.
 5. Add verified historical sector-index returns and then point-in-time constituent-level sector analytics.
 6. Build scanner and signal persistence only after the underlying universe/history pipeline is validated.
-7. Extend the typed evidence/impact contracts into persistent ingestion, canonical entity resolution, temporal graph storage and claim-level verification before implementing model-generated causal analysis.
+7. Integrate the separate typed evidence/impact contracts before implementing model-generated causal analysis.
 8. Complete emulator/device validation and publish only verified APKs.
 
 No placeholder stock picks, fabricated events, fabricated prices or unsupported causal claims are permitted.
