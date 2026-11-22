@@ -103,7 +103,6 @@ def test_server_marked_non_read_only_tool_is_blocked():
 def test_tool_error_and_invalid_json_are_not_silently_accepted():
     seen = []
     transport = httpx.MockTransport(_handler_for({
-        "tools": [{"name": "get_history", "inputSchema": {"type": "object"}}],
         "tools": [{"name": "get_history", "inputSchema": {"type": "object"},
                    "annotations": {"readOnlyHint": True}}],
         "call": {"isError": True, "content": [{"type": "text", "text": "private detail"}]},
