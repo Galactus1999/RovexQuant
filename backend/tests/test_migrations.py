@@ -6,7 +6,7 @@ import psycopg
 import pytest
 from alembic import command
 from alembic.config import Config
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 
 from rovexquant.db.schema import EXPECTED_SCHEMA_REVISION
 from rovexquant.market_data import upstox_credentials as vault
@@ -27,6 +27,19 @@ def migrated_postgres(monkeypatch):
     monkeypatch.setenv("QUANT_TOKEN_STORAGE_MODE", "postgresql")
     monkeypatch.setenv("QUANT_TOKEN_ENCRYPTION_KEY", Fernet.generate_key().decode())
 
+    # Simulate a pre-migration install. The baseline must adopt this table and
+    # preserve its existing encrypted bytes rather than recreate or truncate it.
+    with psycopg.connect(database_url, sslmode="disable") as connection:
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS provider_tokens "
+            "(provider TEXT PRIMARY KEY, encrypted_token BYTEA NOT NULL, updated_at BIGINT NOT NULL)"
+        )
+        connection.execute(
+            "INSERT INTO provider_tokens(provider, encrypted_token, updated_at) "
+            "VALUES (%s, %s, %s) ON CONFLICT(provider) DO NOTHING",
+            ("phase1-legacy-migration-probe", b"legacy-ciphertext-preservation-probe", 1),
+        )
+
     config = Config("alembic.ini")
     command.upgrade(config, "head")
     command.upgrade(config, "head")  # A second upgrade must be a no-op.
@@ -34,7 +47,10 @@ def migrated_postgres(monkeypatch):
     yield database_url
 
     with psycopg.connect(database_url, sslmode="disable") as connection:
-        connection.execute("DELETE FROM provider_tokens WHERE provider = %s", ("upstox",))
+        connection.execute(
+            "DELETE FROM provider_tokens WHERE provider IN (%s, %s, %s)",
+            ("upstox", "phase1-legacy-migration-probe", "phase1-rollback-probe"),
+        )
 
 
 def test_postgres_migration_creates_and_records_expected_schema(migrated_postgres):
@@ -112,3 +128,51 @@ def test_postgres_startup_rejects_schema_revision_mismatch(migrated_postgres):
                 "UPDATE alembic_version SET version_num = %s",
                 (EXPECTED_SCHEMA_REVISION,),
             )
+
+def test_postgres_baseline_adopts_legacy_vault_without_rewriting_ciphertext(migrated_postgres):
+    with psycopg.connect(migrated_postgres, sslmode="disable") as connection:
+        row = connection.execute(
+            "SELECT encrypted_token, expires_at FROM provider_tokens WHERE provider=%s",
+            ("phase1-legacy-migration-probe",),
+        ).fetchone()
+    assert row == (b"legacy-ciphertext-preservation-probe", None)
+
+
+def test_postgres_vault_transaction_rolls_back_partial_changes(migrated_postgres):
+    with pytest.raises(RuntimeError, match="force transaction rollback"):
+        with vault._connect() as connection:
+            connection.execute(
+                "INSERT INTO provider_tokens(provider, encrypted_token, updated_at, expires_at) "
+                "VALUES (%s, %s, %s, %s)",
+                ("phase1-rollback-probe", b"must-not-commit", 1, None),
+            )
+            raise RuntimeError("force transaction rollback")
+    with psycopg.connect(migrated_postgres, sslmode="disable") as connection:
+        row = connection.execute(
+            "SELECT provider FROM provider_tokens WHERE provider=%s",
+            ("phase1-rollback-probe",),
+        ).fetchone()
+    assert row is None
+
+
+def test_postgres_vault_key_rotation_is_atomic_and_new_key_decrypts(migrated_postgres, monkeypatch):
+    old_key = Fernet.generate_key()
+    new_key = Fernet.generate_key()
+    token = "postgres-key-rotation-token-123456789"
+    monkeypatch.setenv("QUANT_TOKEN_ENCRYPTION_KEY", old_key.decode())
+    vault.store_upstox_analytics_token(token)
+
+    assert vault.rotate_provider_token_encryption_key(
+        old_key.decode(), new_key.decode()
+    ) >= 1
+
+    monkeypatch.setenv("QUANT_TOKEN_ENCRYPTION_KEY", new_key.decode())
+    assert vault.get_upstox_analytics_token() == token
+    with psycopg.connect(migrated_postgres, sslmode="disable") as connection:
+        encrypted = connection.execute(
+            "SELECT encrypted_token FROM provider_tokens WHERE provider=%s",
+            ("upstox",),
+        ).fetchone()[0]
+    assert Fernet(new_key).decrypt(bytes(encrypted)).decode() == token
+    with pytest.raises(InvalidToken):
+        Fernet(old_key).decrypt(bytes(encrypted))
