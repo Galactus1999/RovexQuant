@@ -13,8 +13,9 @@ from pydantic import BaseModel, Field, model_validator
 from rovexquant.ai.gateway import GatewayError, authorize_gateway, complete_chat, configured_providers
 from rovexquant.backtesting.engine import BacktestBar, BacktestConfig, run_long_only_backtest
 from rovexquant.indicators.momentum import rsi
+from rovexquant.indicators.moving_average import ema, sma
 from rovexquant.indicators.trend import adx, macd
-from rovexquant.indicators.volatility import atr
+from rovexquant.indicators.volatility import atr, bollinger_bands
 from rovexquant.market_data.providers import QuoteInstrument
 from rovexquant.market_data.instruments import InstrumentMasterError, get_nse_index_instruments
 from rovexquant.market_data.service import (
@@ -216,7 +217,11 @@ class IndicatorRequest(BaseModel):
     close: list[float] = Field(min_length=1)
     high: list[float] | None = None
     low: list[float] | None = None
+    sma_period: int = Field(default=20, ge=1, le=500)
+    ema_period: int = Field(default=20, ge=1, le=500)
     rsi_period: int = Field(default=14, ge=2, le=500)
+    bollinger_period: int = Field(default=20, ge=2, le=500)
+    bollinger_deviations: float = Field(default=2.0, gt=0, le=10)
     atr_period: int = Field(default=14, ge=2, le=500)
     adx_period: int = Field(default=14, ge=2, le=500)
 
@@ -369,7 +374,18 @@ async def ai_chat(request: AIChatRequest, x_quant_ai_gateway_key: str | None = H
 @app.post("/api/v1/research/indicators")
 def calculate_indicators(request: IndicatorRequest):
     try:
-        result = {"rsi": rsi(request.close, request.rsi_period), "macd": macd(request.close)}
+        bb_upper, bb_middle, bb_lower = bollinger_bands(
+            request.close, request.bollinger_period, request.bollinger_deviations
+        )
+        result = {
+            "sma": sma(request.close, request.sma_period),
+            "ema": ema(request.close, request.ema_period),
+            "rsi": rsi(request.close, request.rsi_period),
+            "macd": macd(request.close),
+            "bollinger_bands": {
+                "upper": bb_upper, "middle": bb_middle, "lower": bb_lower,
+            },
+        }
         if request.high is not None or request.low is not None:
             if request.high is None or request.low is None:
                 raise ValueError("high and low must be supplied together")
