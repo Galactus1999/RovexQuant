@@ -440,3 +440,37 @@ def test_gzip_encoded_mcp_response_is_decompressed_exactly_once():
 
     tools = asyncio.run(run())
     assert tools[0]["name"] == "get_market_breadth"
+
+
+def test_reviewed_nse_data_tool_without_read_only_annotation_is_allowed():
+    catalog = safe_tool_catalog([{
+        "name": "get_index_snapshot",
+        "description": "Get the end-of-day values of NSE indices on a specific date.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["date", "filter"],
+            "properties": {"date": {"type": "string"}, "filter": {"type": "string"}},
+        },
+        "annotations": {},
+    }])
+    assert catalog[0]["read_only"] is True
+
+
+def test_explicit_negative_read_only_hint_overrides_local_allowlist():
+    catalog = safe_tool_catalog([{
+        "name": "get_index_snapshot",
+        "description": "Get the end-of-day values of NSE indices on a specific date.",
+        "inputSchema": {"type": "object"},
+        "annotations": {"readOnlyHint": False},
+    }])
+    assert catalog[0]["read_only"] is False
+
+
+def test_unknown_nse_tool_without_positive_read_only_evidence_stays_blocked():
+    catalog = safe_tool_catalog([{
+        "name": "get_unreviewed_data",
+        "description": "Get some data from the server.",
+        "inputSchema": {"type": "object"},
+        "annotations": {},
+    }])
+    assert catalog[0]["read_only"] is False
