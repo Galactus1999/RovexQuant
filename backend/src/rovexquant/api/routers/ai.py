@@ -1,6 +1,7 @@
 """AI gateway routes; provider selection and execution remain in the AI gateway."""
 from __future__ import annotations
 
+import json
 import math
 from datetime import date, datetime, timezone
 from typing import Any, Literal
@@ -10,6 +11,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from rovexquant.ai.gateway import GatewayError, authorize_gateway, complete_chat, configured_providers
 from rovexquant.market_data import tejhq_service
+from rovexquant.market_data.tejhq_service import TejHqError
 from rovexquant.research.contracts import IndicatorRequest
 from rovexquant.research.service import calculate_indicators
 from rovexquant.security.dependencies import require_app_session
@@ -67,9 +69,9 @@ def _build_eod_evidence(bars: list[Any]) -> dict[str, Any]:
     volumes = [item.volume for item in bars]
     indicators = calculate_indicators(IndicatorRequest(close=closes, high=highs, low=lows))
     sma20 = _last_finite(indicators["sma"])
-    sma50 = _last_finite(indicators["ema"]) if len(closes) < 50 else _last_finite(
+    sma50 = _last_finite(
         calculate_indicators(IndicatorRequest(close=closes, high=highs, low=lows, sma_period=50))["sma"]
-    )
+    ) if len(closes) >= 50 else None
     rsi14 = _last_finite(indicators["rsi"])
     atr14 = _last_finite(indicators["atr"])
     adx14 = _last_finite(indicators["adx"])
@@ -246,7 +248,7 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
             model=request.model,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": str(user_evidence)},
+                {"role": "user", "content": json.dumps(user_evidence, separators=(",", ":"), sort_keys=True)},
             ],
             max_tokens=1400,
             temperature=0.1,
