@@ -115,11 +115,8 @@ def _connect() -> Iterator[Any]:
             database_url, connect_timeout=10, sslmode=_database_sslmode()
         )
         try:
-            connection.execute(
-                "CREATE TABLE IF NOT EXISTS provider_tokens "
-                "(provider TEXT PRIMARY KEY, encrypted_token BYTEA NOT NULL, "
-                "updated_at BIGINT NOT NULL, expires_at BIGINT)"
-            )
+            # Schema is owned by Alembic and verified during application startup.
+            # Ordinary requests must never issue DDL against the hosted database.
             yield connection
             connection.commit()
         except Exception:
