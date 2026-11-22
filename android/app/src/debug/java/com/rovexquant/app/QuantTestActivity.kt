@@ -13,6 +13,12 @@ import com.rovexquant.app.data.repository.QuantDataRepository
 import com.rovexquant.app.feature.workspace.QuantWorkspaceViewModel
 import org.json.JSONObject
 
+/**
+ * Deterministic test host compiled only into the debug variant.
+ *
+ * Keeping this Activity in the target debug APK (rather than the androidTest APK)
+ * ensures ActivityScenario launches it in the target application process.
+ */
 class QuantTestActivity : MainActivity() {
     val fakeRepository = FakeQuantRepository()
 
@@ -54,7 +60,9 @@ class FakeQuantRepository : QuantDataRepository {
 
     override suspend fun fetchNseMcpTools(session: QuantSession, server: String): List<NseMcpCatalog> {
         val servers = if (server == "both") listOf("bhavcopy", "cmmkt") else listOf(server)
-        return servers.map { NseMcpCatalog(it, emptyList(), "No tools in deterministic UI test fixture.") }
+        return servers.map {
+            NseMcpCatalog(it, emptyList(), "No tools in deterministic UI test fixture.")
+        }
     }
 
     override suspend fun callNseMcpTool(
