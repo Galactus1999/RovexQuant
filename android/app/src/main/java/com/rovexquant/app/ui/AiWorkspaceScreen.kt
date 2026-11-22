@@ -253,7 +253,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                 Eyebrow("Final strategy stage · data rescue")
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "If your CSV import is unavailable, Quant can retrieve verified daily OHLCV from its configured TejHQ EOD adapter, validate it, calculate deterministic evidence and ask AI to review the strategy.",
+                    "If your CSV import is unavailable, Quant can retrieve corporate-action-adjusted daily OHLC from its TejHQ EOD adapter, validate it, calculate deterministic price evidence and ask AI to review the strategy. Raw volume is excluded from relative-volume claims.",
                     color = MaterialTheme.colorScheme.onBackground, fontSize = 12.sp, lineHeight = 18.sp
                 )
                 Spacer(Modifier.height(10.dp))
@@ -314,7 +314,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                     Text("${report.exchange}:${report.symbol}", color = MaterialTheme.colorScheme.onBackground, fontSize = 19.sp, fontWeight = FontWeight.Bold)
                     Text("${report.barCount} daily bars · ${report.firstTradingDate} to ${report.latestTradingDate}", color = Muted, fontSize = 10.sp)
                     Spacer(Modifier.height(10.dp))
-                    MetricTile("Latest EOD close", String.format(Locale.US, "₹%,.2f", report.evidence.latestClose), report.latestTradingDate, accent = Cyan)
+                    MetricTile("Latest adjusted EOD close", String.format(Locale.US, "₹%,.2f", report.evidence.latestClose), report.latestTradingDate, accent = Cyan)
                     Spacer(Modifier.height(8.dp))
                     AiIndicatorLine("SMA 20", report.evidence.sma20?.let { String.format(Locale.US, "₹%,.2f", it) } ?: "Insufficient history")
                     AiIndicatorLine("SMA 50", report.evidence.sma50?.let { String.format(Locale.US, "₹%,.2f", it) } ?: "Insufficient history")
@@ -338,7 +338,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
             }
             item {
                 TerminalCard {
-                    Eyebrow("Recovered source bars · latest 8")
+                    Eyebrow("Adjusted EOD bars · latest 8")
                     Spacer(Modifier.height(5.dp))
                     report.bars.takeLast(8).asReversed().forEach { bar ->
                         Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), horizontalArrangement = Arrangement.SpaceBetween) {
