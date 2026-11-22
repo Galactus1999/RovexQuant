@@ -6,6 +6,7 @@ import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.NseMcpTool
 import com.rovexquant.app.data.model.QuantSession
+import com.rovexquant.app.data.repository.MarketStream
 
 import android.os.Handler
 import android.os.Looper
@@ -192,7 +193,7 @@ class MarketStreamController(
     private val session: QuantSession,
     private val onStatus: (String) -> Unit,
     private val onTick: (MarketTick) -> Unit
-) {
+) : MarketStream {
     private val client = OkHttpClient.Builder()
         .pingInterval(20, TimeUnit.SECONDS)
         .connectTimeout(12, TimeUnit.SECONDS)
@@ -207,7 +208,7 @@ class MarketStreamController(
     private var keys: List<String> = emptyList()
     private val retry = Runnable { connect() }
 
-    fun start(instrumentKeys: List<String>) {
+    override fun start(instrumentKeys: List<String>) {
         keys = instrumentKeys.distinct().take(100)
         stopped = false
         if (keys.isEmpty()) {
@@ -217,7 +218,7 @@ class MarketStreamController(
         connect()
     }
 
-    fun stop() {
+    override fun stop() {
         stopped = true
         handler.removeCallbacks(retry)
         socket?.close(1000, "App leaving market screen")
