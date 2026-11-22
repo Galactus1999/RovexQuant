@@ -74,3 +74,35 @@ def test_equity_master_supports_gzip_and_rejects_empty_universe():
             {"segment": "NSE_INDEX", "instrument_type": "INDEX", "name": "NIFTY",
              "trading_symbol": "NIFTY", "instrument_key": "NSE_INDEX|Nifty 50"}
         ]).encode())
+
+
+def test_instrument_master_selects_verified_nse_cash_equities_only():
+    records = [
+        {"segment": "NSE_EQ", "instrument_type": "EQ", "name": "RELIANCE INDUSTRIES LTD",
+         "trading_symbol": "RELIANCE", "isin": "INE002A01018",
+         "instrument_key": "NSE_EQ|INE002A01018"},
+        {"segment": "NSE_EQ", "instrument_type": "BE", "name": "JOCIL LIMITED",
+         "trading_symbol": "JOCIL", "isin": "INE839G01010",
+         "instrument_key": "NSE_EQ|INE839G01010"},
+        {"segment": "NSE_FO", "instrument_type": "FUT", "name": "RELIANCE",
+         "trading_symbol": "RELIANCE FUT", "isin": "INE002A01018",
+         "instrument_key": "NSE_FO|12345"},
+        {"segment": "NSE_EQ", "instrument_type": "EQ", "name": "BAD",
+         "trading_symbol": "BAD", "isin": "INE002A01018",
+         "instrument_key": "https://bad.example"},
+    ]
+    result = normalize_nse_equity_master(json.dumps(records).encode())
+    assert [item["trading_symbol"] for item in result] == ["JOCIL", "RELIANCE"]
+    assert result[1]["instrument_key"] == "NSE_EQ|INE002A01018"
+
+
+def test_equity_master_supports_gzip_and_rejects_empty_universe():
+    records = [{"segment": "NSE_EQ", "instrument_type": "EQ", "name": "RELIANCE",
+                "trading_symbol": "RELIANCE", "isin": "INE002A01018",
+                "instrument_key": "NSE_EQ|INE002A01018"}]
+    assert normalize_nse_equity_master(gzip.compress(json.dumps(records).encode()))[0]["isin"] == "INE002A01018"
+    with pytest.raises(InstrumentMasterError, match="no valid cash-equity"):
+        normalize_nse_equity_master(json.dumps([
+            {"segment": "NSE_INDEX", "instrument_type": "INDEX", "name": "NIFTY",
+             "trading_symbol": "NIFTY", "instrument_key": "NSE_INDEX|Nifty 50"}
+        ]).encode())
