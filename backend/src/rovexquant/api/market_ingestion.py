@@ -5,7 +5,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from rovexquant.market_data.eod_store import (
-    EodStoreError, latest_ingestion_status, symbol_history,
+    EodStoreError, latest_ingestion_status, latest_persisted_snapshot, symbol_history,
 )
 from rovexquant.security.dependencies import require_app_session
 
@@ -23,6 +23,20 @@ def _store_error(error: EodStoreError) -> HTTPException:
 def app_market_ingestion_status(exchange: Literal["nse", "bse"] = "nse"):
     try:
         return latest_ingestion_status(exchange)
+    except EodStoreError as error:
+        raise _store_error(error) from error
+
+
+@router.get(
+    "/api/v1/app/market-data/ingestion/snapshot/{exchange}",
+    dependencies=[Depends(require_app_session)],
+)
+def app_market_ingestion_snapshot(
+    exchange: Literal["nse", "bse"],
+    limit: int = Query(20, ge=1, le=50),
+):
+    try:
+        return latest_persisted_snapshot(exchange, limit=limit)
     except EodStoreError as error:
         raise _store_error(error) from error
 
