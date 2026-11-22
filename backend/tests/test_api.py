@@ -165,3 +165,82 @@ def test_readiness_fails_closed_for_unconfigured_hosted_storage(monkeypatch):
         "Required credential storage is unavailable or its schema is not migrated"
     )
     assert "postgresql://" not in response.text
+
+
+def test_validation_errors_are_structured_and_never_echo_password_input():
+    secret = "DO_NOT_ECHO_THIS_PASSWORD_" + ("x" * 300)
+    response = client.post(
+        "/api/v1/auth/session",
+        json={"username": "quant-test", "password": secret},
+    )
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "validation_error"
+    assert body["request_id"] == response.headers["X-Request-ID"]
+    assert secret not in response.text
+    assert all("input" not in item for item in body["detail"])
+
+
+def test_auth_failure_uses_structured_error_contract():
+    response = client.get("/api/v1/app/market/providers")
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "unauthorized"
+    assert response.json()["request_id"] == response.headers["X-Request-ID"]
+
+
+def test_request_logs_are_structured_and_redact_headers_query_and_body(caplog):
+    from rovexquant.security.request_context import request_metrics
+
+    request_metrics.clear()
+    caplog.set_level("INFO", logger="rovexquant.request")
+    secrets = (
+        "AUTHORIZATION_SECRET_7f6e",
+        "ADMIN_HEADER_SECRET_8a9b",
+        "QUERY_SECRET_1c2d",
+    )
+    response = client.get(
+        "/api/v1/health?access_token=" + secrets[2],
+        headers={
+            "Authorization": "Bearer " + secrets[0],
+            "X-Quant-Admin-Key": secrets[1],
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["X-Request-ID"] == response.json().get("request_id", response.headers["X-Request-ID"])
+    matching = [record.getMessage() for record in caplog.records if record.name == "rovexquant.request"]
+    assert matching
+    event = __import__("json").loads(matching[-1])
+    assert event["event"] == "http_request"
+    assert event["route"] == "/api/v1/health"
+    assert event["status_code"] == 200
+    assert event["request_id"] == response.headers["X-Request-ID"]
+    assert event["duration_ms"] >= 0
+    combined = "\n".join(matching)
+    assert all(secret not in combined for secret in secrets)
+    assert request_metrics.snapshot()["requests"]
+
+
+def test_process_metrics_are_admin_only_and_report_real_http_requests(monkeypatch):
+    from rovexquant.security.request_context import request_metrics
+
+    request_metrics.clear()
+    monkeypatch.setenv("QUANT_ADMIN_GATEWAY_TOKEN", "admin-test-token-long-enough")
+    assert client.get("/api/v1/health/metrics").status_code == 401
+    response = client.get(
+        "/api/v1/health/metrics",
+        headers={"X-Quant-Admin-Key": "admin-test-token-long-enough"},
+    )
+    assert response.status_code == 200
+    assert response.json()["scope"] == "single_process"
+    assert any(item["route"] == "/api/v1/health/metrics" for item in response.json()["requests"])
+
+
+def test_body_limit_returns_structured_error_and_correlation_id():
+    response = client.post(
+        "/api/v1/auth/session",
+        content=b" " * (2 * 1024 * 1024 + 1),
+        headers={"Content-Type": "application/json"},
+    )
+    assert response.status_code == 413
+    assert response.json()["error"]["code"] == "request_too_large"
+    assert response.json()["request_id"] == response.headers["X-Request-ID"]
