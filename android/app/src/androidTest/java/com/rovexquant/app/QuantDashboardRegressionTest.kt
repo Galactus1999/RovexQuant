@@ -83,7 +83,7 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithText("Fuel costs may pressure operating margins.").assertIsDisplayed()
         composeRule.onNodeWithText("Company and instrument mapping is not yet enabled.")
             .assertIsDisplayed()
-        composeRule.onNodeWithText("fixture.example").assertIsDisplayed()
+        composeRule.onNodeWithText("↗ fixture.example · seen 20261122T090000Z").assertIsDisplayed()
     }
 
     @Test fun portfolioCalculatesRiskBasedShareQuantity() {
