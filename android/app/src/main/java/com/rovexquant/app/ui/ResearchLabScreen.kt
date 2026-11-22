@@ -1,5 +1,8 @@
 package com.rovexquant.app.ui
 
+import com.rovexquant.app.data.model.QuantSession
+import com.rovexquant.app.data.repository.QuantRepository
+
 import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -32,7 +35,7 @@ import java.util.Locale
 private const val MAX_CSV_BYTES = 20 * 1024 * 1024
 
 @Composable
-fun ResearchLabScreen(session: QuantSession? = null) {
+fun ResearchLabScreen(session: QuantSession? = null, repository: QuantRepository? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var summary by remember { mutableStateOf<OhlcvResearchSummary?>(null) }
@@ -94,7 +97,7 @@ fun ResearchLabScreen(session: QuantSession? = null) {
 
     LazyColumn(contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { SectionHeading("Test the idea before risking capital", "Research lab.", "Use official NSE research tools on demand or import permitted historical OHLCV data for transparent local analysis.") }
-        if (session != null) item { NseMcpResearchPanel(session) }
+        if (session != null && repository != null) item { NseMcpResearchPanel(session, repository) }
         item {
             TerminalCard {
                 Eyebrow("Offline dataset")
