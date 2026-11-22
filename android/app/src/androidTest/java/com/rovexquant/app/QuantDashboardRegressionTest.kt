@@ -42,8 +42,9 @@ class QuantDashboardRegressionTest {
             composeRule.onAllNodesWithText("FIXTURE").fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithTag("market.eod.snapshot").assertIsDisplayed()
-        composeRule.onNodeWithText("FIXTURE").assertIsDisplayed()
         composeRule.onNodeWithText("END OF DAY").assertIsDisplayed()
+        composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasText("FIXTURE"))
+        composeRule.onNodeWithText("FIXTURE").assertIsDisplayed()
         composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("market.feed.status"))
         composeRule.onNodeWithTag("market.feed.status").assertIsDisplayed()
         composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("market.sector.heading"))
