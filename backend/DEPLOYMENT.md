@@ -133,7 +133,7 @@ transaction rolls back. It prints only the number of rows rotated.
    injected by the secret manager:
 
 ```bash
-python scripts/rotate_provider_token_key.py
+uv run --locked python scripts/rotate_provider_token_key.py
 ```
 
 5. Only after a successful rotation, set `QUANT_TOKEN_ENCRYPTION_KEY` to the
