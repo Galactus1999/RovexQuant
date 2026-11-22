@@ -28,7 +28,7 @@ The initial deployment is a private, single-owner pilot. Multi-user tenancy, alw
 | Backtesting | `backtesting/engine.py` | Long-only prototype; not a scientifically complete execution simulator |
 | AI gateway | `ai/gateway.py` | Server-side chat adapter; no Android integration, per-user BYOK, research workflow or independent verifier yet |
 | Database schema/migrations | Not yet established | Credential table is currently bootstrapped by vault code; migration system and durable research schemas are Phase 1 work |
-| Jobs/observability | Not yet established | No durable worker/job queue or production-grade distributed tracing/metrics pipeline yet |
+| Jobs/observability | `security/request_context.py`, health routes and deployment config | Server-generated request IDs and liveness/readiness endpoints exist; no durable worker/job queue, structured redacted request logs, metrics or distributed tracing pipeline yet |
 
 ## Dependency direction
 
@@ -86,11 +86,13 @@ NSE MCP is an on-demand informational source. Do not treat it as a licensed comm
 ## Persistence and operations
 
 - PostgreSQL/Neon is the durable transactional store for user/configuration/credential metadata and future research records.
+- Alembic is the single versioned migration owner. Application startup verifies the expected schema revision; ordinary PostgreSQL requests do not execute DDL.
 - Use Neon's pooled transaction endpoint for ordinary short-lived application requests; use a direct endpoint for schema migrations and operations needing session-level state.
 - SQLite is local/test-only and must be selected explicitly. Hosted Docker defaults to PostgreSQL and fails closed if its URL or encryption configuration is absent.
 - Migrations have one owner and run as an explicit deployment operation, not during ordinary request handling.
 - FastAPI in-process tasks are not durable background jobs. A recoverable job must have persistent state, idempotency and restart semantics before it is exposed as reliable.
 - Render Free is a development/personal pilot tier: no durable filesystem and no dependable always-on WebSocket/worker guarantees.
+- API requests receive a server-generated `X-Request-ID`; readiness checks mandatory credential storage and schema state. Rate limiting is currently process-local for the single-instance pilot and must be replaced with an atomic shared store before horizontal scaling.
 
 ## API and schema compatibility
 
