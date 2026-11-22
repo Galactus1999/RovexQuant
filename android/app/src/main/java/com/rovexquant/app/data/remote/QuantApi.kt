@@ -189,8 +189,17 @@ object QuantApi {
         credentialId: String?
     ): AiCompletion {
         require(messages.isNotEmpty() && messages.size <= 12) { "Keep AI conversations to the latest 12 messages." }
+        val boundedMessages = mutableListOf<AiChatMessage>()
+        var combinedCharacters = 0
+        messages.asReversed().forEach { message ->
+            if (boundedMessages.size < 10 && combinedCharacters + message.content.length <= 22_000) {
+                boundedMessages.add(message)
+                combinedCharacters += message.content.length
+            }
+        }
+        require(boundedMessages.isNotEmpty()) { "Conversation is too large to send safely." }
         val messageArray = JSONArray().apply {
-            messages.forEach { message ->
+            boundedMessages.asReversed().forEach { message ->
                 put(JSONObject().put("role", message.role).put("content", message.content))
             }
         }
