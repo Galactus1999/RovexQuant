@@ -256,7 +256,7 @@ class NseMcpClient:
         }
         if not reviewed.get(name, False):
             raise NseMcpError(
-                "NSE MCP tool is not positively identified as read-only", 403
+                "NSE MCP tool is not marked read-only or otherwise positively identified", 403
             )
         schema = tool.get("inputSchema")
         if not isinstance(schema, dict) or schema.get("type") != "object":
