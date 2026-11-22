@@ -197,8 +197,11 @@ def test_stream_bridge_performs_authorized_v3_subscription_and_decodes_tick(monk
         "mode": "ltpc",
         "instrumentKeys": ["NSE_INDEX|Nifty 50", "NSE_EQ|INE002A01018"],
     }
-    assert len(client_socket.messages[0]["quotes"]) == 2
-    assert client_socket.messages[0]["quotes"][0]["last_price"] == 24000.0
+    quotes_by_key = {
+        quote["instrument_key"]: quote for quote in client_socket.messages[0]["quotes"]
+    }
+    assert quotes_by_key["NSE_INDEX|Nifty 50"]["last_price"] == 24000.0
+    assert quotes_by_key["NSE_EQ|INE002A01018"]["last_price"] == 1500.0
 
 
 def test_stream_bridge_rejects_unapproved_instrument_keys_before_network(monkeypatch):
