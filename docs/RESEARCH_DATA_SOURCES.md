@@ -50,7 +50,7 @@ NSE describes the CM market data as approximately 1–3 minutes delayed, not tic
 For this repository's current single-user, non-commercial educational/research use, Quant may integrate the official NSE MCP servers as an on-demand research source, subject to NSE's current terms. The integration must:
 - make requests only for the authenticated owner's research session; do not expose an unauthenticated public data proxy or multi-user data service;
 - use data only to answer informational/educational questions and perform transparent, on-demand descriptive calculations;
-- never use NSE MCP data to train, fine-tune, evaluate or improve Ben, another AI model, ML model or algorithm;
+- never use NSE MCP data to train, fine-tune, evaluate or train, fine-tune, evaluate or improve any AI/ML model or algorithm;
 - never redistribute raw NSE data, offer a public data feed, place/route orders, or represent the delayed stream as exchange-authorized live trading data;
 - label CM market responses as `DELAYED` with the provider's observed timestamp/freshness where supplied, and Bhavcopy as `END_OF_DAY`;
 - avoid building a persistent raw-data archive from MCP responses unless NSE confirms the permitted retention terms in writing.
@@ -107,10 +107,95 @@ Do not mix adjusted and unadjusted OHLC series in one backtest. Delivery history
 
 - Official API documentation: https://tejhq.dev/docs/api/market-data
 - Terms: https://tejhq.dev/terms
-- The keyless full-market NSE/BSE snapshot is an end-of-day source. The provider documents a daily refresh (normally around 18:30 IST with a later retry) and a large full-market response; it is not an intraday feed.
+- The keyless full-market NSE/BSE snapshot is an end-of-day source. TejHQ documents a trading-day 18:30 IST run with a 21:30 IST retry; its current data terms say data is usually ready by the next morning IST and provide no SLA. Treat the `/v1/status` response, not the cron target, as the freshness authority; it is not an intraday feed.
 - Current terms permit personal research, private dashboards and local storage, but prohibit redistribution and commercial use. Quant is restricted to the private owner installation unless the provider grants broader rights.
 - The authenticated app endpoint `/api/v1/app/market-data/eod/latest/{exchange}` searches backwards for the latest non-empty trading date (bounded lookback), then returns a deterministic summary: EQ-series coverage, advances/declines/unchanged, top gainers/losers and most-active stocks.
 - Android requests this snapshot automatically after successful login and exposes manual refresh. The UI labels it `END_OF_DAY` and displays the actual trading date; retrieval time is never presented as a market timestamp.
 - This endpoint does not persist raw snapshots or claim continuous scheduled collection. A durable daily ingestion worker and historical snapshot store remain separate roadmap work.
 - Upstox V3 remains the optional live WebSocket provider. A stored token is not proof of a live feed; the app must receive valid ticks before reporting live connectivity.
 
+
+## 5. Additional free primary and discovery sources (research reviewed 2026-11-22)
+
+These sources are candidates for the next ingestion phase. A source being free to query does not automatically grant rights to redistribute its content. Store source metadata, canonical URLs, retrieval times and only the content fields permitted by each source.
+
+### Indian listed-company disclosures
+
+- Official NSE RSS: https://www.nseindia.in/static/rss-feed
+- Feed categories include announcements, annual reports, board meetings, financial results, corporate actions, insider trading, shareholding patterns, circulars and other issuer disclosures.
+- Use RSS as a change-discovery mechanism. Fetch and verify the linked exchange filing before creating a factual event or company-impact claim. Preserve the original filing URL and publication metadata.
+- Do not scrape undocumented NSE JSON endpoints. NSE's market-data policy requires subscriber agreements for licensed market data and restricts redistribution. Official real-time data products are subscription/licensing products.
+- NSE Indices publishes historical index-data reports and sector-index factsheets. Use the official historical index-data download for benchmark time series where the data terms permit. Index constituent/weight data is a separate product and may require a subscription; do not infer full constituent weights from a factsheet or from a sector label.
+
+### Live Indian market prices
+
+- Upstox Developer API: https://upstox.com/developer/api-documentation/
+- Upstox advertises its trading and market-data APIs as free to use; the account owner must create an app and authorize access. Quant's Upstox V3 stream remains optional and must display LIVE only after a successful authorized connection and valid source ticks.
+- Keep the user's token server-side in the encrypted provider vault. Do not store it in Android preferences or commit it to Git.
+- Dhan Data API is currently a paid subscription; it is not a zero-cost fallback. Do not design the free tier around it.
+- Alpha Vantage's free service currently documents 25 requests/day. It is not suitable as the primary full-universe Indian scanner feed.
+- Do not build production collection on Yahoo Finance's unofficial yfinance endpoints; Yahoo does not publish an official public API and its terms restrict automated collection without permission.
+
+### Global news, geopolitical events and policy discovery
+
+- GDELT Project: https://www.gdeltproject.org/ and DOC API documentation at https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/
+- GDELT is free/open for research and other uses under its published terms and is useful for broad multilingual discovery. It is not a primary-source verification service. Apply conservative request pacing, caching, deduplication and bounded queries; rate limits may be imposed.
+- Use GDELT article URLs to find source material, then prefer official government, regulator, company or exchange sources for factual verification.
+- Add primary-source RSS feeds from RBI, SEBI, Ministry of Finance, PIB, DGFT, US Treasury, Federal Reserve, ECB and other relevant authorities only after checking their feed terms and stable URLs.
+
+### Macro and cross-country indicators
+
+- World Bank Indicators API: https://datahelpdesk.worldbank.org/knowledgebase/articles/889392-about-the-indicators-api
+  - No API key is required; it exposes thousands of economic and development time series. Best for lower-frequency structural and cross-country context, not intraday market signals.
+- FRED/ALFRED: https://fred.stlouisfed.org/docs/api/fred/
+  - Free personal account and API key; useful for US rates, yields, inflation, credit conditions, dollar and global macro series. Respect attribution and the series-level third-party rights; retain release/vintage timestamps to avoid look-ahead bias.
+- RBI DBIE: https://dbie.rbi.org.in/
+  - Official RBI statistical portal with a large catalogue of Indian macro/financial series and downloadable outputs. Use documented downloads or APIs only; do not assume an undocumented endpoint is a supported public API.
+- IMF Data API: https://data.imf.org/en/Resource-Pages/IMF-API
+  - SDMX APIs expose IMF datasets. Confirm the current account/access and dataset-specific conditions before automating collection.
+
+### Company filings and financial statements outside India
+
+- SEC EDGAR APIs: https://www.sec.gov/search-filings/edgar-application-programming-interfaces
+  - Free JSON submissions and XBRL company-facts APIs; no API key required. Updated as filings are disseminated. Send a descriptive User-Agent and stay at or below the SEC's published 10 requests/second maximum.
+  - Use for US issuer filings and global macro/industry context where relevant; it is not an Indian company filing source.
+
+### Science, AI, inventions and patents
+
+- arXiv RSS/Atom: https://info.arxiv.org/help/rss.html
+  - Free daily subject feeds (including cs.AI, cs.LG, cs.CL, quant-ph and semiconductor-adjacent categories). Treat preprints as research announcements, not peer-reviewed validation or proof of commercial adoption.
+- Crossref REST API: https://www.crossref.org/documentation/retrieve-metadata/rest-api
+  - Public metadata API with no registration required. Use the polite pool with an identifying contact; abstracts and publisher full text may carry separate copyright.
+- OpenAlex API: https://help.openalex.org/api/authentication/
+  - Basic access is free; a free API key increases the daily budget and enables deeper cursor paging. It is useful for scholarly works, institutions, topics and citation relationships, not real-time stock data.
+- USPTO PatentsView: https://www.uspto.gov/ip-policy/economic-research/patentsview
+  - Public patent datasets and search tools for US patenting activity. Patent publication is not proof of technical feasibility, product launch or revenue impact. Indian patent coverage requires a separate India-specific source and terms review.
+
+## 6. Recommended zero-cost acquisition plan
+
+1. **NSE/BSE EOD equities:** TejHQ keyless full-market snapshot and OHLCV. Fetch once after the provider's published daily update window, check /v1/status, and store the date and freshness state. Backfill from the documented Parquet dataset rather than making thousands of symbol-by-symbol calls.
+2. **Intraday/live equities:** owner-authorized Upstox V3 WebSocket. Subscribe to the verified NSE equity and benchmark instrument masters, track each instrument's last valid tick, reconnect state and stale age. Do not label a credential as connected until ticks arrive.
+3. **Corporate disclosures:** NSE RSS + original exchange filing links. Add BSE primary disclosures only through documented endpoints/feeds and source terms.
+4. **Global events:** GDELT discovery + original publisher/government/issuer verification. Deduplicate by canonical URL/content hash and retain both detected and source-published timestamps.
+5. **Macro:** World Bank (keyless) + RBI DBIE documented exports + FRED (free key) + selected IMF SDMX datasets.
+6. **AI/science/patents:** arXiv + Crossref/OpenAlex + USPTO datasets; classify these as research signals and require evidence of company exposure before assigning a listed stock.
+7. **Sector performance:** official NSE/Nifty sector-index historical values plus live Upstox sector-index ticks. Begin with index-level return/relative-strength rankings. Constituent-level attribution requires a verified point-in-time constituent map and weights; do not fabricate one.
+8. **Scheduling:** the repository is public, so standard GitHub-hosted Actions runners are free. A daily EOD workflow is a practical zero-hosting-cost scheduler once committed to the default branch and connected to durable PostgreSQL storage. GitHub schedules run only from the default branch, can be delayed, and may be disabled after 60 days without repository activity; they are not an intraday SLA. Use the persistent database for idempotent snapshots/job state, not the runner filesystem.
+9. **Durability:** Render Free is not a dependable always-on worker or durable filesystem. Use PostgreSQL for market history, evidence metadata, source-health and job state. A scheduler must write idempotently, checkpoint the source trading date, retry safely and expose its last success/failure to the app.
+
+## 7. External research references
+
+- NSE Data Sharing & Usage Policy: https://www.nseindia.in/static/market-data/nse-data-policy
+- NSE real-time data products: https://www.nse.in/static/market-data/real-time-data-subscription
+- TejHQ API: https://tejhq.dev/docs
+- TejHQ data terms: https://tejhq.dev/data-terms
+- Upstox V3 feed: https://upstox.com/developer/api-documentation/v3/get-market-data-feed/
+- GitHub Actions billing: https://docs.github.com/en/actions/concepts/billing-and-usage
+- GitHub Actions schedule event: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows
+- World Bank API: https://datahelpdesk.worldbank.org/knowledgebase/articles/889392-about-the-indicators-api
+- FRED API: https://fred.stlouisfed.org/docs/api/fred/
+- SEC EDGAR APIs: https://www.sec.gov/search-filings/edgar-application-programming-interfaces
+- arXiv RSS: https://info.arxiv.org/help/rss.html
+- Crossref REST API: https://www.crossref.org/documentation/retrieve-metadata/rest-api
+- OpenAlex API: https://help.openalex.org/api/authentication/
+- USPTO PatentsView: https://www.uspto.gov/ip-policy/economic-research/patentsview
