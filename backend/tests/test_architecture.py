@@ -58,3 +58,26 @@ def test_domain_engines_do_not_depend_on_http_or_api_layers():
                 for name in imports
                 for prefix in forbidden
             ), f"{path.relative_to(SOURCE)} imports an HTTP/API layer"
+
+
+def test_api_composition_uses_feature_routers_instead_of_inline_research_handlers():
+    main = ast.parse((SOURCE / "api" / "main.py").read_text(encoding="utf-8"))
+    imports = _imports(SOURCE / "api" / "main.py")
+    assert "rovexquant.research.router" in imports
+    assert "rovexquant.api.research_data" in imports
+    inline_handlers = {
+        node.name for node in ast.walk(main)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    assert not any(
+        name.startswith("app_research_") or name.startswith("app_nse_mcp_")
+        for name in inline_handlers
+    )
+
+
+def test_research_data_transport_delegates_to_provider_services():
+    imports = _imports(SOURCE / "api" / "research_data.py")
+    assert "rovexquant.market_data.nse_mcp_service" in imports
+    assert "rovexquant.market_data.tejhq_service" in imports
+    assert "rovexquant.market_data.nse_mcp" not in imports
+    assert "rovexquant.market_data.tejhq" not in imports
