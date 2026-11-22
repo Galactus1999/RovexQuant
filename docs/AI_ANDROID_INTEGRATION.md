@@ -50,11 +50,11 @@ Before using the Android AI workspace:
 
 1. Deploy the backend with HTTPS and persistent configuration.
 2. Configure the app-session credentials and signing key as already required by mobile login.
-3. Configure `TEJHQ_API_KEY` on the backend. A free key is available through TejHQ email sign-in; no key is sent to Android.
-4. Configure at least one supported AI provider API key on the backend and verify its model ID.
+3. Configure `TEJHQ_API_KEY` on the backend. A free key is available through TejHQ email sign-in; no key is sent to Android. This is required for adjusted EOD recovery.
+4. Configure at least one supported AI provider API key and optional `<PROVIDER>_DEFAULT_MODEL` on the backend if you want chat and AI commentary. Data recovery itself remains available without an AI provider.
 5. Re-deploy the backend.
-6. Sign in to Quant, open **Scan**, select **Open AI data recovery**, choose a configured provider, enter a model ID and send a test prompt.
+6. Sign in to Quant, open **Scan**, select **Open AI data recovery**, enter a symbol and date range, then run adjusted EOD recovery. Configure/select an AI provider and model to receive commentary.
 7. Test adjusted EOD recovery with a liquid NSE symbol and a period with at least 30 available trading sessions.
-8. Confirm the UI labels the recovered dataset `END_OF_DAY_ADJUSTED`, shows the TejHQ source and latest trading date, and displays the data-rights/limitations notice.
+8. Confirm the UI labels the recovered dataset `END_OF_DAY_ADJUSTED`, shows the TejHQ source and latest trading date, and displays the data-rights/limitations notice. If the AI provider is unavailable, the adjusted bars and deterministic metrics should still be returned with an AI-unavailable warning.
 
 The CI suite uses deterministic fake providers and data. It does not prove that a real provider API key, TejHQ upstream, Render deployment or physical Android device is working.
