@@ -52,6 +52,15 @@ class QuantRepository(context: Context) : QuantDataRepository {
     override suspend fun fetchAiProviders(session: QuantSession): List<AiProvider> =
         withContext(Dispatchers.IO) { QuantApi.fetchAiProviders(session) }
 
+    override suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) =
+        withContext(Dispatchers.IO) { QuantApi.saveAiProviderCredential(session, providerId, apiKey) }
+
+    override suspend fun saveUpstoxAnalyticsToken(session: QuantSession, token: String) =
+        withContext(Dispatchers.IO) { QuantApi.saveUpstoxAnalyticsToken(session, token) }
+
+    override suspend fun fetchUpstoxConfigured(session: QuantSession): Boolean =
+        withContext(Dispatchers.IO) { QuantApi.fetchUpstoxConfigured(session) }
+
     override suspend fun fetchIntelligenceEvents(
         session: QuantSession, query: String, timespan: String
     ): IntelligenceFeed = withContext(Dispatchers.IO) {
