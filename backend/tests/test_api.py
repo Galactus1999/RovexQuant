@@ -268,3 +268,35 @@ def test_openapi_exposes_versioned_research_contract_and_bearer_auth():
         operation = schema["paths"][route]["post"]
         assert operation["security"] == [{"QuantAppBearer": []}]
         assert "requestBody" in operation
+
+
+def test_unhandled_server_error_returns_safe_correlated_envelope():
+    from rovexquant.api.main import app
+
+    secret = "UNHANDLED_EXCEPTION_SECRET_MUST_NOT_LEAK"
+
+    def explode():
+        raise RuntimeError(secret)
+
+    route = app.add_api_route("/_test/unhandled-error", explode, methods=["GET"])
+    try:
+        response = TestClient(app, raise_server_exceptions=False).get("/_test/unhandled-error")
+        assert response.status_code == 500
+        assert response.json()["error"]["code"] == "internal_error"
+        assert response.json()["request_id"] == response.headers["X-Request-ID"]
+        assert secret not in response.text
+    finally:
+        app.router.routes.remove(route)
+
+
+def test_api_route_table_has_no_duplicate_http_method_owners():
+    from rovexquant.api.main import app
+
+    owners = []
+    for route in app.routes:
+        path = getattr(route, "path", None)
+        methods = getattr(route, "methods", None)
+        if path and methods:
+            for method in methods:
+                owners.append((method, path))
+    assert len(owners) == len(set(owners))
