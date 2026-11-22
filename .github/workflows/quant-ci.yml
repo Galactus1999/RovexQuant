@@ -40,22 +40,22 @@ jobs:
           python-version: "3.11"
       - name: Install pinned uv resolver
         run: python -m pip install "uv==0.12.9"
-      - name: Resolve and verify backend lockfile
-        run: |
-          uv lock
-          uv lock --check
+      - name: Verify exact backend dependency lock
+        run: python scripts/verify_dependency_lock.py
       - name: Install exact locked backend dependencies
-        run: uv sync --locked --extra dev
+        run: |
+          uv pip install --system --no-deps -r requirements.lock
+          uv pip install --system --no-deps -e .
       - name: Ruff correctness checks
-        run: uv run --locked --extra dev ruff check src tests migrations --select E4,E9,F
+        run: ruff check src tests migrations --select E4,E9,F
       - name: Python syntax compilation
-        run: uv run --locked --extra dev python -m compileall -q src migrations tests
+        run: python -m compileall -q src migrations tests
       - name: Full backend regression suite
-        run: uv run --locked --extra dev pytest -q -m "not integration"
+        run: pytest -q -m "not integration"
       - name: Audit locked Python dependencies for known vulnerabilities
-        run: uv run --locked --extra dev --with pip-audit==2.9.0 pip-audit --local
+        run: uv pip install --system pip-audit==2.9.0 && pip-audit --local
       - name: Export Python dependency license inventory
-        run: uv run --locked --extra dev --with pip-licenses==5.0.0 pip-licenses --format=json > /tmp/quant-python-licenses.json
+        run: uv pip install --system pip-licenses==5.0.0 && pip-licenses --format=json > /tmp/quant-python-licenses.json
       - name: Upload Python lock and license inventory
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -102,12 +102,14 @@ jobs:
           cache-dependency-path: backend/pyproject.toml
       - name: Install pinned uv resolver
         run: python -m pip install "uv==0.12.9"
-      - name: Resolve backend lock for isolated PostgreSQL job
-        run: uv lock
+      - name: Verify exact backend dependency lock
+        run: python scripts/verify_dependency_lock.py
       - name: Install exact locked backend dependencies
-        run: uv sync --locked --extra dev
+        run: |
+          uv pip install --system --no-deps -r requirements.lock
+          uv pip install --system --no-deps -e .
       - name: Run real PostgreSQL migrations, vault, rollback and key-rotation tests
-        run: uv run --locked --extra dev pytest -q -m integration tests/test_migrations.py
+        run: pytest -q -m integration tests/test_migrations.py
       - name: Verify PostgreSQL backup and isolated restore with matching client
         env:
           QUANT_PG_CLIENT_IMAGE: postgres:16
@@ -215,10 +217,12 @@ jobs:
           python-version: "3.11"
       - name: Install pinned uv resolver
         run: python -m pip install "uv==0.12.9"
-      - name: Resolve backend lock for security test job
-        run: uv lock
+      - name: Verify exact backend dependency lock
+        run: python scripts/verify_dependency_lock.py
       - name: Install exact locked backend dependencies
-        run: uv sync --locked --extra dev
+        run: |
+          uv pip install --system --no-deps -r requirements.lock
+          uv pip install --system --no-deps -e .
       - name: Run security, API contract and architecture tests
         run: uv run --locked --extra dev pytest -q tests/test_architecture.py tests/test_api.py tests/test_nse_mcp.py tests/test_nse_mcp_api.py
 
@@ -362,12 +366,14 @@ jobs:
           cache-dependency-path: backend/pyproject.toml
       - name: Install pinned uv resolver
         run: python -m pip install "uv==0.12.9"
-      - name: Resolve backend lock
+      - name: Verify exact backend dependency lock
         working-directory: backend
-        run: uv lock
+        run: python scripts/verify_dependency_lock.py
       - name: Install locked backend and test dependencies
         working-directory: backend
-        run: uv sync --locked --extra dev
+        run: |
+          uv pip install --system --no-deps -r requirements.lock
+          uv pip install --system --no-deps -e .
       - name: Backend tests
         working-directory: backend
         run: uv run --locked --extra dev pytest -q -m "not integration"
@@ -398,12 +404,14 @@ jobs:
           python-version: "3.11"
       - name: Install pinned uv resolver
         run: python -m pip install "uv==0.12.9"
-      - name: Resolve backend lock
+      - name: Verify exact backend dependency lock
         working-directory: backend
-        run: uv lock
+        run: python scripts/verify_dependency_lock.py
       - name: Install locked backend
         working-directory: backend
-        run: uv sync --locked --no-dev
+        run: |
+          uv pip install --system --no-deps -r requirements.lock
+          uv pip install --system --no-deps -e .
       - name: Verify official NSE MCP initialization and tool discovery
         working-directory: backend
-        run: uv run --locked python scripts/nse_mcp_live_smoke.py
+        run: python scripts/nse_mcp_live_smoke.py
