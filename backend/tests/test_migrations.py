@@ -93,3 +93,21 @@ def test_postgres_vault_replaces_and_expires_credentials(migrated_postgres):
 
     assert vault.get_upstox_analytics_token() is None
     assert vault.upstox_analytics_status()["connected"] is False
+
+
+
+def test_postgres_startup_rejects_schema_revision_mismatch(migrated_postgres):
+    with psycopg.connect(migrated_postgres, sslmode="disable") as connection:
+        connection.execute(
+            "UPDATE alembic_version SET version_num = %s",
+            ("unknown_revision",),
+        )
+
+    with pytest.raises(vault.UpstoxCredentialError, match="revision does not match"):
+        vault.validate_postgres_schema()
+
+    with psycopg.connect(migrated_postgres, sslmode="disable") as connection:
+        connection.execute(
+            "UPDATE alembic_version SET version_num = %s",
+            (EXPECTED_SCHEMA_REVISION,),
+        )
