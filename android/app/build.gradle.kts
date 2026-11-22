@@ -12,8 +12,12 @@ buildscript {
         // compiler/daemon dependency to prevent a second Kotlin daemon client
         // from shadowing the application's pinned KGP.
         classpath("com.jaredsburrows:gradle-license-plugin:0.9.91") {
-            exclude(group = "org.jetbrains.kotlin", module = "kotlin-gradle-plugin")
-            exclude(group = "org.jetbrains.kotlin", module = "kotlin-daemon-client")
+            // The license plugin is a build-time reporting tool, not an owner of
+            // the application's Kotlin toolchain. Exclude its entire Kotlin
+            // dependency graph so it cannot introduce a second compiler/daemon
+            // version into Gradle's verification metadata or classpath. The
+            // root build already supplies the pinned Kotlin Gradle plugins.
+            exclude(group = "org.jetbrains.kotlin")
         }
     }
 }
