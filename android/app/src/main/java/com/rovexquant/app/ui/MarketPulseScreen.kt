@@ -1,6 +1,7 @@
 package com.rovexquant.app.ui
 
 import com.rovexquant.app.data.model.MarketTick
+import com.rovexquant.app.data.model.MarketEquityInstrument
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -9,8 +10,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -46,8 +52,16 @@ private val coreSectorIndices = listOf(
 fun MarketPulseScreen(
     ticks: Map<String, MarketTick> = emptyMap(),
     indexKeys: Map<String, String> = emptyMap(),
+    equityInstruments: List<MarketEquityInstrument> = emptyList(),
     streamStatus: String = "Not connected"
 ) {
+    var equitySearch by remember { mutableStateOf("") }
+    val visibleEquities = remember(equityInstruments, equitySearch) {
+        val query = equitySearch.trim().uppercase()
+        if (query.isBlank()) equityInstruments else equityInstruments.filter {
+            it.tradingSymbol.uppercase().contains(query) || it.name.uppercase().contains(query)
+        }
+    }
     val nifty = indexKeys["NIFTY 50"]?.let { ticks[it] }
     val bank = indexKeys["NIFTY BANK"]?.let { ticks[it] }
     val latestTick = listOfNotNull(nifty, bank).maxByOrNull { it.receivedAt }
@@ -133,17 +147,57 @@ fun MarketPulseScreen(
                 }
             }
         }
-        item { Text("Starter universe · editable controls pending", color = MaterialTheme.colorScheme.onBackground, fontSize = 18.sp, fontWeight = FontWeight.Bold) }
-        items(listOf("NIFTY 50" to "Index", "NIFTY BANK" to "Index", "RELIANCE" to "Energy", "HDFCBANK" to "Banking", "INFY" to "Technology")) { item ->
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "NSE listed equities · ${equityInstruments.size} instruments",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                OutlinedTextField(
+                    value = equitySearch,
+                    onValueChange = { equitySearch = it },
+                    modifier = Modifier.fillMaxWidth().testTag("market.equity.search"),
+                    singleLine = true,
+                    label = { Text("Search symbol or company") }
+                )
+                Text(
+                    "The official NSE cash-equity master is subscribed in LTPC mode. Quotes appear only after verified exchange ticks arrive.",
+                    color = Muted,
+                    fontSize = 10.sp,
+                    lineHeight = 15.sp
+                )
+            }
+        }
+        if (equityInstruments.isEmpty()) {
+            item { EmptyPanel("NSE equity universe unavailable", "Check the official instrument master and backend connectivity. Index streaming can still operate independently.") }
+        }
+        items(visibleEquities, key = { it.instrumentKey }) { instrument ->
+            val quote = ticks[instrument.instrumentKey]
             TerminalCard {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column {
-                        Text(item.first, color = MaterialTheme.colorScheme.onBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        Text(item.second, color = Muted, fontSize = 10.sp)
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(instrument.tradingSymbol, color = MaterialTheme.colorScheme.onBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text(instrument.name, color = Muted, fontSize = 9.sp, maxLines = 1)
+                        Text(quote?.quality ?: "AWAITING TICK", color = Muted, fontSize = 8.sp)
                     }
                     Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
-                        Text("—", color = Muted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        Text("Awaiting data", color = Muted, fontSize = 9.sp)
+                        Text(
+                            quote?.lastPrice?.let { String.format(Locale.US, "%.2f", it) } ?: "—",
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            quote?.changePercent?.let { String.format(Locale.US, "%+.2f%%", it) } ?: "Awaiting data",
+                            color = quote?.changePercent?.let { if (it >= 0) Mint else Coral } ?: Muted,
+                            fontSize = 9.sp
+                        )
                     }
                 }
             }
