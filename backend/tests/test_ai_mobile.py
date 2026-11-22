@@ -82,6 +82,7 @@ def test_strategy_evidence_summary_does_not_claim_live_data(monkeypatch):
         for i in range(70)
     ]
     async def fake_fetch(*args, **kwargs):
+        assert kwargs["adjusted"] is True
         return "tejhq_eod", bars
     async def fake_complete(**kwargs):
         assert "END_OF_DAY" in kwargs["messages"][1]["content"]
@@ -113,3 +114,41 @@ def test_strategy_brief_rejects_short_history(mobile_client, monkeypatch):
         "strategy_context": "Review trend continuation.",
     })
     assert response.status_code == 422
+
+
+
+def test_corporate_action_factor_scales_all_ohlc_and_reconciles_close():
+    from rovexquant.api.routers.ai import _apply_corporate_action_adjustment
+    raw = SimpleNamespace(
+        date=date(2026, 1, 1),
+        open=200.0,
+        high=210.0,
+        low=190.0,
+        close=205.0,
+        adjusted_close=102.5,
+        adjustment_factor=0.5,
+        volume=2000,
+    )
+    adjusted = _apply_corporate_action_adjustment([raw])[0]
+    assert adjusted.open == 100.0
+    assert adjusted.high == 105.0
+    assert adjusted.low == 95.0
+    assert adjusted.close == 102.5
+    assert adjusted.volume == 2000
+
+
+def test_corporate_action_factor_mismatch_fails_closed():
+    from rovexquant.api.routers.ai import _apply_corporate_action_adjustment
+    from rovexquant.market_data.tejhq_service import TejHqError
+    raw = SimpleNamespace(
+        date=date(2026, 1, 1),
+        open=200.0,
+        high=210.0,
+        low=190.0,
+        close=205.0,
+        adjusted_close=110.0,
+        adjustment_factor=0.5,
+        volume=2000,
+    )
+    with pytest.raises(TejHqError):
+        _apply_corporate_action_adjustment([raw])
