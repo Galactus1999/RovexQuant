@@ -293,7 +293,8 @@ object QuantApi {
                     trendContext = evidenceJson.optString("trend_context")
                 ),
                 bars = bars,
-                ai = parseAiCompletion(json.optJSONObject("ai") ?: JSONObject()),
+                ai = json.optJSONObject("ai")?.let(::parseAiCompletion),
+                aiError = json.optString("ai_error").takeIf { it.isNotBlank() && it != "null" },
                 dataRights = json.optString("data_rights"),
                 limitations = buildList {
                     for (index in 0 until limitationsJson.length()) {
