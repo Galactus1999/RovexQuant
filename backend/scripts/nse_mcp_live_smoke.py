@@ -164,8 +164,15 @@ async def check(server: str) -> None:
 
 
 async def main() -> None:
+    failures: list[str] = []
     for server in ("bhavcopy", "cmmkt"):
-        await check(server)
+        try:
+            await check(server)
+        except Exception as error:
+            failures.append(f"{server}: {type(error).__name__}: {error}")
+            print(f"{server}: validation blocked: {type(error).__name__}: {error}")
+    if failures:
+        raise SystemExit("; ".join(failures))
 
 
 if __name__ == "__main__":
