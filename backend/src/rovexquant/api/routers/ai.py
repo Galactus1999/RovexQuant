@@ -37,8 +37,8 @@ class AIChatRequest(BaseModel):
 
 
 class AIStrategyBriefRequest(BaseModel):
-    provider_id: str = Field(min_length=1, max_length=40)
-    model: str = Field(min_length=1, max_length=160)
+    provider_id: str | None = Field(default=None, max_length=40)
+    model: str | None = Field(default=None, max_length=160)
     exchange: Literal["NSE", "BSE"] = "NSE"
     symbol: str = Field(min_length=1, max_length=30)
     from_date: date
@@ -149,8 +149,6 @@ def ai_providers(x_quant_ai_gateway_key: str | None = Header(default=None)):
     try:
         authorize_gateway(x_quant_ai_gateway_key)
         return {"providers": configured_providers()}
-    except GatewayError as error:
-        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
 
 @router.post("/api/v1/ai/chat")
@@ -233,10 +231,11 @@ async def app_ai_chat(request: AIChatRequest):
     dependencies=[Depends(require_app_session), Depends(ai_request_rate_limit)],
 )
 async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
-    """Last-resort, verified EOD data recovery followed by an evidence-bounded AI brief.
+    """Last-resort adjusted EOD data recovery followed by optional evidence-bounded AI commentary.
 
-    TejHQ's free-key adjusted EOD endpoint is used. The AI model
+    TejHQ's free-key adjusted EOD endpoint is used. The AI model, when configured,
     receives a compact deterministic summary, not the raw market-data response.
+    Data recovery remains available if the AI provider is unavailable.
     Intraday/scalping data is never inferred from EOD bars.
     """
     try:
@@ -285,18 +284,27 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
                 "Do not infer missing fundamentals, corporate actions, sector breadth, or market depth.",
             ],
         }
-        completion = await complete_chat(
-            provider_id=request.provider_id,
-            model=request.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": json.dumps(user_evidence, separators=(",", ":"), sort_keys=True)},
-            ],
-            max_tokens=1400,
-            temperature=0.1,
-            credential_id=request.credential_id,
-            fallback_providers=request.fallback_providers,
-        )
+        completion = None
+        ai_error = None
+        if request.provider_id and request.model:
+            try:
+                completion = await complete_chat(
+                    provider_id=request.provider_id,
+                    model=request.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": json.dumps(user_evidence, separators=(",", ":"), sort_keys=True)},
+                    ],
+                    max_tokens=1400,
+                    temperature=0.1,
+                    credential_id=request.credential_id,
+                    fallback_providers=request.fallback_providers,
+                )
+            except GatewayError as error:
+                ai_error = f"Data was recovered, but AI commentary is unavailable: {error}"
+        else:
+            ai_error = "Data was recovered. Configure an AI provider and model to generate the strategy commentary."
+
         return {
             "provider": provider_id,
             "data_mode": "END_OF_DAY_ADJUSTED",
@@ -322,6 +330,7 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
                 for item in bars
             ],
             "ai": completion,
+            "ai_error": ai_error,
             "data_rights": (
                 "Private personal research only. Do not redistribute raw data or expose it to other users. "
                 "Exchange terms may independently apply; this endpoint does not grant exchange display rights."
