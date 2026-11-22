@@ -277,3 +277,76 @@ def test_app_equity_master_requires_session_and_returns_verified_nse_equities(mo
     assert response.status_code == 200
     assert response.json()["data_mode"] == "INSTRUMENT_REFERENCE"
     assert response.json()["instruments"][0]["instrument_key"] == "NSE_EQ|INE002A01018"
+
+
+def test_upstox_stream_authorization_classifies_transient_upstream_failures(monkeypatch):
+    from rovexquant.market_data import streaming, upstox_credentials
+    from rovexquant.market_data.streaming import StreamError
+
+    class FakeResponse:
+        status_code = 503
+
+    class FakeHttpClient:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *_args):
+            return None
+        async def get(self, *_args, **_kwargs):
+            return FakeResponse()
+
+    monkeypatch.setattr(upstox_credentials, "get_upstox_analytics_token", lambda: "fake-analytics-token")
+    monkeypatch.setattr(streaming.httpx, "AsyncClient", lambda **_kwargs: FakeHttpClient())
+    with pytest.raises(StreamError) as failure:
+        asyncio.run(streaming.stream_upstox_market_data(
+            object(), ["NSE_INDEX|Nifty 50"], "ltpc"
+        ))
+    assert failure.value.retryable is True
+
+
+def test_upstox_stream_authorization_does_not_retry_rejected_credentials(monkeypatch):
+    from rovexquant.market_data import streaming, upstox_credentials
+    from rovexquant.market_data.streaming import StreamError
+
+    class FakeResponse:
+        status_code = 401
+
+    class FakeHttpClient:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *_args):
+            return None
+        async def get(self, *_args, **_kwargs):
+            return FakeResponse()
+
+    monkeypatch.setattr(upstox_credentials, "get_upstox_analytics_token", lambda: "fake-analytics-token")
+    monkeypatch.setattr(streaming.httpx, "AsyncClient", lambda **_kwargs: FakeHttpClient())
+    with pytest.raises(StreamError) as failure:
+        asyncio.run(streaming.stream_upstox_market_data(
+            object(), ["NSE_INDEX|Nifty 50"], "ltpc"
+        ))
+    assert failure.value.retryable is False
+
+
+def test_market_websocket_uses_retryable_close_for_temporary_provider_failure(monkeypatch):
+    from starlette.websockets import WebSocketDisconnect
+    from rovexquant.market_data.streaming import StreamError
+
+    configure(monkeypatch)
+    token, _ = issue_app_session("quant-user", "long-test-password")
+
+    async def temporary_failure(*_args, **_kwargs):
+        raise StreamError("Upstox temporarily unavailable", retryable=True)
+
+    monkeypatch.setattr(market_routes, "stream_upstox_market_data", temporary_failure)
+    client = TestClient(app)
+    with client.websocket_connect(
+        "/api/v1/app/market/stream",
+        headers={"Authorization": f"Bearer {token}"},
+    ) as websocket:
+        websocket.send_json({"instrument_keys": ["NSE_INDEX|Nifty 50"], "mode": "ltpc"})
+        message = websocket.receive_json()
+        assert message["type"] == "error"
+        assert message["retryable"] is True
+        with pytest.raises(WebSocketDisconnect) as closed:
+            websocket.receive_json()
+        assert closed.value.code == 1013
