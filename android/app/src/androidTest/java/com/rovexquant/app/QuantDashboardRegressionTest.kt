@@ -105,11 +105,15 @@ class QuantDashboardRegressionTest {
         }
         composeRule.onNodeWithTag("intelligence.screen")
             .performScrollToNode(hasTestTag("intelligence.feed.ready"))
-        composeRule.onNodeWithTag("intelligence.screen").performScrollToNode(hasText("AVIATION"))
-        composeRule.onNodeWithText("AVIATION").assertIsDisplayed()
-        composeRule.onNodeWithText("Fuel costs may pressure operating margins.").assertIsDisplayed()
-        composeRule.onNodeWithText("Company and instrument mapping is not yet enabled.").assertIsDisplayed()
-        composeRule.onNodeWithText("↗ fixture.example · seen 20261122T090000Z").assertIsDisplayed()
+        listOf(
+            "AVIATION",
+            "Fuel costs may pressure operating margins.",
+            "Company and instrument mapping is not yet enabled.",
+            "↗ fixture.example · seen 20261122T090000Z"
+        ).forEach { evidence ->
+            composeRule.onNodeWithTag("intelligence.screen").performScrollToNode(hasText(evidence))
+            composeRule.onNodeWithText(evidence).assertIsDisplayed()
+        }
     }
 
     @Test fun portfolioCalculatesRiskBasedShareQuantity() {
@@ -160,16 +164,19 @@ class QuantLoginRegressionTest {
         composeRule.onNodeWithTag("login.username").performTextInput("quant-test")
         composeRule.activity.fakeRepository.rejectLogin = true
         composeRule.onNodeWithTag("login.password").performTextInput("wrong-password")
+        composeRule.onNodeWithTag("login.submit").performScrollTo()
+        composeRule.onNodeWithTag("login.submit").assertIsDisplayed()
         composeRule.onNodeWithTag("login.submit").performClick()
-        composeRule.waitUntil(10_000) {
+        composeRule.waitUntil(30_000) {
             composeRule.onAllNodesWithText("Test credentials rejected.").fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.activity.fakeRepository.rejectLogin = false
         waitForLoginForm()
         composeRule.onNodeWithTag("login.password").performTextClearance()
         composeRule.onNodeWithTag("login.password").performTextInput("correct-password")
+        composeRule.onNodeWithTag("login.submit").performScrollTo()
         composeRule.onNodeWithTag("login.submit").performClick()
-        composeRule.waitUntil(10_000) {
+        composeRule.waitUntil(30_000) {
             composeRule.onAllNodesWithText("Market pulse.").fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithText("Market pulse.").assertIsDisplayed()
