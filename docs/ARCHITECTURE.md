@@ -17,7 +17,7 @@ The initial deployment is a private, single-owner pilot. Multi-user tenancy, alw
 | Android WebSocket transport | `data/remote/MarketStreamController.kt` | Owns socket, reconnect and stop semantics behind the stream port |
 | Android session persistence | `data/local/QuantSessionStore.kt` | Encrypted session token storage using Android Keystore; accessed through repository |
 | Android typed data contracts | `data/model/QuantModels.kt` | Session, instrument, MCP and market-tick models shared between data and feature layers |
-| Backend HTTP composition and route registration | `api/main.py`, `api/research_data.py`, `research/router.py` | `main.py` composes feature routers and cross-cutting middleware; EOD/NSE research and deterministic compute routes are separate modules |
+| Backend HTTP composition and route registration | `api/main.py`, `api/routers/`, `api/research_data.py`, `research/router.py` | `main.py` is a composition root; feature routes are split by auth, market, integrations, health, AI and strategies; EOD/NSE research routes remain separate |
 | App-session authentication | `auth.py` | Short-lived HMAC-signed app session; single configured owner, not a multi-tenant identity system |
 | Provider-neutral quote selection | `market_data/service.py` | Explicit provider order and transient-error failover; semantic capability/entitlement compatibility remains to be implemented |
 | Upstox and Dhan REST adapters | `market_data/providers.py` | Snapshot quote adapters; real credentialed connectivity is not proven by unit tests |
@@ -155,3 +155,21 @@ services own provider selection and data-quality policy. Domain engines remain
 independent of FastAPI, network transports and persistence drivers. The
 architecture regression tests enforce these import and ownership boundaries,
 and the route-table test rejects duplicate HTTP-method/path owners.
+
+
+## Android toolchain and dependency integrity
+
+The Android build uses JDK 17, Android Gradle Plugin 8.11.1, Kotlin Gradle Plugin 2.2.21
+and Gradle 8.14.8. These versions are selected from the official Kotlin/AGP/Gradle
+compatibility matrices; AGP 8.11.1 requires Gradle 8.13 or newer, and KGP 2.2.21
+is fully supported with AGP 8.11.1 and Gradle 8.14. The Gradle 8.14.8 patch line
+also includes security fixes published on 19 November 2026.
+
+Project dependency configurations use strict Gradle dependency locking. The
+source-controlled app lockfile pins resolved module versions, while
+verification-metadata.xml pins SHA-256 checksums for downloaded artifacts and
+Gradle module metadata. CI runs strict dependency verification for build and
+emulator tests. The first verified build persists the generated lock state;
+later runs reject unreviewed lock or checksum drift instead of silently
+regenerating a new baseline. See docs/ANDROID_BUILD_TOOLCHAIN.md and
+docs/DATABASE_OPERATIONS.md for the related operational procedures.

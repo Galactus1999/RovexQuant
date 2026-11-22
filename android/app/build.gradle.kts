@@ -1,3 +1,5 @@
+import org.gradle.api.artifacts.dsl.LockMode
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -7,6 +9,7 @@ plugins {
 
 dependencyLocking {
     lockAllConfigurations()
+    lockMode.set(LockMode.STRICT)
 }
 
 android {
