@@ -219,3 +219,36 @@ def test_summarize_snapshot_rows_uses_only_verified_equity_close_fields():
     assert summary["top_gainers"][0]["symbol"] == "GAIN"
     assert summary["top_losers"][0]["symbol"] == "LOSS"
     assert summary["most_active_by_volume"][0]["symbol"] == "FLAT"
+
+
+def test_fetch_latest_snapshot_skips_documented_empty_date_http_400_mapping(monkeypatch):
+    from rovexquant.market_data import tejhq_service
+
+    calls = []
+
+    class FakeProvider:
+        provider_id = "tejhq_eod"
+
+        async def get_snapshot(self, _exchange, trading_date):
+            calls.append(trading_date)
+            if trading_date == date(2026, 11, 22):
+                # The provider adapter maps upstream HTTP 400 to a non-retryable 422.
+                raise TejHqError("TejHQ rejected the request (HTTP 400)", 422)
+            if trading_date == date(2026, 11, 21):
+                return [{"symbol": "RELIANCE", "series": "EQ", "close": 100}]
+            return []
+
+    monkeypatch.setattr(
+        tejhq_service.TejHqEodProvider,
+        "from_environment",
+        classmethod(lambda _cls: FakeProvider()),
+    )
+    provider_id, trading_date, rows = asyncio.run(
+        tejhq_service.fetch_latest_snapshot(
+            "nse", as_of=date(2026, 11, 22), max_lookback_days=2
+        )
+    )
+    assert provider_id == "tejhq_eod"
+    assert trading_date == date(2026, 11, 21)
+    assert rows[0]["symbol"] == "RELIANCE"
+    assert calls == [date(2026, 11, 22), date(2026, 11, 21)]

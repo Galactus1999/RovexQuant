@@ -13,6 +13,7 @@ from rovexquant.api.routers.integrations import router as integrations_router
 from rovexquant.api.routers.market import router as market_router
 from rovexquant.api.routers.strategies import router as strategies_router
 from rovexquant.api.research_data import router as research_data_router
+from rovexquant.api.market_ingestion import router as market_ingestion_router
 from rovexquant.research.router import router as research_router
 from rovexquant.security.errors import (
     http_exception_handler,
@@ -45,6 +46,7 @@ for feature_router in (
     ai_router,
     research_router,
     research_data_router,
+    market_ingestion_router,
 ):
     app.include_router(feature_router)
 

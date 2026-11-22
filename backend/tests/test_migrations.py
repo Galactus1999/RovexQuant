@@ -204,3 +204,30 @@ def test_postgres_vault_key_rotation_wrong_old_key_rolls_back(migrated_postgres,
         )
 
     assert vault.get_upstox_analytics_token() == token
+
+
+def test_postgres_market_eod_migration_creates_provenance_tables(migrated_postgres):
+    with psycopg.connect(migrated_postgres, sslmode="disable") as connection:
+        tables = {
+            row[0] for row in connection.execute(
+                """
+                SELECT table_name FROM information_schema.tables
+                WHERE table_schema = current_schema()
+                  AND table_name IN ('market_eod_bars', 'market_ingestion_runs')
+                """
+            ).fetchall()
+        }
+        bar_columns = {
+            row[0] for row in connection.execute(
+                """
+                SELECT column_name FROM information_schema.columns
+                WHERE table_schema = current_schema() AND table_name = 'market_eod_bars'
+                """
+            ).fetchall()
+        }
+    assert tables == {"market_eod_bars", "market_ingestion_runs"}
+    assert {
+        "exchange", "trading_date", "symbol", "series", "open", "high",
+        "low", "close", "volume", "isin", "trades", "provider", "data_mode",
+        "quality_status", "source_retrieved_at",
+    }.issubset(bar_columns)

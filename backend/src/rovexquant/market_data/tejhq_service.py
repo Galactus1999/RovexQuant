@@ -63,7 +63,7 @@ async def fetch_latest_snapshot(
         try:
             rows = await provider.get_snapshot(exchange, trading_date)
         except TejHqError as error:
-            if error.status_code in (400, 404) and not error.retryable:
+            if error.status_code in (400, 404, 422) and not error.retryable:
                 continue
             raise
         if rows:
