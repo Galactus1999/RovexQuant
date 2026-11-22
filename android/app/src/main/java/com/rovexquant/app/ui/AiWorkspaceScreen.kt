@@ -142,6 +142,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
     }
 
     LazyColumn(
+        modifier = Modifier.fillMaxSize().testTag("ai.workspace.list"),
         contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
