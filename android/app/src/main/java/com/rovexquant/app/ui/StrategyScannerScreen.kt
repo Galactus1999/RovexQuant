@@ -86,7 +86,7 @@ fun StrategyScannerScreen(onOpenAi: () -> Unit = {}) {
             StrategyItem("Low volatility", "Risk-aware universe and concentration filters", "Research candidate", false)
         )
     }
-    LazyColumn(contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(modifier = Modifier.fillMaxSize().testTag("scanner.list"), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { SectionHeading("Find setups, not stories", "Strategy scanner.", "Separate playbooks for every holding period. Strategies are research candidates, not buy/sell recommendations.") }
         item {
             when {
