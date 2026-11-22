@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import os
 
 import psycopg
@@ -12,7 +14,9 @@ from rovexquant.db.schema import EXPECTED_SCHEMA_REVISION
 from rovexquant.market_data import upstox_credentials as vault
 
 pytestmark = pytest.mark.integration
-TEST_VAULT_KEY = Fernet.generate_key()
+TEST_VAULT_KEY = base64.urlsafe_b64encode(
+    hashlib.sha256(b"RovexQuant Phase 1 PostgreSQL integration test key only").digest()
+)
 LEGACY_CIPHERTEXT = Fernet(TEST_VAULT_KEY).encrypt(b"legacy-ciphertext-preservation-probe")
 
 
@@ -53,6 +57,11 @@ def migrated_postgres(monkeypatch):
         connection.execute(
             "DELETE FROM provider_tokens WHERE provider IN (%s, %s)",
             ("upstox", "phase1-rollback-probe"),
+        )
+        connection.execute(
+            "UPDATE provider_tokens SET encrypted_token=%s, updated_at=%s, expires_at=NULL "
+            "WHERE provider=%s",
+            (LEGACY_CIPHERTEXT, 1, "phase1-legacy-migration-probe"),
         )
 
 
