@@ -46,6 +46,10 @@ def _storage_mode() -> str:
         raise UpstoxCredentialError(
             "PostgreSQL storage is required but QUANT_TOKEN_DATABASE_URL is not configured", 503
         )
+    if mode == "postgresql" and not database_url.startswith(("postgresql://", "postgres://")):
+        raise UpstoxCredentialError(
+            "QUANT_TOKEN_DATABASE_URL must be a PostgreSQL connection URL", 503
+        )
     if mode == "sqlite" and database_url:
         raise UpstoxCredentialError(
             "QUANT_TOKEN_DATABASE_URL is set but QUANT_TOKEN_STORAGE_MODE selects SQLite", 503
@@ -54,8 +58,9 @@ def _storage_mode() -> str:
 
 
 def validate_storage_configuration() -> None:
-    """Validate storage mode at application startup without connecting or exposing secrets."""
+    """Validate hosted storage and encryption configuration without connecting or exposing secrets."""
     _storage_mode()
+    _fernet()
 
 
 @contextmanager
