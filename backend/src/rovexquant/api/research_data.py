@@ -10,9 +10,9 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, model_validator
 
-from rovexquant.market_data.nse_mcp import NseMcpError, extract_source_timestamp
-from rovexquant.market_data.tejhq import TejHqError
 from rovexquant.market_data import nse_mcp_service, tejhq_service
+from rovexquant.market_data.nse_mcp_service import NseMcpError, extract_source_timestamp
+from rovexquant.market_data.tejhq_service import TejHqError
 from rovexquant.security.dependencies import require_app_session
 from rovexquant.security.request_controls import nse_tool_rate_limit
 
