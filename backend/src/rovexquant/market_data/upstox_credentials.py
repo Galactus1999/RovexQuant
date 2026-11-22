@@ -73,9 +73,10 @@ def _database_sslmode() -> str:
 
 def validate_storage_configuration() -> None:
     """Validate hosted storage and encryption configuration without connecting or exposing secrets."""
-    _storage_mode()
-    _database_sslmode()
-    _fernet()
+    mode = _storage_mode()
+    if mode == "postgresql":
+        _database_sslmode()
+        _fernet()
 
 
 def validate_postgres_schema() -> None:
