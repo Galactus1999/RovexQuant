@@ -131,3 +131,37 @@ def test_login_rate_limit_cannot_be_bypassed_with_forwarded_ip_header():
         assert int(responses[5].headers["Retry-After"]) >= 1
     finally:
         rate_limiter.clear()
+
+
+
+def test_request_id_is_server_generated_and_returned():
+    response = client.get("/api/v1/health", headers={"X-Request-ID": "caller-controlled"})
+    request_id = response.headers["X-Request-ID"]
+    assert response.status_code == 200
+    assert request_id != "caller-controlled"
+    assert len(request_id) == 32
+    int(request_id, 16)
+
+
+def test_readiness_checks_local_storage_without_provider_credentials(monkeypatch, tmp_path):
+    monkeypatch.setenv("QUANT_TOKEN_STORAGE_MODE", "sqlite")
+    monkeypatch.delenv("QUANT_TOKEN_DATABASE_URL", raising=False)
+    monkeypatch.setenv("QUANT_TOKEN_DB_PATH", str(tmp_path / "ready.sqlite3"))
+    monkeypatch.delenv("QUANT_TOKEN_ENCRYPTION_KEY", raising=False)
+
+    response = client.get("/api/v1/health/ready")
+    assert response.status_code == 200
+    assert response.json()["status"] == "ready"
+
+
+def test_readiness_fails_closed_for_unconfigured_hosted_storage(monkeypatch):
+    monkeypatch.setenv("QUANT_TOKEN_STORAGE_MODE", "postgresql")
+    monkeypatch.delenv("QUANT_TOKEN_DATABASE_URL", raising=False)
+    monkeypatch.delenv("QUANT_TOKEN_ENCRYPTION_KEY", raising=False)
+
+    response = client.get("/api/v1/health/ready")
+    assert response.status_code == 503
+    assert response.json()["detail"] == (
+        "Required credential storage is unavailable or its schema is not migrated"
+    )
+    assert "postgresql://" not in response.text
