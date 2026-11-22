@@ -97,5 +97,5 @@ class QuantRepository(context: Context) : QuantDataRepository {
         session: QuantSession,
         onStatus: (String) -> Unit,
         onTicks: (List<MarketTick>) -> Unit
-    ): MarketStream = MarketStreamController(session, onStatus, onTick)
+    ): MarketStream = MarketStreamController(session, onStatus, onTicks)
 }
