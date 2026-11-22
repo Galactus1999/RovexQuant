@@ -543,12 +543,23 @@ jobs:
           REF_FULL: ${{ github.ref }}
         run: |
           set -euo pipefail
-          for result in "$BACKEND_STATIC" "$POSTGRES" "$CONTAINER" "$SECRET_SCAN" "$SECURITY_ARCHITECTURE" "$ANDROID_BUILD" "$ANDROID_EMULATOR"; do
+          for result in "$BACKEND_STATIC" "$POSTGRES" "$CONTAINER" "$SECRET_SCAN" "$SECURITY_ARCHITECTURE" "$ANDROID_BUILD"; do
             test "$result" = "success" || {
               echo "Phase 1 acceptance blocked by a non-success required job: $result"
               exit 1
             }
           done
+          if [[ "$EVENT_NAME" == "push" && "$REF_FULL" == "refs/heads/feat/quant-phase1-engineering-foundations" ]]; then
+            test "$ANDROID_EMULATOR" = "success" || {
+              echo "The Phase 1 implementation branch requires a successful Android emulator regression."
+              exit 1
+            }
+          else
+            [[ "$ANDROID_EMULATOR" == "success" || "$ANDROID_EMULATOR" == "skipped" ]] || {
+              echo "Unexpected Android emulator regression result: $ANDROID_EMULATOR"
+              exit 1
+            }
+          fi
           if [[ "$EVENT_NAME" != "workflow_dispatch" || "$RUN_NSE_LIVE_SMOKE" == "true" ]]; then
             test "$NSE_MCP_LIVE" = "success" || {
               echo "Phase 1 acceptance requires a successful live NSE MCP schema/tool smoke."
