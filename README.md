@@ -57,7 +57,3 @@ discovery index, not primary-source verification; use original publisher,
 exchange and regulator sources for material claims. This endpoint is on-demand,
 not an always-on ingestion or alert service. See
 [AI Android integration](docs/AI_ANDROID_INTEGRATION.md).
-
-## Evidence-first intelligence contracts
-
-The backend now includes typed Pydantic contracts for evidence provenance, canonical entities, event lifecycle, temporally valid impact edges and research claims. Deterministic impact rollups preserve opposing directions and source references; they do not generate buy/sell scores or stock recommendations. These are domain contracts, not a claim that graph persistence or automated company resolution is complete. See [AI Intelligence architecture](docs/AI_INTELLIGENCE_ARCHITECTURE.md), [implementation status](docs/AI_INTELLIGENCE_IMPLEMENTATION_STATUS.md) and the [authoritative build prompt](docs/prompts/ROVEXQUANT_AI_INTELLIGENCE_BUILD_PROMPT.md).
