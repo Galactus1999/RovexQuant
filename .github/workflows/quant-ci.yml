@@ -365,6 +365,38 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  quant-phase1-acceptance:
+    name: Quant Phase 1 Required Acceptance Gate
+    if: always()
+    needs:
+      - quant-backend-static
+      - quant-backend-postgres-integration
+      - quant-backend-container
+      - quant-secret-scan
+      - quant-security-architecture
+      - quant-android-build
+      - quant-android-instrumentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every Phase 1 gate to pass
+        env:
+          BACKEND_STATIC: ${{ needs.quant-backend-static.result }}
+          POSTGRES: ${{ needs.quant-backend-postgres-integration.result }}
+          CONTAINER: ${{ needs.quant-backend-container.result }}
+          SECRET_SCAN: ${{ needs.quant-secret-scan.result }}
+          SECURITY_ARCHITECTURE: ${{ needs.quant-security-architecture.result }}
+          ANDROID_BUILD: ${{ needs.quant-android-build.result }}
+          ANDROID_EMULATOR: ${{ needs.quant-android-instrumentation.result }}
+        run: |
+          set -euo pipefail
+          for result in "$BACKEND_STATIC" "$POSTGRES" "$CONTAINER" "$SECRET_SCAN" "$SECURITY_ARCHITECTURE" "$ANDROID_BUILD" "$ANDROID_EMULATOR"; do
+            test "$result" = "success" || {
+              echo "Phase 1 acceptance blocked by a non-success required job: $result"
+              exit 1
+            }
+          done
+          echo "All mandatory Quant Phase 1 CI gates passed."
+
   quant-regression:
     name: Quant Optional Unit & Backend Tests
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_regression == true }}
