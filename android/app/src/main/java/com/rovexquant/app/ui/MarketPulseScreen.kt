@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -103,7 +104,7 @@ fun MarketPulseScreen(
     LazyColumn(modifier = Modifier.fillMaxSize().testTag("market.pulse.list"), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item { SectionHeading("The market, without the noise", "Market pulse.", "A clean overview of indices, breadth, sectors and your tracked universe.") }
         item {
-            TerminalCard(Modifier.testTag("market.eod.snapshot")) {
+            TerminalCard {
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -114,6 +115,7 @@ fun MarketPulseScreen(
                 }
                 Text(
                     "NSE equity snapshot",
+                    modifier = Modifier.testTag("market.eod.snapshot"),
                     color = MaterialTheme.colorScheme.onBackground,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold
