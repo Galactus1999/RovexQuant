@@ -8,6 +8,8 @@ import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiDailyBar
 import com.rovexquant.app.data.model.AiProvider
 import com.rovexquant.app.data.model.AiStrategyBrief
+import com.rovexquant.app.data.model.EodMarketSnapshot
+import com.rovexquant.app.data.model.EodStockMove
 import com.rovexquant.app.data.model.AiStrategyEvidence
 import com.rovexquant.app.data.model.MarketIndexInstrument
 import com.rovexquant.app.data.model.MarketEquityInstrument
@@ -98,6 +100,25 @@ class FakeQuantRepository(
     override suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) = Unit
     override suspend fun saveUpstoxAnalyticsToken(session: QuantSession, token: String) = Unit
     override suspend fun fetchUpstoxConfigured(session: QuantSession): Boolean = false
+    override suspend fun fetchLatestEodMarketSnapshot(
+        session: QuantSession,
+        exchange: String
+    ): EodMarketSnapshot = EodMarketSnapshot(
+        provider = "tejhq_eod",
+        dataMode = "END_OF_DAY",
+        exchange = exchange.uppercase(),
+        marketScope = "NSE_EQ",
+        tradingDate = "2026-11-20",
+        totalRows = 3000,
+        equitySeriesRows = 2500,
+        pricedSymbols = 2450,
+        advances = 1200,
+        declines = 1100,
+        unchanged = 150,
+        topGainers = listOf(EodStockMove("FIXTURE", "Fixture Industries", "EQ", 110.0, 100.0, 10.0, 10.0, 100000, null)),
+        topLosers = listOf(EodStockMove("LOSER", "Loser Industries", "EQ", 90.0, 100.0, -10.0, -10.0, 200000, null)),
+        mostActiveByVolume = listOf(EodStockMove("ACTIVE", "Active Industries", "EQ", 100.0, 99.0, 1.0, 1.01, 500000, null))
+    )
 
     override suspend fun fetchIntelligenceEvents(
         session: QuantSession, query: String, timespan: String
