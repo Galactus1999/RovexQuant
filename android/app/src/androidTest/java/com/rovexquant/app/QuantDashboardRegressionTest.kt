@@ -19,7 +19,14 @@ import org.junit.runner.RunWith
 class QuantDashboardRegressionTest {
     @get:Rule val composeRule = createAndroidComposeRule<QuantTestActivity>()
 
+    private fun waitForLoginForm() {
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("login.password").fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
     private fun login() {
+        waitForLoginForm()
         composeRule.onNodeWithTag("login.password").performTextInput("correct-password")
         composeRule.onNodeWithTag("login.submit").performClick()
         composeRule.waitUntil(10_000) {
@@ -66,6 +73,7 @@ class QuantDashboardRegressionTest {
 
 
     @Test fun loginFailureRemainsVisibleAndCanBeRetried() {
+        waitForLoginForm()
         composeRule.activity.fakeRepository.rejectLogin = true
         composeRule.onNodeWithTag("login.password").performTextInput("wrong-password")
         composeRule.onNodeWithTag("login.submit").performClick()
@@ -80,4 +88,12 @@ class QuantDashboardRegressionTest {
             composeRule.onAllNodesWithText("Market pulse.").fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithText("Market pulse.").assertIsDisplayed()
+    }
+
+
+    @Test fun signOutReturnsToLoginAndClearsWorkspaceState() {
+        login()
+        composeRule.onNodeWithText("Sign out").performClick()
+        waitForLoginForm()
+        composeRule.onNodeWithText("Connect securely").assertIsDisplayed()
     }
