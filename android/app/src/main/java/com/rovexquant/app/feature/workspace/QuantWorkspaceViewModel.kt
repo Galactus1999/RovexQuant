@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.rovexquant.app.data.local.QuantSessionStore
 import com.rovexquant.app.data.model.MarketIndexInstrument
+import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.MarketTick
 import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.data.repository.MarketStream
@@ -27,6 +28,7 @@ data class QuantWorkspaceUiState(
     val loginError: String? = null,
     val ticks: Map<String, MarketTick> = emptyMap(),
     val indexKeys: Map<String, String> = emptyMap(),
+    val equities: List<MarketEquityInstrument> = emptyList(),
     val streamStatus: String = "Not connected"
 )
 
@@ -87,6 +89,7 @@ class QuantWorkspaceViewModel(
                 session = null,
                 ticks = emptyMap(),
                 indexKeys = emptyMap(),
+                equities = emptyList(),
                 streamStatus = "Not connected",
                 loginError = null
             )
@@ -138,34 +141,48 @@ class QuantWorkspaceViewModel(
             }
         )
         marketStream = controller
-        _uiState.update { it.copy(streamStatus = "Loading official NSE index master") }
+        _uiState.update { it.copy(streamStatus = "Loading official NSE index and equity masters") }
 
         marketJob = viewModelScope.launch {
             try {
-                val master = repository.fetchIndexInstruments(session)
-                val resolved = resolveDashboardIndices(master)
-                _uiState.update { it.copy(indexKeys = resolved) }
-                if (resolved.isEmpty()) {
-                    throw IllegalStateException("No dashboard indices matched the official master.")
+                val indexMaster = repository.fetchIndexInstruments(session)
+                val resolvedIndices = resolveDashboardIndices(indexMaster)
+                if (resolvedIndices.isEmpty()) {
+                    throw IllegalStateException("Official NSE index master contained no dashboard benchmark matches.")
                 }
-                controller.start(resolved.values.toList())
-                _uiState.update { it.copy(streamStatus = "Connecting · ${resolved.size} indices") }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                // Preserve the existing fallback behaviour for this refactor checkpoint.
-                // Phase 2 replaces guessed keys with fail-closed instrument-master handling.
-                val fallback = mapOf(
-                    "NIFTY 50" to "NSE_INDEX|Nifty 50",
-                    "NIFTY BANK" to "NSE_INDEX|Nifty Bank"
-                )
-                _uiState.update {
-                    it.copy(
-                        indexKeys = fallback,
-                        streamStatus = "Instrument master unavailable · limited feed"
+
+                var equityMasterFailure: String? = null
+                val equities = try {
+                    repository.fetchEquityInstruments(session)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    equityMasterFailure = failure.message ?: "NSE equity master unavailable"
+                    emptyList()
+                }
+
+                val subscriptions = (resolvedIndices.values + equities.map { it.instrumentKey }).distinct()
+                if (subscriptions.size > 5000) {
+                    throw IllegalStateException(
+                        "NSE instrument universe (${subscriptions.size}) exceeds Upstox's 5,000 LTPC subscription limit."
                     )
                 }
-                controller.start(fallback.values.toList())
+                _uiState.update {
+                    it.copy(
+                        indexKeys = resolvedIndices,
+                        equities = equities,
+                        streamStatus = equityMasterFailure?.let {
+                            "NSE equity master unavailable: $it · index-only feed"
+                        } ?: "Connecting · ${equities.size} equities + ${resolvedIndices.size} indices"
+                    )
+                }
+                controller.start(subscriptions)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                _uiState.update {
+                    it.copy(streamStatus = failure.message ?: "Unable to load official NSE instrument master")
+                }
             }
         }
     }
