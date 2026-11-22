@@ -109,7 +109,7 @@ async def app_latest_eod_market_snapshot(
         summary = tejhq_service.summarize_snapshot_rows(
             rows,
             limit=limit,
-            allowed_series={"EQ"} if exchange == "nse" else None,
+            allowed_series={"EQ"} if exchange == "nse" else {"A", "B", "T"},
         )
         return {
             "provider": provider_id,
