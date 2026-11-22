@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       run_regression:
-        description: 'Run backend and Android unit-test suites (emulator tests removed)'
+        description: 'Run backend and Android unit-test suites (emulator instrumentation is a required CI gate)'
         required: false
         default: false
         type: boolean
@@ -33,9 +33,9 @@ jobs:
         working-directory: backend
     steps:
       - name: Checkout Quant source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
@@ -165,12 +165,12 @@ jobs:
       - name: Checkout Quant source
         uses: actions/checkout@v4
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
       - name: Set up Gradle 8.9
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: "8.9"
       - name: Validate Android project structure
@@ -214,12 +214,49 @@ jobs:
           echo "APK_VERSION_NAME=$VERSION"
           test "$APP_ID" = "com.rovexquant.app"
       - name: Upload Quant debug APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: Quant-Android-Debug-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
+
+  quant-android-instrumentation:
+    name: Quant Android Emulator Login & Navigation Regression
+    needs: quant-android-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout Quant source
+        uses: actions/checkout@v7
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - name: Configure Gradle
+        uses: gradle/actions/setup-gradle@v6
+      - name: Run authenticated UI regression suite on Android 15 emulator
+        uses: reactivecircus/android-emulator-runner@v2.38.0
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: Pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 900
+          script: cd android && ./gradlew :app:connectedDebugAndroidTest --stacktrace
+      - name: Upload emulator test reports
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: Quant-Android-Emulator-Test-Reports
+          path: |
+            android/app/build/reports/androidTests/connected
+            android/app/build/outputs/androidTest-results/connected
+          if-no-files-found: warn
+          retention-days: 14
 
   quant-regression:
     name: Quant Optional Unit & Backend Tests
