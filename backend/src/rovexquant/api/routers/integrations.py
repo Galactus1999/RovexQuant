@@ -76,7 +76,7 @@ def delete_app_upstox_analytics_token():
 )
 def save_upstox_analytics_token(request: UpstoxAnalyticsTokenInput):
     try:
-        store_upstox_analytics_token(request.token)
+        store_upstox_analytics_token(request.token.get_secret_value())
         return {
             "status": "connected",
             "provider": "upstox",
