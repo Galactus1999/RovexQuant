@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit
 class MarketStreamController(
     private val session: QuantSession,
     private val onStatus: (String) -> Unit,
-    private val onTick: (MarketTick) -> Unit
+    private val onTicks: (List<MarketTick>) -> Unit
 ) : MarketStream {
     private val client = OkHttpClient.Builder()
         .pingInterval(20, TimeUnit.SECONDS)
