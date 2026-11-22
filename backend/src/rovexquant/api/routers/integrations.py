@@ -1,6 +1,6 @@
 """Provider credential administration routes."""
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, SecretStr
 
 from rovexquant.api.dependencies import require_quant_admin
 from rovexquant.security.dependencies import require_app_session
