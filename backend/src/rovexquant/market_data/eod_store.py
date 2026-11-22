@@ -232,6 +232,71 @@ def latest_ingestion_status(exchange: str = "NSE") -> dict[str, Any]:
     return {"exchange": market, **dict(zip(keys, row, strict=True))}
 
 
+def latest_persisted_snapshot(exchange: str = "NSE", *, limit: int = 20) -> dict[str, Any]:
+    """Build the Market Pulse snapshot only from the latest successful PostgreSQL batch."""
+    market = exchange.strip().upper()
+    if market not in _SERIES:
+        raise EodStoreError("Exchange must be NSE or BSE", 422)
+    if not 1 <= limit <= 50:
+        raise EodStoreError("Snapshot limit must be between 1 and 50", 422)
+    try:
+        with connect() as connection:
+            run = connection.execute("""
+                SELECT trading_date, provider, completed_at
+                FROM market_ingestion_runs
+                WHERE exchange=%s AND status='SUCCEEDED' AND trading_date IS NOT NULL
+                ORDER BY completed_at DESC LIMIT 1
+            """, (market,)).fetchone()
+            if run is None:
+                raise EodStoreError("No successful PostgreSQL EOD batch is available yet", 404)
+            trading_date, provider, completed_at = run
+            stored_rows = connection.execute("""
+                SELECT symbol, company_name, series, close, previous_close, volume,
+                       turnover, quality_status, source_retrieved_at
+                FROM market_eod_bars
+                WHERE exchange=%s AND trading_date=%s AND provider=%s
+                ORDER BY symbol
+            """, (market, trading_date, provider)).fetchall()
+    except EodStoreError:
+        raise
+    except psycopg.Error as error:
+        raise EodStoreError(
+            "Persisted market snapshot is unavailable; verify PostgreSQL migrations and connectivity"
+        ) from error
+    if not stored_rows:
+        raise EodStoreError(
+            "The latest successful ingestion run has no matching persisted market rows", 503
+        )
+
+    rows = [{
+        "symbol": row[0],
+        "name": row[1],
+        "series": row[2],
+        "close": float(row[3]),
+        "prev_close": float(row[4]) if row[4] is not None else None,
+        "volume": int(row[5]),
+        "turnover": float(row[6]) if row[6] is not None else None,
+    } for row in stored_rows]
+    from rovexquant.market_data.tejhq_service import summarize_snapshot_rows
+
+    summary = summarize_snapshot_rows(
+        rows, limit=limit, allowed_series=_SERIES[market]
+    )
+    quality = {row[7] for row in stored_rows}
+    return {
+        "provider": provider,
+        "data_mode": "END_OF_DAY",
+        "data_origin": "POSTGRESQL",
+        "exchange": market,
+        "market_scope": "NSE_EQ" if market == "NSE" else "BSE_EQ",
+        "trading_date": trading_date.isoformat(),
+        "completed_at": completed_at.isoformat() if completed_at else None,
+        "quality_status": "PROVISIONAL" if "PROVISIONAL" in quality else "VERIFIED_SOURCE",
+        "source_retrieved_at": max(row[8] for row in stored_rows).isoformat(),
+        "summary": summary,
+    }
+
+
 def symbol_history(exchange: str, symbol: str, *, from_date: date, to_date: date,
                    limit: int = 1000) -> list[dict[str, Any]]:
     market, ticker = exchange.strip().upper(), symbol.strip().upper()
