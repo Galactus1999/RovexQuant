@@ -146,8 +146,18 @@ async def app_market_stream(websocket: WebSocket):
             raise StreamError("instrument_keys must be a list of verified NSE instrument keys")
         await stream_upstox_market_data(websocket, keys, mode)
     except (StreamError, asyncio.TimeoutError) as error:
-        await websocket.send_json({"type": "error", "message": str(error)})
-        await websocket.close(code=4400, reason="Invalid or unavailable market stream")
+        retryable = isinstance(error, asyncio.TimeoutError) or (
+            isinstance(error, StreamError) and error.retryable
+        )
+        await websocket.send_json({
+            "type": "error",
+            "message": str(error),
+            "retryable": retryable,
+        })
+        await websocket.close(
+            code=1013 if retryable else 4400,
+            reason="Temporary upstream outage" if retryable else "Invalid or unavailable market stream",
+        )
     except WebSocketDisconnect:
         return
     except Exception:
