@@ -3,6 +3,11 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+dependencyLocking {
+    lockAllConfigurations()
+}
+
 android {
     namespace = "com.rovexquant.app"
     compileSdk = 35
