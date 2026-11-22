@@ -1,7 +1,8 @@
 """Server-side, provider-neutral AI gateway.
 
-Credentials are loaded only from the backend environment/secret manager. The gateway
-never returns credential material, logs prompts, or rotates keys to evade provider limits.
+Credentials are loaded from backend environment configuration or the encrypted
+owner-only provider vault. The gateway never returns credential material, logs
+prompts, or rotates keys to evade provider limits.
 """
 from __future__ import annotations
 
