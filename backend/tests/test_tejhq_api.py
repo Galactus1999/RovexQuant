@@ -63,3 +63,49 @@ def test_tejhq_adjusted_endpoint_reports_missing_free_key_without_network(monkey
     )
     assert response.status_code == 503
     assert "optional free API key" in response.json()["detail"]
+
+
+def test_latest_eod_market_snapshot_is_authenticated_and_summarized(monkeypatch):
+    from datetime import date
+
+    token = _session(monkeypatch)
+
+    async def fake_latest(exchange, *, max_lookback_days=10):
+        assert exchange == "nse"
+        assert max_lookback_days == 10
+        return "tejhq_eod", date(2026, 11, 20), [
+            {"symbol": "GAIN", "name": "Gainer Ltd", "series": "EQ", "close": 110, "prev_close": 100, "volume": 1000},
+            {"symbol": "LOSS", "series": "EQ", "close": 90, "prev_close": 100, "volume": 2000},
+            {"symbol": "BEONLY", "series": "BE", "close": 120, "prev_close": 100, "volume": 9000},
+        ]
+
+    monkeypatch.setattr(tejhq_service, "fetch_latest_snapshot", fake_latest)
+    client = TestClient(api.app)
+    unauthorized = client.get("/api/v1/app/market-data/eod/latest/nse")
+    assert unauthorized.status_code == 401
+
+    response = client.get(
+        "/api/v1/app/market-data/eod/latest/nse",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "tejhq_eod"
+    assert body["data_mode"] == "END_OF_DAY"
+    assert body["trading_date"] == "2026-11-20"
+    assert body["summary"]["advances"] == 1
+    assert body["summary"]["declines"] == 1
+    assert body["summary"]["equity_series_rows"] == 2
+    assert body["summary"]["top_gainers"][0]["symbol"] == "GAIN"
+    assert "rows" not in body
+    assert "BEONLY" not in response.text
+
+
+def test_latest_eod_market_snapshot_bounds_lookback_and_limit(monkeypatch):
+    token = _session(monkeypatch)
+    response = TestClient(api.app).get(
+        "/api/v1/app/market-data/eod/latest/nse",
+        params={"max_lookback_days": 30, "limit": 100},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 422
