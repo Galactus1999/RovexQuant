@@ -7,6 +7,7 @@ import os
 from typing import Any, Literal
 
 from fastapi import FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel, Field, model_validator
 
 from rovexquant.ai.gateway import GatewayError, authorize_gateway, complete_chat, configured_providers
@@ -32,6 +33,49 @@ from rovexquant.market_data.upstox_credentials import (
 from rovexquant.strategies.registry import default_registry
 
 app = FastAPI(title="Quant API", version="0.5.0", description="Evidence-based market research. No order execution.")
+
+def _quant_openapi():
+    """Publish mobile app authentication as a Swagger HTTP Bearer security scheme."""
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    components = schema.setdefault("components", {})
+    schemes = components.setdefault("securitySchemes", {})
+    schemes["QuantAppBearer"] = {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Use the short-lived token returned by POST /api/v1/auth/session.",
+    }
+
+    for path, path_item in schema.get("paths", {}).items():
+        if not path.startswith("/api/v1/app/"):
+            continue
+        for operation in path_item.values():
+            if not isinstance(operation, dict) or "responses" not in operation:
+                continue
+            operation["security"] = [{"QuantAppBearer": []}]
+            operation["parameters"] = [
+                parameter
+                for parameter in operation.get("parameters", [])
+                if not (
+                    parameter.get("in") == "header"
+                    and parameter.get("name", "").lower() == "authorization"
+                )
+            ]
+
+    app.openapi_schema = schema
+    return app.openapi_schema
+
+
+app.openapi = _quant_openapi
+
 
 
 def authorize_quant_admin(supplied_key: str | None) -> None:
