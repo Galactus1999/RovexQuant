@@ -2,6 +2,8 @@ package com.rovexquant.app.ui
 
 import com.rovexquant.app.data.model.MarketTick
 import com.rovexquant.app.data.model.MarketEquityInstrument
+import com.rovexquant.app.data.model.QuantSession
+import com.rovexquant.app.data.repository.QuantDataRepository
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -9,17 +11,21 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Locale
@@ -53,9 +59,25 @@ fun MarketPulseScreen(
     ticks: Map<String, MarketTick> = emptyMap(),
     indexKeys: Map<String, String> = emptyMap(),
     equityInstruments: List<MarketEquityInstrument> = emptyList(),
-    streamStatus: String = "Not connected"
+    streamStatus: String = "Not connected",
+    session: QuantSession? = null,
+    repository: QuantDataRepository? = null,
+    onReconnect: () -> Unit = {}
 ) {
+    val scope = rememberCoroutineScope()
     var equitySearch by remember { mutableStateOf("") }
+    var upstoxToken by remember { mutableStateOf("") }
+    var tokenSaving by remember { mutableStateOf(false) }
+    var tokenError by remember { mutableStateOf<String?>(null) }
+    var tokenConfigured by remember { mutableStateOf<Boolean?>(null) }
+    var showTokenForm by remember { mutableStateOf(true) }
+
+    LaunchedEffect(session, repository) {
+        if (session != null && repository != null) {
+            tokenConfigured = runCatching { repository.fetchUpstoxConfigured(session) }.getOrNull()
+            if (tokenConfigured == true) showTokenForm = false
+        }
+    }
     val visibleEquities = remember(equityInstruments, equitySearch) {
         val query = equitySearch.trim().uppercase()
         if (query.isBlank()) equityInstruments else equityInstruments.filter {
@@ -70,6 +92,81 @@ fun MarketPulseScreen(
 
     LazyColumn(contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item { SectionHeading("The market, without the noise", "Market pulse.", "A clean overview of indices, breadth, sectors and your tracked universe.") }
+        if (session != null && repository != null) {
+            item {
+                TerminalCard {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Eyebrow("Market data connection")
+                        StatusPill(
+                            when (tokenConfigured) {
+                                true -> "Token stored"
+                                false -> "Setup required"
+                                null -> "Checking"
+                            },
+                            if (tokenConfigured == true) Mint else Gold
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Upstox Analytics Token · read-only market data",
+                        color = MaterialTheme.colorScheme.onBackground,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "Generate the free, one-year Analytics Token in your Upstox Developer Apps account. Paste it here; Quant sends it over HTTPS and stores it encrypted on the backend. Never share it in chat.",
+                        color = Muted, fontSize = 10.sp, lineHeight = 15.sp
+                    )
+                    if (tokenConfigured == true && !showTokenForm) {
+                        Text(
+                            "Stored does not mean live. The feed is verified separately by upstream authorization and received ticks.",
+                            color = Gold, fontSize = 10.sp, lineHeight = 15.sp
+                        )
+                        androidx.compose.material3.TextButton(
+                            onClick = { showTokenForm = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Replace Analytics Token") }
+                    } else {
+                        Spacer(Modifier.height(7.dp))
+                        OutlinedTextField(
+                            value = upstoxToken,
+                            onValueChange = { upstoxToken = it.take(4096); tokenError = null },
+                            label = { Text("Upstox Analytics Token") },
+                            placeholder = { Text("Paste your read-only token") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().testTag("market.upstox.token")
+                        )
+                        Button(
+                            onClick = {
+                                val token = upstoxToken.trim()
+                                if (token.length !in 20..4096 || tokenSaving) return@Button
+                                tokenSaving = true
+                                tokenError = null
+                                scope.launch {
+                                    try {
+                                        repository.saveUpstoxAnalyticsToken(session, token)
+                                        upstoxToken = ""
+                                        tokenConfigured = true
+                                        showTokenForm = false
+                                        onReconnect()
+                                    } catch (failure: Exception) {
+                                        tokenError = failure.message ?: "Unable to store Upstox token."
+                                    } finally {
+                                        tokenSaving = false
+                                    }
+                                }
+                            },
+                            enabled = !tokenSaving && upstoxToken.trim().length in 20..4096,
+                            modifier = Modifier.fillMaxWidth().testTag("market.upstox.save")
+                        ) {
+                            Text(if (tokenSaving) "Encrypting on backend…" else "Save token and connect feed")
+                        }
+                        tokenError?.let { Text(it, color = Coral, fontSize = 10.sp, lineHeight = 15.sp) }
+                    }
+                }
+            }
+        }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 MetricTile(
