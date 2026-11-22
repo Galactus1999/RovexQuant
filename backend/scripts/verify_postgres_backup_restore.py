@@ -1,6 +1,8 @@
 """Verify PostgreSQL custom-format backup and restore without exposing URLs."""
 from __future__ import annotations
 
+import base64
+import hashlib
 import os
 from pathlib import Path
 import subprocess
@@ -9,7 +11,13 @@ from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
 
 import psycopg
+from cryptography.fernet import Fernet, InvalidToken
 from psycopg import sql
+
+
+_TEST_VAULT_KEY = base64.urlsafe_b64encode(
+    hashlib.sha256(b"RovexQuant Phase 1 PostgreSQL integration test key only").digest()
+)
 
 
 def _run_pg_client(image: str, directory: str, *arguments: str) -> None:
@@ -101,6 +109,14 @@ def main() -> int:
                 raise RuntimeError("Restored PostgreSQL schema did not pass verification")
             if legacy is None or not bytes(legacy[0]):
                 raise RuntimeError("Restored PostgreSQL backup did not preserve legacy vault data")
+            try:
+                restored_plaintext = Fernet(_TEST_VAULT_KEY).decrypt(bytes(legacy[0]))
+            except InvalidToken as error:
+                raise RuntimeError(
+                    "Restored PostgreSQL backup did not preserve decryptable vault ciphertext"
+                ) from error
+            if restored_plaintext != b"legacy-ciphertext-preservation-probe":
+                raise RuntimeError("Restored PostgreSQL vault probe plaintext did not match")
         finally:
             if created:
                 with psycopg.connect(admin_url, autocommit=True) as connection:
