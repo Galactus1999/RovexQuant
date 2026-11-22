@@ -5,6 +5,7 @@ import com.rovexquant.app.data.model.EodMarketSnapshot
 import com.rovexquant.app.data.model.EodStockMove
 import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.QuantSession
+import com.rovexquant.app.data.model.MarketIngestionStatus
 import com.rovexquant.app.data.repository.QuantDataRepository
 
 import androidx.compose.foundation.background
@@ -69,7 +70,10 @@ fun MarketPulseScreen(
     onReconnect: () -> Unit = {},
     eodSnapshot: EodMarketSnapshot? = null,
     eodSnapshotStatus: String = "EOD snapshot not loaded",
-    onRefreshEodSnapshot: () -> Unit = {}
+    onRefreshEodSnapshot: () -> Unit = {},
+    marketIngestionStatus: MarketIngestionStatus? = null,
+    marketIngestionStatusLabel: String = "Persistent database status not checked",
+    onRefreshMarketIngestionStatus: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     val activeSession = session
@@ -166,6 +170,83 @@ fun MarketPulseScreen(
                         onClick = onRefreshEodSnapshot,
                         modifier = Modifier.testTag("market.eod.refresh")
                     ) { Text("Refresh") }
+                }
+            }
+        }
+        item {
+            TerminalCard {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    Eyebrow("Persistent PostgreSQL ingestion")
+                    StatusPill(
+                        marketIngestionStatus?.status ?: "UNKNOWN",
+                        when (marketIngestionStatus?.status) {
+                            "SUCCEEDED" -> Mint
+                            "FAILED", "EMPTY" -> Coral
+                            else -> Gold
+                        }
+                    )
+                }
+                Text(
+                    "Database collection health",
+                    modifier = Modifier.testTag("market.ingestion.status"),
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    marketIngestionStatusLabel,
+                    color = Muted,
+                    fontSize = 10.sp,
+                    lineHeight = 15.sp
+                )
+                val persistedDate = marketIngestionStatus?.lastSuccessfulTradingDate
+                if (persistedDate != null) {
+                    Text(
+                        "Persisted EOD data · $persistedDate · " +
+                            "${marketIngestionStatus.lastSuccessfulRows} rows · " +
+                            "${marketIngestionStatus.lastSuccessfulProvider ?: "source unknown"}",
+                        color = Mint,
+                        fontSize = 10.sp,
+                        lineHeight = 15.sp
+                    )
+                } else {
+                    Text(
+                        "No successful EOD batch is recorded in PostgreSQL yet. A live quote connection does not prove historical data has been persisted.",
+                        color = Gold,
+                        fontSize = 10.sp,
+                        lineHeight = 15.sp
+                    )
+                }
+                if (marketIngestionStatus?.status == "FAILED") {
+                    Text(
+                        "Latest run error · ${marketIngestionStatus.errorCode ?: "unknown"}: " +
+                            (marketIngestionStatus.errorMessage ?: "No safe error detail supplied."),
+                        color = Coral,
+                        fontSize = 9.sp,
+                        lineHeight = 14.sp
+                    )
+                }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    Text(
+                        marketIngestionStatus?.let {
+                            "Latest run · ${it.rowsUpserted} rows processed · ${it.rowsSkipped} skipped"
+                        } ?: "Waiting for backend status",
+                        color = Muted,
+                        fontSize = 9.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    androidx.compose.material3.TextButton(
+                        onClick = onRefreshMarketIngestionStatus,
+                        modifier = Modifier.testTag("market.ingestion.refresh")
+                    ) { Text("Check") }
                 }
             }
         }
