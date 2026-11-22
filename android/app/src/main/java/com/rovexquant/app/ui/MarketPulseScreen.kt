@@ -1,5 +1,7 @@
 package com.rovexquant.app.ui
 
+import com.rovexquant.app.data.model.MarketTick
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
