@@ -6,6 +6,7 @@ import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiProvider
 import com.rovexquant.app.data.model.AiStrategyBrief
+import com.rovexquant.app.data.model.EodMarketSnapshot
 import com.rovexquant.app.data.model.IntelligenceFeed
 import com.rovexquant.app.data.model.MarketIndexInstrument
 import com.rovexquant.app.data.model.MarketEquityInstrument
@@ -60,6 +61,9 @@ class QuantRepository(context: Context) : QuantDataRepository {
 
     override suspend fun fetchUpstoxConfigured(session: QuantSession): Boolean =
         withContext(Dispatchers.IO) { QuantApi.fetchUpstoxConfigured(session) }
+
+    override suspend fun fetchLatestEodMarketSnapshot(session: QuantSession, exchange: String): EodMarketSnapshot =
+        withContext(Dispatchers.IO) { QuantApi.fetchLatestEodMarketSnapshot(session, exchange) }
 
     override suspend fun fetchIntelligenceEvents(
         session: QuantSession, query: String, timespan: String
