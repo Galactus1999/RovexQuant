@@ -16,6 +16,7 @@ def _run_pg_client(image: str, directory: str, *arguments: str) -> None:
     """Run version-matched PostgreSQL tools in a disposable official client image."""
     command = [
         "docker", "run", "--rm", "--network", "host",
+        "--user", str(os.getuid()) + ":" + str(os.getgid()),
         "-v", directory + ":/backup", image, *arguments,
     ]
     try:
