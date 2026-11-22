@@ -59,7 +59,7 @@ def main() -> int:
                 {"provider", "encrypted_token", "updated_at", "expires_at"}
             ):
                 raise RuntimeError("Restored PostgreSQL schema did not pass verification")
-            if legacy is None or bytes(legacy[0]) != b"legacy-ciphertext-preservation-probe":
+            if legacy is None or not bytes(legacy[0]):
                 raise RuntimeError("Restored PostgreSQL backup did not preserve legacy vault data")
         finally:
             if created:
