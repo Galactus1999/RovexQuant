@@ -21,6 +21,25 @@ NSE_MCP_ENDPOINTS = {
 _PROTOCOL_VERSION = "2025-03-26"
 _TOOL_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
 _BLOCKED_TOOL_PARTS = ("trade", "order", "execute", "cancel", "modify", "place", "submit", "write", "delete")
+# NSE's live MCP catalogue omits readOnlyHint annotations. These exact data-query
+# tools were inspected in the live catalogue and correspond to the read-only
+# capabilities published on NSE's official MCP page. Unknown tools remain denied.
+_NSE_READ_ONLY_TOOL_ALLOWLIST = frozenset({
+    "get_top_by_volume", "get_top_movers", "nse_lookup_symbol", "get_market_mood",
+    "get_index_valuation", "get_market_breadth", "get_corporate_actions",
+    "compare_indices", "get_index_movers", "get_ltp_by_date", "get_bulk_quote",
+    "get_volume_analysis", "get_stock_history", "get_index_snapshot", "search_symbols",
+    "get_stock_vs_index", "compare_stocks", "get_index_history", "moving_average",
+    "get_52_week_high_low", "get_index_performance",
+})
+_READ_ONLY_DESCRIPTION = re.compile(
+    r"^(get|search|compare|calculate|calculates|find|list|lookup|look up|retrieve|fetch)\\b",
+    re.IGNORECASE,
+)
+_MUTATING_DESCRIPTION = re.compile(
+    r"\\b(place order|submit order|modify order|cancel order|delete|create order|write|execute trade)\\b",
+    re.IGNORECASE,
+)
 
 
 class NseMcpError(Exception):
@@ -283,13 +302,29 @@ def safe_tool_catalog(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
         name = tool.get("name")
         if not isinstance(name, str):
             continue
+        description = str(tool.get("description", ""))[:2000]
+        annotations = tool.get("annotations")
+        read_only_hint = annotations.get("readOnlyHint") if isinstance(annotations, dict) else None
+        name_is_safe = not any(part in name.lower() for part in _BLOCKED_TOOL_PARTS)
+        if read_only_hint is False:
+            read_only = False
+        elif read_only_hint is True:
+            read_only = name_is_safe
+        else:
+            # Some official NSE deployments omit MCP annotations entirely.
+            # Fall back only for exact locally reviewed names with a data-query
+            # description. This is not a general "get_*" allow rule.
+            read_only = (
+                name in _NSE_READ_ONLY_TOOL_ALLOWLIST
+                and name_is_safe
+                and bool(_READ_ONLY_DESCRIPTION.search(description.strip()))
+                and not _MUTATING_DESCRIPTION.search(description)
+            )
         safe.append({
             "name": name,
-            "description": str(tool.get("description", ""))[:2000],
+            "description": description,
             "input_schema": tool.get("inputSchema") if isinstance(tool.get("inputSchema"), dict) else {},
-            "read_only": not any(part in name.lower() for part in _BLOCKED_TOOL_PARTS)
-                and isinstance(tool.get("annotations"), dict)
-                and tool["annotations"].get("readOnlyHint") is True,
+            "read_only": read_only,
         })
     return safe
 
