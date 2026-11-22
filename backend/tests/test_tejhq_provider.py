@@ -180,10 +180,13 @@ def test_fetch_latest_snapshot_skips_non_trading_days(monkeypatch):
 def test_fetch_latest_snapshot_stops_on_transient_provider_failure(monkeypatch):
     from rovexquant.market_data import tejhq_service
 
+    calls = []
+
     class FakeProvider:
         provider_id = "tejhq_eod"
 
         async def get_snapshot(self, _exchange, _trading_date):
+            calls.append(1)
             raise TejHqError("provider temporarily unavailable", 503, retryable=True)
 
     monkeypatch.setattr(
@@ -198,6 +201,7 @@ def test_fetch_latest_snapshot_stops_on_transient_provider_failure(monkeypatch):
             )
         )
     assert failure.value.retryable is True
+    assert len(calls) == 3
 
 
 def test_summarize_snapshot_rows_uses_only_verified_equity_close_fields():
