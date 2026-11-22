@@ -2,7 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
-    id("com.github.jk1.dependency-license-report")
+    id("com.jaredsburrows.license")
 }
 
 dependencyLocking {
@@ -25,8 +25,15 @@ android {
     kotlinOptions { jvmTarget = "17" }
 }
 licenseReport {
-    configurations = listOf("releaseRuntimeClasspath")
-    allowedLicensesFile = file("config/allowed-licenses.json")
+    generateCsvReport = false
+    generateHtmlReport = false
+    generateJsonReport = true
+    generateJsonFullReport = true
+    generateTextReport = false
+    copyCsvReportToAssets = false
+    copyHtmlReportToAssets = false
+    copyJsonReportToAssets = false
+    copyTextReportToAssets = false
 }
 
 dependencies {
