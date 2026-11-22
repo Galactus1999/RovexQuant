@@ -104,6 +104,8 @@ def test_tool_error_and_invalid_json_are_not_silently_accepted():
     seen = []
     transport = httpx.MockTransport(_handler_for({
         "tools": [{"name": "get_history", "inputSchema": {"type": "object"}}],
+        "tools": [{"name": "get_history", "inputSchema": {"type": "object"},
+                   "annotations": {"readOnlyHint": True}}],
         "call": {"isError": True, "content": [{"type": "text", "text": "private detail"}]},
     }, seen))
     async def run():
@@ -115,7 +117,8 @@ def test_tool_error_and_invalid_json_are_not_silently_accepted():
 
 def test_safe_catalog_hides_mutating_tools():
     catalog = safe_tool_catalog([
-        {"name": "get_quote", "inputSchema": {"type": "object"}},
+        {"name": "get_quote", "inputSchema": {"type": "object"},
+         "annotations": {"readOnlyHint": True}},
         {"name": "delete_history", "inputSchema": {"type": "object"}},
     ])
     assert catalog[0]["read_only"] is True
@@ -242,3 +245,72 @@ def test_http_timeout_is_retryable():
         asyncio.run(run())
     assert error.value.retryable is True
     assert "timed out" in str(error.value).lower()
+
+
+
+def test_tool_without_positive_read_only_annotation_is_denied():
+    seen = []
+    transport = httpx.MockTransport(_handler_for({
+        "tools": [{"name": "get_history", "inputSchema": {"type": "object"}}],
+    }, seen))
+
+    async def run():
+        async with NseMcpClient("bhavcopy", transport=transport) as client:
+            await client.call_tool("get_history", {})
+
+    with pytest.raises(NseMcpError, match="readOnlyHint must be true"):
+        asyncio.run(run())
+    assert not any(body["method"] == "tools/call" for body, _ in seen)
+
+
+def test_tool_arguments_are_validated_against_published_schema():
+    seen = []
+    transport = httpx.MockTransport(_handler_for({
+        "tools": [{
+            "name": "get_history",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"symbol": {"type": "string"}},
+                "required": ["symbol"],
+                "additionalProperties": False,
+            },
+            "annotations": {"readOnlyHint": True},
+        }],
+    }, seen))
+
+    async def run():
+        async with NseMcpClient("bhavcopy", transport=transport) as client:
+            await client.call_tool("get_history", {"symbol": 123})
+
+    with pytest.raises(NseMcpError, match="arguments do not match"):
+        asyncio.run(run())
+    assert not any(body["method"] == "tools/call" for body, _ in seen)
+
+
+def test_remote_schema_references_are_rejected_without_fetching():
+    seen = []
+    transport = httpx.MockTransport(_handler_for({
+        "tools": [{
+            "name": "get_history",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"symbol": {"$ref": "https://example.invalid/schema.json"}},
+            },
+            "annotations": {"readOnlyHint": True},
+        }],
+    }, seen))
+
+    async def run():
+        async with NseMcpClient("bhavcopy", transport=transport) as client:
+            await client.call_tool("get_history", {"symbol": "RELIANCE"})
+
+    with pytest.raises(NseMcpError, match="references are not supported"):
+        asyncio.run(run())
+    assert not any(body["method"] == "tools/call" for body, _ in seen)
+
+
+def test_safe_catalog_marks_missing_read_only_hint_as_not_read_only():
+    catalog = safe_tool_catalog([
+        {"name": "unknown_tool", "inputSchema": {"type": "object"}},
+    ])
+    assert catalog[0]["read_only"] is False
