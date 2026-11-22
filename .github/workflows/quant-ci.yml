@@ -1,0 +1,674 @@
+name: Quant Build & APK Integrity CI
+
+on:
+  push:
+    branches: [main, develop, 'fix/**', 'feat/**']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run_regression:
+        description: 'Run backend and Android unit-test suites (emulator instrumentation is a required CI gate)'
+        required: false
+        default: false
+        type: boolean
+      run_nse_live_smoke:
+        description: 'Connect to official NSE MCP servers and list available tools'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quant-ci-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  quant-backend-static:
+    name: Quant Backend Static Quality
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout Quant source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.11"
+      - name: Install pinned uv resolver
+        run: python -m pip install "uv==0.12.9"
+      - name: Install pinned dependency-lock verifier
+        run: uv pip install --system --no-deps packaging==26.3
+      - name: Verify exact backend dependency lock
+        run: python scripts/verify_dependency_lock.py
+      - name: Install exact locked backend dependencies
+        run: |
+          uv pip install --system --no-deps -r requirements.lock
+          uv pip install --system --no-deps -e .
+      - name: Ruff correctness checks
+        run: ruff check src tests migrations --select E4,E9,F
+      - name: Python syntax compilation
+        run: python -m compileall -q src migrations tests
+      - name: Full backend regression suite
+        run: pytest -q -m "not integration"
+      - name: Audit locked Python dependencies for known vulnerabilities
+        run: uvx --from pip-audit==2.9.0 pip-audit -r requirements.lock
+      - name: Export Python dependency license inventory
+        run: uv pip install --system pip-licenses==5.0.0 && pip-licenses --format=json > /tmp/quant-python-licenses.json
+      - name: Upload Python lock and license inventory
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Quant-Python-Dependency-Lock-and-Licenses
+          path: |
+            backend/requirements.lock
+            /tmp/quant-python-licenses.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  quant-backend-postgres-integration:
+    name: Quant PostgreSQL Migration & Vault Integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: quant
+          POSTGRES_PASSWORD: quant-test-password
+          POSTGRES_DB: quant_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U quant -d quant_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      QUANT_ENV: test
+      QUANT_TOKEN_TEST_DATABASE_URL: postgresql://quant:quant-test-password@127.0.0.1:5432/quant_test?sslmode=disable
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout Quant source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Install pinned uv resolver
+        run: python -m pip install "uv==0.12.9"
+      - name: Install pinned dependency-lock verifier
+        run: uv pip install --system --no-deps packaging==26.3
+      - name: Verify exact backend dependency lock
+        run: python scripts/verify_dependency_lock.py
+      - name: Install exact locked backend dependencies
+        run: |
+          uv pip install --system --no-deps -r requirements.lock
+          uv pip install --system --no-deps -e .
+      - name: Run real PostgreSQL migrations, vault, rollback and key-rotation tests
+        run: pytest -q -m integration tests/test_migrations.py
+      - name: Verify PostgreSQL backup and isolated restore with matching client
+        env:
+          QUANT_PG_CLIENT_IMAGE: postgres:16
+        run: python scripts/verify_postgres_backup_restore.py
+
+  quant-backend-container:
+    name: Quant Backend Container & Auth Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Quant source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Build production backend image
+        run: docker build --pull -t quant-api:ci ./backend
+      - name: Smoke-test container, app auth and encrypted provider vault
+        shell: bash
+        run: |
+          set -euo pipefail
+          DATA_DIR="$RUNNER_TEMP/quant-api-data"
+          mkdir -p "$DATA_DIR"
+          sudo chown 10001:10001 "$DATA_DIR"
+          APP_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          FERNET_KEY="$(python -c 'import base64,os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')"
+          ADMIN_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          docker run -d --name quant-api-ci \
+            -p 127.0.0.1:8765:8000 \
+            -v "$DATA_DIR:/data" \
+            -e PORT=8000 \
+            -e QUANT_TOKEN_DB_PATH=/data/quant-secrets.sqlite3 \
+            -e QUANT_TOKEN_STORAGE_MODE=sqlite \
+            -e QUANT_APP_USERNAME=quant-ci \
+            -e QUANT_APP_PASSWORD=quant-ci-password \
+            -e QUANT_APP_SESSION_SIGNING_KEY="$APP_KEY" \
+            -e QUANT_TOKEN_ENCRYPTION_KEY="$FERNET_KEY" \
+            -e QUANT_ADMIN_GATEWAY_TOKEN="$ADMIN_KEY" \
+            quant-api:ci
+          cleanup() {
+            status=$?
+            docker logs quant-api-ci || true
+            docker rm -f quant-api-ci >/dev/null 2>&1 || true
+            exit "$status"
+          }
+          trap cleanup EXIT
+          ready=false
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8765/api/v1/health >/dev/null; then ready=true; break; fi
+            sleep 1
+          done
+          test "$ready" = true
+          curl -fsS http://127.0.0.1:8765/api/v1/health/ready >/dev/null
+          UNAUTH_CODE="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8765/api/v1/app/market/providers)"
+          test "$UNAUTH_CODE" = "401"
+          UNAUTH_NSE_CODE="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8765/api/v1/app/research/nse-mcp/tools)"
+          test "$UNAUTH_NSE_CODE" = "401"
+          SESSION="$(curl -fsS -X POST http://127.0.0.1:8765/api/v1/auth/session \
+            -H 'Content-Type: application/json' \
+            --data '{"username":"quant-ci","password":"quant-ci-password"}' \
+            | python -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')"
+          curl -fsS http://127.0.0.1:8765/api/v1/app/market/providers \
+            -H "Authorization: Bearer $SESSION" >/dev/null
+          curl -fsS http://127.0.0.1:8765/api/v1/app/research/nse-mcp/providers \
+            -H "Authorization: Bearer $SESSION" | grep -q '"nse_mcp_bhavcopy"'
+          PROVISION="$(curl -fsS -X POST http://127.0.0.1:8765/api/v1/integrations/upstox/analytics-token \
+            -H "X-Quant-Admin-Key: $ADMIN_KEY" \
+            -H 'Content-Type: application/json' \
+            --data '{"token":"fake-analytics-token-for-container-smoke"}')"
+          case "$PROVISION" in *fake-analytics-token-for-container-smoke*) echo "Provider token leaked in response"; exit 1 ;; esac
+          STATUS="$(curl -fsS http://127.0.0.1:8765/api/v1/integrations/upstox/status \
+            -H "X-Quant-Admin-Key: $ADMIN_KEY")"
+          echo "$STATUS" | grep -q '"connected":true'
+          if grep -a -R -q "fake-analytics-token-for-container-smoke" "$DATA_DIR"; then
+            echo "Provider token found in plaintext in persistent storage"
+            exit 1
+          fi
+
+  quant-secret-scan:
+    name: Quant Secret Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout full Quant history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Scan repository history and working tree for secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+
+  quant-security-architecture:
+    name: Quant Security, API Contract & Architecture Regression
+    runs-on: ubuntu-latest
+    needs: quant-backend-static
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout Quant source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.11"
+      - name: Install pinned uv resolver
+        run: python -m pip install "uv==0.12.9"
+      - name: Install pinned dependency-lock verifier
+        run: uv pip install --system --no-deps packaging==26.3
+      - name: Verify exact backend dependency lock
+        run: python scripts/verify_dependency_lock.py
+      - name: Install exact locked backend dependencies
+        run: |
+          uv pip install --system --no-deps -r requirements.lock
+          uv pip install --system --no-deps -e .
+      - name: Run security, API contract and architecture tests
+        run: pytest -q tests/test_architecture.py tests/test_api.py tests/test_nse_mcp.py tests/test_nse_mcp_api.py
+
+  quant-android-build:
+    name: Quant Android Compile, Lint & APK Integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout Quant source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up JDK 17
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Gradle 8.14.8
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          gradle-version: "8.14.8"
+      - name: Validate Android project structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f android/settings.gradle.kts
+          test -f android/build.gradle.kts
+          test -f android/app/build.gradle.kts
+          test -f android/app/src/main/AndroidManifest.xml
+          test -f android/app/src/main/java/com/rovexquant/app/MainActivity.kt
+           test -f android/app/src/debug/AndroidManifest.xml
+           test -f android/app/src/debug/java/com/rovexquant/app/QuantTestActivity.kt
+           test ! -e android/app/src/androidTest/AndroidManifest.xml
+           test ! -e android/app/src/androidTest/java/com/rovexquant/app/QuantTestActivity.kt
+      - name: Bootstrap Android dependency locks and verification metadata when absent
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -s android/app/gradle.lockfile && -s android/gradle/verification-metadata.xml && ! -f android/gradle/ALLOW_DEPENDENCY_METADATA_REFRESH ]]; then
+            echo "Using committed Android dependency locks and verification metadata."
+          else
+            echo "Bootstrapping the complete Android dependency graph for first-time lock persistence or an explicitly approved refresh."
+            gradle -p android help :app:dependencies :app:licenseReleaseReport :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug :app:testDebugUnitTest --refresh-dependencies --write-locks --write-verification-metadata sha256 --no-daemon --stacktrace
+          fi
+      - name: Verify Kotlin compiler and daemon dependency alignment
+        run: python android/scripts/verify_kotlin_daemon_alignment.py
+      - name: Clean Android build outputs
+        run: gradle -p android clean --no-daemon --stacktrace
+      - name: Generate Android dependency license inventory
+        run: gradle -p android :app:licenseReleaseReport --dependency-verification=strict --no-daemon --stacktrace
+      - name: Enforce Android runtime dependency license allowlist
+        run: python android/scripts/check_dependency_licenses.py
+      - name: Verify locked dependencies and compile Quant APK with strict verification
+        run: gradle -p android :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug :app:testDebugUnitTest --dependency-verification=strict --no-daemon --stacktrace
+      - name: Verify APK identity, contents and archive integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          python - "$APK" <<'PY'
+          import hashlib, pathlib, sys, zipfile
+          apk = pathlib.Path(sys.argv[1])
+          assert apk.stat().st_size > 100_000, f"APK unexpectedly small: {apk.stat().st_size}"
+          with zipfile.ZipFile(apk) as archive:
+              bad = archive.testzip()
+              assert bad is None, f"Corrupt APK entry: {bad}"
+              names = set(archive.namelist())
+              assert "AndroidManifest.xml" in names, "APK manifest missing"
+              assert "classes.dex" in names, "DEX bytecode missing"
+              assert "resources.arsc" in names, "Compiled resources missing"
+          digest = hashlib.sha256(apk.read_bytes()).hexdigest()
+          print(f"APK={apk}")
+          print(f"APK_SIZE_BYTES={apk.stat().st_size}")
+          print(f"APK_SHA256={digest}")
+          PY
+          ANALYZER="$(find "$ANDROID_HOME" -type f -name apkanalyzer -perm -u+x -print -quit)"
+          test -n "$ANALYZER"
+          APP_ID="$("$ANALYZER" manifest application-id "$APK")"
+          VERSION="$("$ANALYZER" manifest version-name "$APK")"
+          echo "APK_APPLICATION_ID=$APP_ID"
+          echo "APK_VERSION_NAME=$VERSION"
+          test "$APP_ID" = "com.rovexquant.app"
+      - name: Upload Quant debug APK
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Quant-Android-Debug-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload Android dependency locks and verification metadata
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Quant-Android-Dependency-Locks
+          path: |
+            android/app/gradle.lockfile
+            android/gradle/verification-metadata.xml
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload Android dependency license inventory
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Quant-Android-License-Inventory
+          path: android/app/build/reports/licenses
+          if-no-files-found: warn
+          retention-days: 14
+
+  quant-android-instrumentation:
+    name: Quant Android Emulator Login & Navigation Regression
+    needs: quant-android-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout Quant source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Java
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - name: Set up Gradle 8.14.8
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          gradle-version: "8.14.8"
+      - name: Download exact dependency locks from Android build job
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: Quant-Android-Dependency-Locks
+          path: android
+      - name: Enable and verify KVM for Android emulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          if [[ ! -e /dev/kvm ]]; then
+            echo "::error::KVM device /dev/kvm is unavailable; refusing to launch a software-only emulator that cannot boot on this runner."
+            exit 1
+          fi
+          ls -l /dev/kvm
+          id
+          test -r /dev/kvm
+          test -w /dev/kvm
+      - name: Preserve emulator environment diagnostics
+        if: always()
+        shell: bash
+        run: |
+          set -u
+          REPORT_DIR="android/app/build/reports/androidTests/connected"
+          mkdir -p "$REPORT_DIR"
+          {
+            echo "Runner: $RUNNER_OS"
+            uname -a
+            echo "KVM device:"
+            ls -l /dev/kvm 2>&1 || true
+            echo "Runner identity:"
+            id
+            echo "ADB version:"
+            ADB="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/platform-tools/adb"
+             if [[ -x "$ADB" ]]; then
+               "$ADB" version 2>&1
+             else
+               echo "ADB not found at $ADB before emulator action setup."
+             fi
+          } > "$REPORT_DIR/CI-EMULATOR-ENVIRONMENT.txt"
+      - name: Run authenticated UI regression suite on Android 15 emulator
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          disable-linux-hw-accel: false
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
+          script: gradle -p android :app:connectedDebugAndroidTest --dependency-verification=strict --no-daemon --stacktrace
+      - name: Upload emulator test reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Quant-Android-Emulator-Test-Reports
+          path: |
+            android/app/build/reports/androidTests/connected
+            android/app/build/outputs/androidTest-results/connected
+            android/app/build/outputs/connected_android_test_additional_output
+          if-no-files-found: error
+          retention-days: 14
+
+
+  quant-android-lock-persist:
+    name: Quant Android Dependency Lock Persistence
+    needs: quant-android-build
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feat/quant-phase1-engineering-foundations' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout current Phase 1 branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Download dependency metadata produced by the verified Android build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: Quant-Android-Dependency-Locks
+          path: generated-android-locks
+      - name: Validate dependency lock and checksum metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          lock = Path("generated-android-locks/app/gradle.lockfile")
+          metadata = Path("generated-android-locks/gradle/verification-metadata.xml")
+          assert lock.is_file() and lock.stat().st_size > 0, "Android lockfile missing"
+          assert metadata.is_file() and metadata.stat().st_size > 0, "Verification metadata missing"
+          namespace = {"g": "https://schema.gradle.org/dependency-verification"}
+          root = ET.parse(metadata).getroot()
+          configuration = root.find("g:configuration", namespace)
+          assert configuration is not None
+          assert configuration.findtext("g:verify-metadata", namespaces=namespace) == "true"
+          components = root.findall(".//g:component", namespace)
+          artifacts = root.findall(".//g:artifact", namespace)
+          module_metadata = [item for item in artifacts if item.attrib.get("name", "").endswith(".module")]
+          missing_checksums = [
+              item.attrib.get("name", "?") for item in artifacts
+              if not item.findall("g:sha256", namespace)
+          ]
+          assert components and artifacts, "Dependency verification metadata is empty"
+          assert module_metadata, "Gradle module metadata has no pinned checksum entries"
+          assert not missing_checksums, f"Artifacts missing SHA-256: {missing_checksums[:10]}"
+          entries = [
+              line.strip() for line in lock.read_text(encoding="utf-8").splitlines()
+              if line.strip() and not line.startswith("#") and not line.startswith("empty=")
+          ]
+          assert entries, "Gradle dependency lockfile has no resolved modules"
+          assert not any("SNAPSHOT" in line.upper() for line in entries)
+          print(
+              f"Verified {len(entries)} locked modules, {len(components)} components, "
+              f"{len(artifacts)} artifact checksums and {len(module_metadata)} module metadata checksums."
+          )
+          PY
+          python android/scripts/verify_kotlin_daemon_alignment.py --metadata generated-android-locks/gradle/verification-metadata.xml
+      - name: Persist first lock snapshot or reject unreviewed drift
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android/app android/gradle
+          if [[ -f android/gradle/ALLOW_DEPENDENCY_METADATA_REFRESH ]]; then
+            echo "Applying the explicitly approved one-time dependency metadata refresh."
+            cp generated-android-locks/app/gradle.lockfile android/app/gradle.lockfile
+            cp generated-android-locks/gradle/verification-metadata.xml android/gradle/verification-metadata.xml
+            rm android/gradle/ALLOW_DEPENDENCY_METADATA_REFRESH
+          else
+            if [[ -s android/app/gradle.lockfile ]]; then
+              cmp -s android/app/gradle.lockfile generated-android-locks/app/gradle.lockfile || {
+                echo "::error::Generated Android dependency lock differs from the committed lockfile. Review and approve a one-time refresh."
+                exit 1
+              }
+            else
+              cp generated-android-locks/app/gradle.lockfile android/app/gradle.lockfile
+            fi
+            if [[ -s android/gradle/verification-metadata.xml ]]; then
+              cmp -s android/gradle/verification-metadata.xml generated-android-locks/gradle/verification-metadata.xml || {
+                echo "::error::Generated verification metadata differs from the committed metadata. Review and approve a one-time refresh."
+                exit 1
+              }
+            else
+              cp generated-android-locks/gradle/verification-metadata.xml android/gradle/verification-metadata.xml
+            fi
+          fi
+          git add -A android/app/gradle.lockfile android/gradle/verification-metadata.xml android/gradle/ALLOW_DEPENDENCY_METADATA_REFRESH
+          if git diff --cached --quiet; then
+            echo "Committed Android dependency integrity metadata matches the verified build artifact."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "[skip ci] build(android): persist dependency lock and verification metadata"
+            git push origin "HEAD:$GITHUB_REF_NAME"
+          fi
+
+  quant-phase1-acceptance:
+    name: Quant Phase 1 Required Acceptance Gate
+    if: always()
+    needs:
+      - quant-backend-static
+      - quant-backend-postgres-integration
+      - quant-backend-container
+      - quant-secret-scan
+      - quant-security-architecture
+      - quant-android-build
+      - quant-android-instrumentation
+      - quant-android-lock-persist
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every Phase 1 gate to pass
+        env:
+          BACKEND_STATIC: ${{ needs.quant-backend-static.result }}
+          POSTGRES: ${{ needs.quant-backend-postgres-integration.result }}
+          CONTAINER: ${{ needs.quant-backend-container.result }}
+          SECRET_SCAN: ${{ needs.quant-secret-scan.result }}
+          SECURITY_ARCHITECTURE: ${{ needs.quant-security-architecture.result }}
+          ANDROID_BUILD: ${{ needs.quant-android-build.result }}
+          ANDROID_EMULATOR: ${{ needs.quant-android-instrumentation.result }}
+          LOCK_PERSIST: ${{ needs.quant-android-lock-persist.result }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_FULL: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          for result in "$BACKEND_STATIC" "$POSTGRES" "$CONTAINER" "$SECRET_SCAN" "$SECURITY_ARCHITECTURE" "$ANDROID_BUILD" "$ANDROID_EMULATOR"; do
+            test "$result" = "success" || {
+              echo "Phase 1 acceptance blocked by a non-success required job: $result"
+              exit 1
+            }
+          done
+          if [[ "$EVENT_NAME" == "push" && "$REF_FULL" == "refs/heads/feat/quant-phase1-engineering-foundations" ]]; then
+            test "$LOCK_PERSIST" = "success" || {
+              echo "Phase 1 acceptance requires persisted Android dependency locks on the implementation branch."
+              exit 1
+            }
+          else
+            [[ "$LOCK_PERSIST" == "success" || "$LOCK_PERSIST" == "skipped" ]] || {
+              echo "Unexpected Android lock persistence result: $LOCK_PERSIST"
+              exit 1
+            }
+          fi
+          echo "All mandatory Quant Phase 1 CI gates passed."
+
+  quant-production-db-migration:
+    name: Quant Production PostgreSQL Migration
+    needs: quant-phase1-acceptance
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.quant-phase1-acceptance.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      QUANT_ENV: production
+      QUANT_TOKEN_MIGRATION_DATABASE_URL: ${{ secrets.QUANT_TOKEN_MIGRATION_DATABASE_URL }}
+    steps:
+      - name: Require direct production migration URL
+        shell: bash
+        run: |
+          if [[ -z "${QUANT_TOKEN_MIGRATION_DATABASE_URL}" ]]; then
+            echo "::error::Set QUANT_TOKEN_MIGRATION_DATABASE_URL in GitHub Actions secrets before deploying a new database schema."
+            exit 1
+          fi
+      - name: Checkout Quant source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.lock
+      - name: Install pinned uv and verify the backend lock
+        working-directory: backend
+        run: |
+          python -m pip install --disable-pip-version-check "uv==0.12.9"
+          uv pip install --system --no-deps packaging==26.3
+          python scripts/verify_dependency_lock.py
+      - name: Install exact locked backend dependencies
+        working-directory: backend
+        run: |
+          uv pip install --system --no-deps -r requirements.lock
+          uv pip install --system --no-deps -e .
+      - name: Apply production Alembic migrations
+        working-directory: backend
+        run: |
+          alembic -c alembic.ini upgrade head
+          alembic -c alembic.ini current --verbose
+
+  quant-regression:
+    name: Quant Optional Unit & Backend Tests
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_regression == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - name: Checkout Quant source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Install pinned uv resolver
+        run: python -m pip install "uv==0.12.9"
+      - name: Install pinned dependency-lock verifier
+        working-directory: backend
+        run: uv pip install --system --no-deps packaging==26.3
+      - name: Verify exact backend dependency lock
+        working-directory: backend
+        run: python scripts/verify_dependency_lock.py
+      - name: Install locked backend and test dependencies
+        working-directory: backend
+        run: |
+          uv pip install --system --no-deps -r requirements.lock
+          uv pip install --system --no-deps -e .
+      - name: Backend tests
+        working-directory: backend
+        run: pytest -q -m "not integration"
+      - name: Set up JDK 17
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Gradle 8.14.8
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          gradle-version: "8.14.8"
+      - name: Android unit tests (no emulator)
+        run: gradle -p android :app:testDebugUnitTest --no-daemon --stacktrace
+
+
+  quant-nse-mcp-live-smoke:
+    name: Quant Official NSE MCP Live Connectivity
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_nse_live_smoke == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout Quant source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.11"
+      - name: Install pinned uv resolver
+        run: python -m pip install "uv==0.12.9"
+      - name: Install pinned dependency-lock verifier
+        working-directory: backend
+        run: uv pip install --system --no-deps packaging==26.3
+      - name: Verify exact backend dependency lock
+        working-directory: backend
+        run: python scripts/verify_dependency_lock.py
+      - name: Install locked backend
+        working-directory: backend
+        run: |
+          uv pip install --system --no-deps -r requirements.lock
+          uv pip install --system --no-deps -e .
+      - name: Verify official NSE MCP initialization and tool discovery
+        working-directory: backend
+        run: python scripts/nse_mcp_live_smoke.py

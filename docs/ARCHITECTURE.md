@@ -1,20 +1,177 @@
-# Architecture
+# RovexQuant architecture and ownership
 
-Independent signals/research/paper-trading app. No order placement.
+## Product boundary
 
-## Modes
-- Local zero-budget: Android client, local FastAPI, SQLite and permitted historical/public datasets.
-- Hosted later: authenticated API, persistent worker and PostgreSQL. Free tiers are not assumed always-on.
-- Broker-connected later: optional Zerodha Kite Connect and DhanHQ market-data adapters, implemented only after current official API, entitlement, rate-limit and data-use terms are verified.
+RovexQuant is an Android-first Indian-market quantitative research workspace backed by a FastAPI modular monolith. It is research-only: no broker order placement, automated execution or autonomous risk changes.
 
-## Modules
-`market_data`, `instruments`, `indicators`, `strategies`, `risk`, `signals`, `backtesting`, `ai`, `api`. Each owns one domain responsibility. Strategy logic depends on internal contracts, never broker SDK types.
+The initial deployment is a private, single-owner pilot. Multi-user tenancy, always-on streaming and commercial redistribution are separate capabilities requiring explicit security, hosting and data-rights work.
 
-## Data safety
-Persist provider, exchange timestamp, receive timestamp, completeness and quality. Stale, incomplete, gap-detected, disconnected or adjustment-pending data suppresses signals. Never label delayed data live.
+## Current implementation map
 
-## Bias controls
-Point-in-time fundamentals and classifications; delisted securities retained; corporate actions adjusted; no future data; realistic spread, slippage, fees, taxes, partial fills, liquidity and circuits.
+| Domain / responsibility | Current authoritative owner | Current state / boundary |
+|---|---|---|
+| Android application composition and navigation | `ui/RovexQuantApp.kt`, `ui/QuantTerminal.kt` | Compose shell owns navigation and renders state; no network orchestration |
+| Android workspace state/lifecycle | `feature/workspace/QuantWorkspaceViewModel.kt` | Owns session restoration, login state, index discovery and stream lifecycle with cancellation and serialized sign-out |
+| Android repository contract/implementation | `data/repository/QuantDataRepository.kt`, `QuantRepository.kt`, `MarketStream.kt` | Feature UI depends on a repository port; implementation coordinates local and remote sources |
+| Android HTTP transport | `data/remote/QuantApi.kt` | Typed REST/session/NSE calls; called only by repository implementation |
+| Android WebSocket transport | `data/remote/MarketStreamController.kt` | Owns socket, reconnect and stop semantics behind the stream port |
+| Android session persistence | `data/local/QuantSessionStore.kt` | Encrypted session token storage using Android Keystore; accessed through repository |
+| Android typed data contracts | `data/model/QuantModels.kt`, `AiModels.kt`, `IntelligenceModels.kt` | Session, instrument, MCP, market-tick, AI and source-linked intelligence contracts |
+| Backend HTTP composition and route registration | `api/main.py`, `api/routers/`, `api/research_data.py`, `research/router.py` | `main.py` is a composition root; feature routes are split by auth, market, integrations, health, AI and strategies; EOD/NSE research routes remain separate |
+| App-session authentication | `auth.py` | Short-lived HMAC-signed app session; single configured owner, not a multi-tenant identity system |
+| Provider-neutral quote selection | `market_data/service.py` | Explicit provider order and transient-error failover; semantic capability/entitlement compatibility remains to be implemented |
+| Upstox and Dhan REST adapters | `market_data/providers.py` | Snapshot quote adapters; real credentialed connectivity is not proven by unit tests |
+| Instrument master | `market_data/instruments.py` | Upstox NSE index instrument resolution; Android must fail closed when official mapping is unavailable |
+| Upstox streaming | `market_data/streaming.py` | Backend bridge and Protobuf decoder exist; protocol/device live verification is outstanding |
+| TejHQ EOD | `market_data/tejhq.py`, `market_data/tejhq_service.py`, `api/research_data.py` | Adapter owns HTTP/provider protocol; service owns use-case calls; API router owns authenticated transport contract; not an intraday/live feed |
+| NSE MCP | `market_data/nse_mcp.py`, `market_data/nse_mcp_service.py`, `api/research_data.py` | Adapter owns MCP protocol/schema safety; service owns discovery/invocation; API router owns auth/rate limit and response mapping |
+| Provider credential vault | `market_data/upstox_credentials.py` | Fernet-encrypted Upstox token; PostgreSQL hosted mode, explicit SQLite local/test mode |
+| Canonical market-bar domain | `domain/market.py` | Decimal/UUID bar contract exists; quote path is not yet fully normalized to this contract |
+| Indicators and research use cases | `indicators/`, `research/contracts.py`, `research/service.py`, `research/router.py` | Deterministic engines remain domain owners; service orchestrates them; route owns HTTP validation, auth and safe response mapping |
+| Strategies | `strategies/` | Versioned registry and strategy implementations; no complete multi-stock scanner workflow yet |
+| Backtesting | `backtesting/engine.py` | Long-only prototype; not a scientifically complete execution simulator |
+| Android intelligence feature | `feature/intelligence/IntelligenceCentreViewModel.kt`, `ui/IntelligenceCentreScreen.kt` | Dedicated authenticated event-to-sector analytical workspace; chat remains optional |
+| AI gateway | `ai/gateway.py` | Server-side chat adapter; no Android integration, per-user BYOK, research workflow or independent verifier yet |
+| Database schema/migrations | `db/schema.py`, `migrations/`, `alembic.ini` | Alembic owns PostgreSQL schema evolution; startup checks the expected revision; PostgreSQL integration verifies legacy adoption, rollback, rotation and isolated backup/restore |
+| Jobs/observability | `security/request_context.py`, `security/errors.py`, health routes, `docs/OBSERVABILITY.md`, `docs/JOBS_AND_HOSTING.md` | Server-generated request IDs, redacted JSON request logs, safe error envelopes, process-local HTTP metrics and explicit durable-job exclusion/contract |
+
+## Dependency direction
+
+Target direction:
+
+```text
+Android UI
+  -> feature state holders / ViewModels
+  -> repositories
+  -> typed API clients
+  -> versioned FastAPI contracts
+  -> application use cases
+  -> domain services and deterministic engines
+  -> provider/storage ports
+  -> external adapters / PostgreSQL
+```
+
+Backend rules:
+- Route handlers validate transport input, authorize, call an application service or provider port, and map the result to a response. Indicator/backtest formulas live behind `research/service.py`; routes do not implement formulas, strategy rules, provider protocol logic or portfolio accounting.
+- Architecture tests reject imports from HTTP/API layers into deterministic domain packages, reject direct engine imports from API composition/research transport, and enforce feature-router/service ownership for EOD and NSE MCP endpoints.
+- Domain engines do not import FastAPI, Android, provider SDKs or database drivers.
+- Provider adapters normalize provider responses and report capabilities/provenance; they do not select strategies or make risk decisions.
+- Application services orchestrate domain services and ports. Each domain has one authoritative owner.
+- AI is downstream of data-use policy and deterministic calculations. It may explain evidence but cannot authoritatively calculate, change risk controls or place orders.
+- Event intelligence preserves original source URLs and seen timestamps. Rule-based event classification and sector-impact hypotheses must expose their method and uncertainty; no stock mapping is allowed without canonical company/instrument identity and verified exposure evidence.
+- Shared infrastructure (auth, logging, persistence, policy) must not absorb domain-specific business logic.
+
+Android rules:
+- Composables render state and emit user intent; they do not call `QuantApi`, own WebSocket clients or perform long-running network orchestration.
+- `QuantDataRepository` is the feature-facing port; `QuantRepository` owns IO dispatch and coordination of local session storage, REST and stream adapters.
+- `QuantWorkspaceViewModel` owns session state, authentication transitions, stream startup/stop and cancellation. Sign-out cancels login/stream work and serializes credential clearing.
+- `QuantApi` and `MarketStreamController` remain transport-only adapters; neither owns UI state.
+- The workspace factory seam permits deterministic fake-repository instrumentation tests without real credentials or provider calls.
+- ViewModels/state holders own screen state and cancellation where screen complexity warrants them.
+- Collect flows with lifecycle-aware APIs. Cancel stream/network work when the owning session or lifecycle ends.
+- Keep one Gradle app module until measured build, test or ownership benefits justify extraction. Do not create a module per screen.
+
+## Market-data contract
+
+The target shared platform supports distinct source modes:
+- REST snapshots and historical queries;
+- WebSocket streaming;
+- batch/file imports and scheduled EOD updates;
+- on-demand MCP/tool queries.
+
+These are not forced through one transport pipeline. They converge on canonical instrument identity, typed observation contracts, provenance, quality/freshness and data-use policy.
+
+Every observation should carry instrument identity/mapping, venue/segment, currency/unit, value precision, adjustment basis, event/source/retrieval timestamps, provider, data mode, market session, freshness threshold, quality flags and retention/use policy. Distinguish LIVE, DELAYED, EOD, HISTORICAL, STALE, UNKNOWN and UNAVAILABLE. Missing, zero, null and stale are not interchangeable.
+
+Provider fallback is permitted only when an alternate is explicitly selected and its instrument, venue/segment, data type, adjustment basis, currency, market phase, freshness and entitlement semantics are compatible. Otherwise report a provider mismatch or unavailable state.
+
+Money and ledger values use Decimal/fixed-point semantics. Statistical arrays may use float64 with explicit conversion and precision tests. Adjusted and unadjusted series must never be mixed silently.
+
+## Data rights and retention
+
+Data rights are part of the provider contract, not an afterthought. Each provider/data product must explicitly define display, transient analysis, cache, persistence, derivation, AI context, training, export, sharing/redistribution, commercial use and retention.
+
+NSE MCP is an on-demand informational source. Do not treat it as a licensed commercial feed or unrestricted AI-training corpus. Default-deny uncertain use, do not persist raw responses, and do not send restricted source data to external models without permission. TejHQ's published terms restrict free data to personal research and prohibit raw redistribution; a paid TejHQ plan does not grant exchange rights.
+
+## Persistence and operations
+
+- PostgreSQL/Neon is the durable transactional store for user/configuration/credential metadata and future research records.
+- Alembic is the single versioned migration owner. Application startup verifies the expected schema revision; ordinary PostgreSQL requests do not execute DDL.
+- Use Neon's pooled transaction endpoint for ordinary short-lived application requests; use a direct endpoint for schema migrations and operations needing session-level state.
+- SQLite is local/test-only and must be selected explicitly. Hosted Docker defaults to PostgreSQL and fails closed if its URL or encryption configuration is absent.
+- Migrations have one owner and run as an explicit deployment operation, not during ordinary request handling.
+- No durable job queue or worker is currently implemented. FastAPI in-process tasks are not durable background jobs. A recoverable job must have persistent state, idempotency and restart semantics before it is exposed as reliable; see `docs/JOBS_AND_HOSTING.md`.
+- Render Free is a development/personal pilot tier: no durable filesystem and no dependable always-on WebSocket/worker guarantees.
+- API requests receive a server-generated `X-Request-ID`; request logs contain only method, route template, status, duration and exception class. Validation and unhandled errors use bounded structured envelopes without echoing request values or exception text.
+- Admin-protected HTTP count/latency metrics are real but process-local; they reset on restart and are not distributed telemetry. Rate limiting is also process-local for the single-instance pilot and must be replaced with an atomic shared store before horizontal scaling.
+- The backend Python runtime/development dependency set is pinned in `backend/requirements.lock`; CI verifies declared dependency coverage and audits the lock for known vulnerabilities. Android dependency locking and license reporting are generated by CI and retained as artifacts; commit/persistence of the generated Gradle lock and verification metadata remains a close-out item.
+
+## API and schema compatibility
+
+- Existing public routes remain under `/api/v1`.
+- Additive, backward-compatible response fields and optional request fields may be added within v1.
+- Removing/renaming fields, changing units/timestamp semantics, or changing required request behaviour is breaking and requires a new API version or an explicit deprecation/migration window.
+- Persisted database changes are versioned migrations with an upgrade path and rollback/backup plan.
+- Each API contract change requires request/response fixtures and compatibility tests. OpenAPI is generated from the same route/request definitions used by runtime code.
+
+## Research and backtest limitations
+
+The current backtest is a long-only prototype. Do not describe its output as execution-realistic. A credible engine requires point-in-time universes and fundamentals, delisted instruments, corporate actions, event-time fills, realistic liquidity/partial-fill/slippage/market-impact assumptions, Indian date-effective cost schedules, chronological validation, trial-count disclosure and selection-bias controls.
 
 ## AI boundary
-AI receives computed evidence and may explain it. It cannot create prices, override risk gates, set quantity or place orders. Secrets never enter source control.
+
+The current AI gateway is backend-only and uses server-configured credentials. Before Android integration, add per-user authorization, encrypted user credential ownership, quotas/budgets, an allow-listed schema-validated tool registry, data-rights checks, bounded workflows, deterministic quant tools, independent verification and provenance. Never ship a global/admin token in the APK.
+
+## Diagnostics and operational boundaries
+
+- HTTP requests receive a server-owned correlation ID, safe structured error envelope and payload-free structured log.
+- Current HTTP count/latency metrics are process-local, admin-protected and reset on restart. Provider/AI/job metrics are not claimed until their authoritative event sources exist.
+- See `docs/OBSERVABILITY.md` for log fields, metric ownership, redaction and OpenTelemetry span boundaries.
+
+## Phase governance
+
+Implementation is governed by `docs/PHASE1_ACCEPTANCE.md`. A phase closes only when each agreed requirement has an owner, test and exact evidence. Unverified external connectivity and skipped device tests remain unverified, not passed.
+
+
+## API composition and feature ownership
+
+The FastAPI application entry point is a composition root only. It configures
+middleware, exception handlers, startup validation and OpenAPI metadata, then
+includes feature routers from the API package. HTTP contracts and response
+mapping live in the feature router that owns the endpoint family:
+
+- auth and app-session routes: api/routers/auth.py
+- market quotes, index-instrument lookup and WebSocket transport: api/routers/market.py
+- provider credential administration: api/routers/integrations.py
+- liveness, readiness and protected process metrics: api/routers/health.py
+- AI gateway transport: api/routers/ai.py
+- strategy catalogue transport: api/routers/strategies.py
+- existing research and NSE/TejHQ research routes remain in their existing
+  research/API router modules.
+
+Routers may validate transport schemas and map application-service errors to
+HTTP/WebSocket responses. They must not implement indicator, strategy, risk or
+backtest calculations, open network clients, or access database drivers
+directly. Provider protocols remain in market-data adapters; application
+services own provider selection and data-quality policy. Domain engines remain
+independent of FastAPI, network transports and persistence drivers. The
+architecture regression tests enforce these import and ownership boundaries,
+and the route-table test rejects duplicate HTTP-method/path owners.
+
+
+## Android toolchain and dependency integrity
+
+The Android build uses JDK 17, Android Gradle Plugin 8.11.1, Kotlin Gradle Plugin 2.2.21
+and Gradle 8.14.8. These versions are selected from the official Kotlin/AGP/Gradle
+compatibility matrices; AGP 8.11.1 requires Gradle 8.13 or newer, and KGP 2.2.21
+is fully supported with AGP 8.11.1 and Gradle 8.14. The Gradle 8.14.8 patch line
+also includes security fixes published on 19 November 2026.
+
+Project dependency configurations use strict Gradle dependency locking. The
+source-controlled app lockfile pins resolved module versions, while
+verification-metadata.xml pins SHA-256 checksums for downloaded artifacts and
+Gradle module metadata. CI runs strict dependency verification for build and
+emulator tests. The first verified build persists the generated lock state;
+later runs reject unreviewed lock or checksum drift instead of silently
+regenerating a new baseline. See docs/ANDROID_BUILD_TOOLCHAIN.md and
+docs/DATABASE_OPERATIONS.md for the related operational procedures.

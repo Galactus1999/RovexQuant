@@ -1,0 +1,1 @@
+One-time approved refresh: regenerate Android lock and verification metadata after isolating the license-report plugin's Kotlin daemon dependency. CI must verify the Kotlin daemon client matches the app KGP and remove this marker when persisting the refreshed baseline.
