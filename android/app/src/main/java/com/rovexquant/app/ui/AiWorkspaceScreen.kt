@@ -301,7 +301,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                 }
                 if (briefError != null) Text(briefError!!, color = Coral, fontSize = 11.sp, lineHeight = 16.sp)
                 Text(
-                    "Fallback is EOD only, not intraday/live. If the source or AI provider is unavailable, Quant reports failure; it never fabricates candles. Private personal research only.",
+                    "Fallback is adjusted EOD only, not intraday/live. If the source fails, recovery stops. If AI fails, the recovered bars and deterministic metrics are still returned with a warning. Quant never fabricates candles. Private personal research only.",
                     color = Muted, fontSize = 10.sp, lineHeight = 16.sp
                 )
             }
@@ -311,7 +311,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
             item {
                 TerminalCard {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Eyebrow("Verified source · ${report.dataMode}")
+                        Eyebrow("Structurally validated source · ${report.dataMode}")
                         StatusPill("EOD", Gold)
                     }
                     Spacer(Modifier.height(7.dp))
