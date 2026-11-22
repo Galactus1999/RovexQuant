@@ -313,3 +313,85 @@ def test_safe_catalog_marks_missing_read_only_hint_as_not_read_only():
         {"name": "unknown_tool", "inputSchema": {"type": "object"}},
     ])
     assert catalog[0]["read_only"] is False
+
+
+def test_streamed_mcp_response_limit_is_enforced_before_json_decode():
+    def handler(request):
+        body = json.loads(request.content)
+        if body["method"] == "initialize":
+            return _response(request, {
+                "jsonrpc": "2.0", "id": body["id"],
+                "result": {"protocolVersion": "2025-03-26", "capabilities": {}, "serverInfo": {}},
+            })
+        if body["method"] == "notifications/initialized":
+            return httpx.Response(202)
+        if body["method"] == "tools/list":
+            return httpx.Response(
+                200,
+                headers={"content-type": "application/json"},
+                content=b" " * (10_000_001),
+            )
+        raise AssertionError(body["method"])
+
+    async def run():
+        async with NseMcpClient("bhavcopy", transport=httpx.MockTransport(handler)) as client:
+            await client.list_tools()
+
+    with pytest.raises(NseMcpError, match="10 MB safety limit"):
+        asyncio.run(run())
+
+
+def test_oversized_remote_tool_schema_is_rejected_before_invocation():
+    seen = []
+    transport = httpx.MockTransport(_handler_for({
+        "tools": [{
+            "name": "get_history",
+            "inputSchema": {"type": "object", "description": "x" * (128 * 1024 + 1)},
+            "annotations": {"readOnlyHint": True},
+        }],
+    }, seen))
+
+    async def run():
+        async with NseMcpClient("bhavcopy", transport=transport) as client:
+            await client.call_tool("get_history", {})
+
+    with pytest.raises(NseMcpError, match="128 KB safety limit"):
+        asyncio.run(run())
+    assert not any(body["method"] == "tools/call" for body, _ in seen)
+
+
+def test_remote_json_rpc_error_text_is_not_reflected():
+    remote_secret = "REMOTE_ERROR_SECRET_SHOULD_NOT_ESCAPE"
+
+    def handler(request):
+        body = json.loads(request.content)
+        if body["method"] == "initialize":
+            return _response(request, {
+                "jsonrpc": "2.0", "id": body["id"],
+                "result": {"protocolVersion": "2025-03-26", "capabilities": {}, "serverInfo": {}},
+            })
+        if body["method"] == "notifications/initialized":
+            return httpx.Response(202)
+        if body["method"] == "tools/list":
+            return _response(request, {
+                "jsonrpc": "2.0", "id": body["id"],
+                "result": {"tools": [{
+                    "name": "get_history",
+                    "inputSchema": {"type": "object"},
+                    "annotations": {"readOnlyHint": True},
+                }]},
+            })
+        if body["method"] == "tools/call":
+            return _response(request, {
+                "jsonrpc": "2.0", "id": body["id"],
+                "error": {"code": -32000, "message": remote_secret},
+            })
+        raise AssertionError(body["method"])
+
+    async def run():
+        async with NseMcpClient("bhavcopy", transport=httpx.MockTransport(handler)) as client:
+            await client.call_tool("get_history", {})
+
+    with pytest.raises(NseMcpError) as error:
+        asyncio.run(run())
+    assert remote_secret not in str(error.value)
