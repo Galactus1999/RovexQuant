@@ -66,7 +66,9 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
             providers = repository.fetchAiProviders(session)
             val configured = providers.filter { it.configured }
             if (selectedProvider.isBlank() && configured.isNotEmpty()) {
-                selectedProvider = configured.first().providerId
+                val firstProvider = configured.first()
+                selectedProvider = firstProvider.providerId
+                model = firstProvider.defaultModel.orEmpty()
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -167,7 +169,10 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                             configuredProviders.forEach { provider ->
                                 FilterChip(
                                     selected = selectedProvider == provider.providerId,
-                                    onClick = { selectedProvider = provider.providerId },
+                                    onClick = {
+                                        selectedProvider = provider.providerId
+                                        model = provider.defaultModel.orEmpty()
+                                    },
                                     label = { Text(provider.providerId.replaceFirstChar { it.uppercase() }) }
                                 )
                             }
