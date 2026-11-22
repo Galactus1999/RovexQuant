@@ -1,1 +1,1 @@
-"""Evidence-first market intelligence domain contracts and services."""
+"""Deterministic market-intelligence primitives and evidence-first domain contracts."""
