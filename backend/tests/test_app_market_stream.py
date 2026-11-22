@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from rovexquant.auth import AppAuthError, issue_app_session, verify_app_session
-from rovexquant.api import main as api_main
+from rovexquant.api.routers import market as market_routes
 from rovexquant.api.main import app
 from rovexquant.market_data import upstox_market_data_pb2
 from rovexquant.market_data.streaming import decode_feed_message
@@ -80,7 +80,7 @@ def test_app_index_master_requires_session_and_returns_verified_keys(monkeypatch
             "trading_symbol": "Nifty 50",
         }]
 
-    monkeypatch.setattr(api_main, "get_nse_index_instruments", fake_master)
+    monkeypatch.setattr(market_routes, "get_nse_index_instruments", fake_master)
     client = TestClient(app)
     assert client.get("/api/v1/app/market/index-instruments").status_code == 401
     token, _ = issue_app_session("quant-user", "long-test-password")
@@ -103,7 +103,7 @@ def test_websocket_route_authenticates_and_forwards_market_ticks(monkeypatch):
         }]})
         await websocket.close(code=1000)
 
-    monkeypatch.setattr(api_main, "stream_upstox_market_data", fake_stream)
+    monkeypatch.setattr(market_routes, "stream_upstox_market_data", fake_stream)
     client = TestClient(app)
     with client.websocket_connect(
         "/api/v1/app/market/stream",
