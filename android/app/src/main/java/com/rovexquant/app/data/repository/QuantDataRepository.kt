@@ -53,6 +53,6 @@ interface QuantDataRepository {
     fun createMarketStream(
         session: QuantSession,
         onStatus: (String) -> Unit,
-        onTick: (MarketTick) -> Unit
+        onTicks: (List<MarketTick>) -> Unit
     ): MarketStream
 }
