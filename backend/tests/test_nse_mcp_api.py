@@ -63,7 +63,7 @@ def test_nse_mcp_call_labels_delayed_mode_and_does_not_claim_source_timestamp(mo
             return {"tool": name, "content": [{"type": "text", "text": "quote"}],
                     "structured_content": {"price": 100, "source_timestamp": "2026-11-22T10:15:00+05:30"}}
 
-    monkeypatch.setattr(api, "NseMcpClient", FakeClient)
+    monkeypatch.setattr(nse_mcp_service, "NseMcpClient", FakeClient)
     response = TestClient(api.app).post(
         "/api/v1/app/research/nse-mcp/call",
         json={"server": "cmmkt", "tool": "get_quote", "arguments": {"symbol": "RELIANCE"}},
@@ -99,7 +99,7 @@ def test_nse_mcp_remote_schema_failure_uses_safe_structured_error(monkeypatch):
         async def call_tool(self, _name, _arguments):
             raise NseMcpError("NSE MCP tool schema references are not supported", 502)
 
-    monkeypatch.setattr(api, "NseMcpClient", FakeClient)
+    monkeypatch.setattr(nse_mcp_service, "NseMcpClient", FakeClient)
     response = TestClient(api.app).post(
         "/api/v1/app/research/nse-mcp/call",
         json={"server": "bhavcopy", "tool": "get_history", "arguments": {}},
