@@ -1,6 +1,8 @@
 package com.rovexquant.app.ui
 
 import com.rovexquant.app.data.model.MarketTick
+import com.rovexquant.app.data.model.EodMarketSnapshot
+import com.rovexquant.app.data.model.EodStockMove
 import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.data.repository.QuantDataRepository
@@ -63,7 +65,10 @@ fun MarketPulseScreen(
     streamStatus: String = "Not connected",
     session: QuantSession? = null,
     repository: QuantDataRepository? = null,
-    onReconnect: () -> Unit = {}
+    onReconnect: () -> Unit = {},
+    eodSnapshot: EodMarketSnapshot? = null,
+    eodSnapshotStatus: String = "EOD snapshot not loaded",
+    onRefreshEodSnapshot: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     val activeSession = session
@@ -97,6 +102,71 @@ fun MarketPulseScreen(
 
     LazyColumn(modifier = Modifier.fillMaxSize().testTag("market.pulse.list"), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item { SectionHeading("The market, without the noise", "Market pulse.", "A clean overview of indices, breadth, sectors and your tracked universe.") }
+        item {
+            TerminalCard(Modifier.testTag("market.eod.snapshot")) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    Eyebrow("Latest NSE market data")
+                    StatusPill("END OF DAY", Gold)
+                }
+                Text(
+                    "NSE equity snapshot",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    eodSnapshot?.let {
+                        "TejHQ · ${it.tradingDate} · ${it.pricedSymbols} priced EQ symbols"
+                    } ?: eodSnapshotStatus,
+                    color = Muted, fontSize = 10.sp, lineHeight = 15.sp
+                )
+                if (eodSnapshot == null) {
+                    Text(
+                        "The app retrieves the latest available trading session after login. This is EOD data, not a live quote feed.",
+                        color = Muted, fontSize = 10.sp, lineHeight = 15.sp
+                    )
+                } else {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        EodBreadthStat("Advances", eodSnapshot.advances, Mint, Modifier.weight(1f))
+                        EodBreadthStat("Declines", eodSnapshot.declines, Coral, Modifier.weight(1f))
+                        EodBreadthStat("Unchanged", eodSnapshot.unchanged, Muted, Modifier.weight(1f))
+                    }
+                    Spacer(Modifier.height(5.dp))
+                    Text(
+                        "${eodSnapshot.totalRows} source rows · ${eodSnapshot.equitySeriesRows} EQ-series breadth rows · EOD only",
+                        color = Muted, fontSize = 9.sp
+                    )
+                    if (eodSnapshot.topGainers.isNotEmpty()) {
+                        Text("TOP GAINERS", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        eodSnapshot.topGainers.take(5).forEach { EodStockMoveRow(it, positive = true) }
+                    }
+                    if (eodSnapshot.topLosers.isNotEmpty()) {
+                        Text("TOP LOSERS", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        eodSnapshot.topLosers.take(5).forEach { EodStockMoveRow(it, positive = false) }
+                    }
+                    if (eodSnapshot.mostActiveByVolume.isNotEmpty()) {
+                        Text("MOST ACTIVE BY VOLUME", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        eodSnapshot.mostActiveByVolume.take(5).forEach { EodStockMoveRow(it, positive = null) }
+                    }
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Text(
+                        eodSnapshotStatus,
+                        color = if (eodSnapshot == null) Gold else Muted,
+                        fontSize = 9.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    androidx.compose.material3.TextButton(
+                        onClick = onRefreshEodSnapshot,
+                        modifier = Modifier.testTag("market.eod.refresh")
+                    ) { Text("Refresh") }
+                }
+            }
+        }
         if (activeSession != null && activeRepository != null) {
             item {
                 TerminalCard {
@@ -314,5 +384,52 @@ private fun SectorMetric(label: String, value: String) {
         Text(label, color = Muted, fontSize = 8.sp, letterSpacing = .7.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(3.dp))
         Text(value, color = MaterialTheme.colorScheme.onBackground, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+
+@Composable
+private fun EodBreadthStat(label: String, value: Int, color: Color, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .background(Panel, RoundedCornerShape(12.dp))
+            .padding(horizontal = 10.dp, vertical = 8.dp)
+    ) {
+        Text(value.toString(), color = color, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = Muted, fontSize = 9.sp)
+    }
+}
+
+@Composable
+private fun EodStockMoveRow(item: EodStockMove, positive: Boolean?) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 3.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(item.symbol, color = MaterialTheme.colorScheme.onBackground, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            Text(item.name, color = Muted, fontSize = 9.sp, maxLines = 1)
+        }
+        Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
+            Text(
+                item.close?.let { "₹" + String.format(Locale.US, "%.2f", it) } ?: "—",
+                color = MaterialTheme.colorScheme.onBackground,
+                fontSize = 10.sp
+            )
+            val changeText = item.changePercent?.let {
+                (if (it > 0) "+" else "") + String.format(Locale.US, "%.2f%%", it)
+            } ?: "Vol. ${item.volume}"
+            Text(
+                changeText,
+                color = when (positive) {
+                    true -> Mint
+                    false -> Coral
+                    null -> Muted
+                },
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
     }
 }
