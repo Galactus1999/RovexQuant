@@ -133,6 +133,12 @@ def test_extract_source_timestamp_only_uses_explicit_source_fields():
     }) == "2026-11-22T10:15:00+05:30"
     assert extract_source_timestamp({"structured_content": {"retrieved_at": "now"}}) is None
     assert extract_source_timestamp({"structured_content": {"rows": [{"timestamp": "2026-11-22", "source_timestamp": "row-time"}]}}) is None
+    assert extract_source_timestamp({
+        "content": [{"type": "text", "text": json.dumps({"nseTimestamp": "2026-11-22T15:30:00+05:30"})}]
+    }) == "2026-11-22T15:30:00+05:30"
+    assert extract_source_timestamp({
+        "structured_content": {"metadata": {"updatedAt": "2026-11-22T15:31:00+05:30"}}
+    }) == "2026-11-22T15:31:00+05:30"
 
 
 
