@@ -199,7 +199,7 @@ def test_adjusted_eod_data_survives_ai_provider_failure(monkeypatch):
     async def fake_fetch(*args, **kwargs):
         return "tejhq_eod", bars
     async def failed_ai(**kwargs):
-        raise ai_router.GatewayError(503, "Provider unavailable")
+        raise ai_router.GatewayError("Provider unavailable", 503)
     monkeypatch.setattr(ai_router.tejhq_service, "fetch_ohlcv", fake_fetch)
     monkeypatch.setattr(ai_router, "complete_chat", failed_ai)
     request = ai_router.AIStrategyBriefRequest(
