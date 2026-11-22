@@ -311,7 +311,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                     Spacer(Modifier.height(10.dp))
                     MetricTile("Latest EOD close", String.format(Locale.US, "₹%,.2f", report.evidence.latestClose), report.latestTradingDate, accent = Cyan)
                     Spacer(Modifier.height(8.dp))
-                    IndicatorLine("SMA 20", report.evidence.sma20?.let { String.format(Locale.US, "₹%,.2f", it) } ?: "Insufficient history")
+                    AiIndicatorLine("SMA 20", report.evidence.sma20?.let { String.format(Locale.US, "₹%,.2f", it) } ?: "Insufficient history")
                     IndicatorLine("SMA 50", report.evidence.sma50?.let { String.format(Locale.US, "₹%,.2f", it) } ?: "Insufficient history")
                     IndicatorLine("RSI 14", report.evidence.rsi14?.let { String.format(Locale.US, "%.1f", it) } ?: "Unavailable")
                     IndicatorLine("ADX 14", report.evidence.adx14?.let { String.format(Locale.US, "%.1f", it) } ?: "Unavailable")
@@ -349,5 +349,17 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                 }
             }
         }
+    }
+}
+
+
+@Composable
+private fun AiIndicatorLine(label: String, value: String) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, color = Muted, fontSize = 11.sp)
+        Text(value, color = MaterialTheme.colorScheme.onBackground, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
     }
 }
