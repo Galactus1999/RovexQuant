@@ -257,7 +257,7 @@ def test_tool_without_positive_read_only_annotation_is_denied():
         async with NseMcpClient("bhavcopy", transport=transport) as client:
             await client.call_tool("get_history", {})
 
-    with pytest.raises(NseMcpError, match="readOnlyHint must be true"):
+    with pytest.raises(NseMcpError, match="not marked read-only"):
         asyncio.run(run())
     assert not any(body["method"] == "tools/call" for body, _ in seen)
 
