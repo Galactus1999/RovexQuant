@@ -303,3 +303,26 @@ def test_api_route_table_has_no_duplicate_http_method_owners():
             for method in methods:
                 owners.append((method, path))
     assert len(owners) == len(set(owners))
+
+
+def test_w3c_trace_context_is_extracted_for_http_span_and_safe_log(caplog):
+    caplog.set_level("INFO", logger="rovexquant.request")
+    trace_id = "4bf92f3577b34da6a3ce929d0e0e4736"
+    response = client.get(
+        "/api/v1/health",
+        headers={
+            "traceparent": f"00-{trace_id}-00f067aa0ba902b7-01",
+            "X-Request-ID": "caller-controlled",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["X-Request-ID"] != "caller-controlled"
+    matching = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "rovexquant.request"
+    ]
+    assert matching
+    event = __import__("json").loads(matching[-1])
+    assert event["trace_id"] == trace_id
+    assert event["request_id"] == response.headers["X-Request-ID"]

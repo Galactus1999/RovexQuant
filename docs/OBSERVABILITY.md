@@ -68,3 +68,20 @@ instance. Multiple workers or replicas require an atomic shared rate limiter and
 a metrics backend/collector before horizontal scaling. Render Free does not
 provide durable worker execution or a persistent filesystem. FastAPI
 BackgroundTasks must not be advertised as durable jobs.
+
+
+## OpenTelemetry-compatible request tracing
+
+The HTTP boundary uses the OpenTelemetry API and W3C Trace Context propagator.
+Each request creates an `http.server` span with only allow-listed attributes:
+method, matched route template, response status and server-generated request ID.
+Incoming `traceparent`/`tracestate` values are parsed as correlation context
+only; they are never trusted for authentication, tenancy or authorization.
+The structured request log includes the trace ID when a valid span context is
+available. Raw URLs, query strings, bodies, headers, credentials and provider
+payloads are excluded from span attributes.
+
+The API package alone supplies no-op spans unless the host installs and configures
+an OpenTelemetry SDK/exporter. No trace export or external collector is claimed
+for the current Render pilot. This keeps the application instrumented without
+forcing a collector or exporter into the current hosting plan.
