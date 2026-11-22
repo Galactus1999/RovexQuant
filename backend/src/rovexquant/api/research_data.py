@@ -14,7 +14,7 @@ from rovexquant.market_data import nse_mcp_service, tejhq_service
 from rovexquant.market_data.nse_mcp_service import NseMcpError, extract_source_timestamp
 from rovexquant.market_data.tejhq_service import TejHqError
 from rovexquant.security.dependencies import require_app_session
-from rovexquant.security.request_controls import nse_tool_rate_limit
+from rovexquant.security.request_controls import eod_snapshot_rate_limit, nse_tool_rate_limit
 
 router = APIRouter()
 
@@ -94,7 +94,7 @@ async def app_research_eod_delivery(
 
 @router.get(
     "/api/v1/app/market-data/eod/latest/{exchange}",
-    dependencies=[Depends(require_app_session)],
+    dependencies=[Depends(require_app_session), Depends(eod_snapshot_rate_limit)],
 )
 async def app_latest_eod_market_snapshot(
     exchange: Literal["nse", "bse"],
