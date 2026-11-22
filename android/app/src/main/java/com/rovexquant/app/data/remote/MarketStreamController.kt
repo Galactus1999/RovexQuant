@@ -34,10 +34,14 @@ class MarketStreamController(
     private val retry = Runnable { connect() }
 
     override fun start(instrumentKeys: List<String>) {
-        keys = instrumentKeys.distinct().take(100)
         stopped = false
+        keys = instrumentKeys.distinct()
         if (keys.isEmpty()) {
-            emitStatus("No verified NSE index keys found")
+            emitStatus("No verified NSE instruments found")
+            return
+        }
+        if (keys.size > 5000) {
+            emitStatus("NSE universe exceeds Upstox LTPC subscription limit (5,000)")
             return
         }
         connect()
@@ -72,7 +76,7 @@ class MarketStreamController(
                 emitStatus("Connected · awaiting ticks")
                 val subscription = JSONObject()
                     .put("instrument_keys", JSONArray(keys))
-                    .put("mode", "full")
+                    .put("mode", "ltpc")
                 webSocket.send(subscription.toString())
             }
 
@@ -81,6 +85,10 @@ class MarketStreamController(
                     val json = JSONObject(text)
                     if (json.optString("type") == "error") {
                         emitStatus(json.optString("message", "Stream error"))
+                        return
+                    }
+                    if (json.optString("type") == "upstream_text") {
+                        emitStatus("Upstox sent an unexpected text frame; expected binary Protobuf data")
                         return
                     }
                     val quotes = json.optJSONArray("quotes") ?: return
