@@ -16,11 +16,12 @@ import org.json.JSONObject
 /**
  * Deterministic test host compiled only into the debug variant.
  *
- * Keeping this Activity in the target debug APK (rather than the androidTest APK)
- * ensures ActivityScenario launches it in the target application process.
+ * Workspace tests restore a pre-authenticated fake session so dashboard tests
+ * never depend on typing credentials or contacting a backend. Login tests use
+ * [QuantLoginTestActivity], which deliberately starts without a session.
  */
-class QuantTestActivity : MainActivity() {
-    val fakeRepository = FakeQuantRepository()
+open class QuantTestActivity : MainActivity() {
+    open val fakeRepository = FakeQuantRepository(restoreAuthenticatedSession = true)
 
     override fun createWorkspaceViewModelFactory(): ViewModelProvider.Factory =
         object : ViewModelProvider.Factory {
@@ -32,14 +33,23 @@ class QuantTestActivity : MainActivity() {
         }
 }
 
-class FakeQuantRepository : QuantDataRepository {
+/** Separate host keeps login-form coverage independent of authenticated UI tests. */
+class QuantLoginTestActivity : QuantTestActivity() {
+    override val fakeRepository = FakeQuantRepository(restoreAuthenticatedSession = false)
+}
+
+class FakeQuantRepository(
+    private val restoreAuthenticatedSession: Boolean
+) : QuantDataRepository {
     var rejectLogin = false
     private val testSession = QuantSession("https://quant.test", "test-session-token")
 
     override suspend fun loadSavedConnection() =
         QuantSessionStore.SavedConnection(testSession.baseUrl, "quant-test")
 
-    override suspend fun loadSession(): QuantSession? = null
+    override suspend fun loadSession(): QuantSession? =
+        testSession.takeIf { restoreAuthenticatedSession }
+
     override suspend fun saveSession(session: QuantSession, username: String) = Unit
     override suspend fun clearSession() = Unit
 
