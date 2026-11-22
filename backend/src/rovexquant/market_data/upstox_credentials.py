@@ -102,6 +102,19 @@ def validate_postgres_schema() -> None:
         )
 
 
+
+def validate_storage_readiness() -> None:
+    """Check mandatory credential storage without exposing connection details."""
+    validate_storage_configuration()
+    validate_postgres_schema()
+    if _storage_mode() == "sqlite":
+        try:
+            with _connect() as connection:
+                connection.execute("SELECT 1").fetchone()
+        except sqlite3.Error as error:
+            raise UpstoxCredentialError("Local credential storage is unavailable", 503) from error
+
+
 @contextmanager
 def _connect() -> Iterator[Any]:
     """Open one short-lived DB connection; never retain a connection across requests."""
