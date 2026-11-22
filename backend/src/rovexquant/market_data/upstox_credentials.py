@@ -12,6 +12,8 @@ from typing import Any
 import psycopg
 from cryptography.fernet import Fernet, InvalidToken
 
+from rovexquant.db.schema import EXPECTED_SCHEMA_REVISION
+
 
 class UpstoxCredentialError(Exception):
     def __init__(self, message: str, status_code: int = 400):
@@ -57,10 +59,46 @@ def _storage_mode() -> str:
     return mode
 
 
+def _database_sslmode() -> str:
+    mode = os.getenv("QUANT_TOKEN_DATABASE_SSLMODE", "require").strip().lower()
+    allowed = {"require", "verify-ca", "verify-full"}
+    if os.getenv("QUANT_ENV") == "test":
+        allowed.add("disable")
+    if mode not in allowed:
+        raise UpstoxCredentialError(
+            "QUANT_TOKEN_DATABASE_SSLMODE must enforce TLS outside the test environment", 503
+        )
+    return mode
+
+
 def validate_storage_configuration() -> None:
     """Validate hosted storage and encryption configuration without connecting or exposing secrets."""
     _storage_mode()
+    _database_sslmode()
     _fernet()
+
+
+def validate_postgres_schema() -> None:
+    """Fail closed when the hosted database has not been migrated to the code's schema head."""
+    if _storage_mode() != "postgresql":
+        return
+    try:
+        with psycopg.connect(
+            _database_url(), connect_timeout=10, sslmode=_database_sslmode()
+        ) as connection:
+            row = connection.execute(
+                "SELECT version_num FROM alembic_version"
+            ).fetchone()
+    except psycopg.Error as error:
+        raise UpstoxCredentialError(
+            "PostgreSQL schema is unavailable or not migrated; apply the Alembic migrations",
+            503,
+        ) from error
+    if not row or row[0] != EXPECTED_SCHEMA_REVISION:
+        raise UpstoxCredentialError(
+            "PostgreSQL schema revision does not match this application; apply the Alembic migrations",
+            503,
+        )
 
 
 @contextmanager
@@ -73,7 +111,9 @@ def _connect() -> Iterator[Any]:
                 "QUANT_TOKEN_DATABASE_URL must be a PostgreSQL connection URL", 503
             )
         # Neon requires TLS. The pooled endpoint is compatible with short transactions.
-        connection = psycopg.connect(database_url, connect_timeout=10, sslmode="require")
+        connection = psycopg.connect(
+            database_url, connect_timeout=10, sslmode=_database_sslmode()
+        )
         try:
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS provider_tokens "
