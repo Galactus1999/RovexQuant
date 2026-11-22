@@ -307,3 +307,25 @@ def test_app_upstox_credential_setup_is_authenticated_and_never_echoes_token(
     )
     assert deleted.status_code == 200
     assert deleted.json()["deleted"] is True
+
+
+def test_short_provider_secrets_are_not_reflected_in_validation_errors(mobile_client):
+    client, headers = mobile_client
+    ai_secret = "short-ai-key-secret"
+    upstox_secret = "short-upstox-secret"
+
+    ai_response = client.put(
+        "/api/v1/app/ai/providers/groq/credential",
+        headers=headers,
+        json={"api_key": ai_secret},
+    )
+    assert ai_response.status_code == 422
+    assert ai_secret not in ai_response.text
+
+    upstox_response = client.put(
+        "/api/v1/app/integrations/upstox/analytics-token",
+        headers=headers,
+        json={"token": upstox_secret},
+    )
+    assert upstox_response.status_code == 422
+    assert upstox_secret not in upstox_response.text
