@@ -27,6 +27,7 @@ from rovexquant.security.request_controls import (
     RequestBodyLimitMiddleware, backtest_rate_limit, indicator_rate_limit,
     login_rate_limit, nse_tool_rate_limit,
 )
+from rovexquant.security.request_context import RequestContextMiddleware
 from rovexquant.market_data.streaming import StreamError, stream_upstox_market_data
 from rovexquant.market_data.tejhq import TejHqEodProvider, TejHqError
 from rovexquant.market_data.nse_mcp import (
@@ -35,7 +36,7 @@ from rovexquant.market_data.nse_mcp import (
 )
 from rovexquant.market_data.upstox_credentials import (
     UpstoxCredentialError, store_upstox_analytics_token, upstox_analytics_status,
-    validate_storage_configuration, validate_postgres_schema,
+    validate_storage_configuration, validate_postgres_schema, validate_storage_readiness,
 )
 from rovexquant.strategies.registry import default_registry
 
@@ -56,6 +57,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.add_middleware(RequestBodyLimitMiddleware, max_body_size=2 * 1024 * 1024)
+app.add_middleware(RequestContextMiddleware)
 
 def _quant_openapi():
     """Publish mobile app authentication as a Swagger HTTP Bearer security scheme."""
@@ -362,8 +364,23 @@ async def market_quotes(
 
 
 @app.get("/api/v1/health")
+@app.get("/api/v1/health/live")
 def health():
+    """Liveness only; optional providers are not required for process health."""
     return {"status": "ok", "application": "Quant", "mode": "research-only"}
+
+
+@app.get("/api/v1/health/ready")
+def readiness():
+    """Readiness for mandatory credential storage; never returns secret/config values."""
+    try:
+        validate_storage_readiness()
+        return {"status": "ready", "application": "Quant"}
+    except UpstoxCredentialError as error:
+        raise HTTPException(
+            status_code=503,
+            detail="Required credential storage is unavailable or its schema is not migrated",
+        ) from error
 
 
 @app.get("/api/v1/strategies")
