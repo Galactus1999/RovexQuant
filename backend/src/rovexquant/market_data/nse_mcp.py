@@ -156,9 +156,8 @@ class NseMcpClient:
         if payload.get("jsonrpc") != "2.0":
             raise NseMcpError("NSE MCP returned an invalid JSON-RPC version", 502)
         if "error" in payload:
-            error = payload.get("error")
-            message_text = error.get("message", "Remote JSON-RPC error") if isinstance(error, dict) else "Remote JSON-RPC error"
-            raise NseMcpError(f"NSE MCP JSON-RPC error: {str(message_text)[:240]}", 502)
+            # Do not forward arbitrary remote error text into API responses or logs.
+            raise NseMcpError("NSE MCP returned a remote JSON-RPC error", 502)
         return payload
 
     async def _initialize(self) -> None:
