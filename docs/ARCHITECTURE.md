@@ -10,9 +10,13 @@ The initial deployment is a private, single-owner pilot. Multi-user tenancy, alw
 
 | Domain / responsibility | Current authoritative owner | Current state / boundary |
 |---|---|---|
-| Android application composition and navigation | `RovexQuantApp.kt` | Compose shell; owns top-level session/navigation/stream lifecycle today |
-| Android HTTP and WebSocket transport | `MarketDataClient.kt` (`QuantApi`, `MarketStreamController`) | Transport currently lives in the UI package; Phase 1 moves orchestration behind data/repository boundaries without rewriting screens |
-| Android session persistence | `QuantSessionStore.kt` | Encrypted session token storage using Android Keystore |
+| Android application composition and navigation | `ui/RovexQuantApp.kt`, `ui/QuantTerminal.kt` | Compose shell owns navigation and renders state; no network orchestration |
+| Android workspace state/lifecycle | `feature/workspace/QuantWorkspaceViewModel.kt` | Owns session restoration, login state, index discovery and stream lifecycle with cancellation and serialized sign-out |
+| Android repository contract/implementation | `data/repository/QuantDataRepository.kt`, `QuantRepository.kt`, `MarketStream.kt` | Feature UI depends on a repository port; implementation coordinates local and remote sources |
+| Android HTTP transport | `data/remote/QuantApi.kt` | Typed REST/session/NSE calls; called only by repository implementation |
+| Android WebSocket transport | `data/remote/MarketStreamController.kt` | Owns socket, reconnect and stop semantics behind the stream port |
+| Android session persistence | `data/local/QuantSessionStore.kt` | Encrypted session token storage using Android Keystore; accessed through repository |
+| Android typed data contracts | `data/model/QuantModels.kt` | Session, instrument, MCP and market-tick models shared between data and feature layers |
 | Backend HTTP composition and route registration | `api/main.py` | Current composition point is oversized and still contains request contracts/orchestration; Phase 1 progressively separates routers and application services |
 | App-session authentication | `auth.py` | Short-lived HMAC-signed app session; single configured owner, not a multi-tenant identity system |
 | Provider-neutral quote selection | `market_data/service.py` | Explicit provider order and transient-error failover; semantic capability/entitlement compatibility remains to be implemented |
@@ -55,8 +59,11 @@ Backend rules:
 - Shared infrastructure (auth, logging, persistence, policy) must not absorb domain-specific business logic.
 
 Android rules:
-- Composables render state and emit user intent; they do not own network orchestration or long-running calculations.
-- Repositories own data-source coordination and cache policy.
+- Composables render state and emit user intent; they do not call `QuantApi`, own WebSocket clients or perform long-running network orchestration.
+- `QuantDataRepository` is the feature-facing port; `QuantRepository` owns IO dispatch and coordination of local session storage, REST and stream adapters.
+- `QuantWorkspaceViewModel` owns session state, authentication transitions, stream startup/stop and cancellation. Sign-out cancels login/stream work and serializes credential clearing.
+- `QuantApi` and `MarketStreamController` remain transport-only adapters; neither owns UI state.
+- The workspace factory seam permits deterministic fake-repository instrumentation tests without real credentials or provider calls.
 - ViewModels/state holders own screen state and cancellation where screen complexity warrants them.
 - Collect flows with lifecycle-aware APIs. Cancel stream/network work when the owning session or lifecycle ends.
 - Keep one Gradle app module until measured build, test or ownership benefits justify extraction. Do not create a module per screen.
