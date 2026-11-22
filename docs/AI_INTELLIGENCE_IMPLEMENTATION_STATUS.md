@@ -27,6 +27,7 @@
   - Event lifecycle, involved entities, evidence references, materiality and extractor version.
   - Typed temporal impact edges with direction, horizon, assumptions, confidence and evidence.
   - Research claims that distinguish observed facts, deterministic calculations, inferences and hypotheses.
+- Added a deterministic impact rollup service that groups evidence-linked edges by target entity, preserves opposing impacts as mixed, and never invents an aggregate buy/sell score. Added tests for grouping, evidence preservation, conflict handling and empty input.
 - Added tests for provenance requirements, timezone integrity, event evidence, entity validity periods and hypothesis/fact classification rules.
 - Added the authoritative product/build prompt and architecture document.
 - Linked both from README.
