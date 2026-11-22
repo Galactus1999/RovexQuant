@@ -118,7 +118,22 @@ class NseMcpClient:
         if self._session_id:
             headers["Mcp-Session-Id"] = self._session_id
         try:
-            response = await self._client.post(self.endpoint, json=message, headers=headers)
+            async with self._client.stream(
+                "POST", self.endpoint, json=message, headers=headers
+            ) as streamed:
+                body = bytearray()
+                async for chunk in streamed.aiter_bytes():
+                    if len(body) + len(chunk) > 10_000_000:
+                        raise NseMcpError("NSE MCP response exceeded the 10 MB safety limit", 502)
+                    body.extend(chunk)
+                response = httpx.Response(
+                    streamed.status_code,
+                    headers=streamed.headers,
+                    content=bytes(body),
+                    request=streamed.request,
+                )
+        except NseMcpError:
+            raise
         except httpx.TimeoutException as error:
             raise NseMcpError("NSE MCP request timed out", 503, retryable=True) from error
         except httpx.RequestError as error:
@@ -223,6 +238,9 @@ class NseMcpClient:
                 return any(contains_ref(item) for item in value)
             return False
 
+        schema_size = len(json.dumps(schema, ensure_ascii=True, separators=(",", ":")).encode("utf-8"))
+        if schema_size > 128 * 1024:
+            raise NseMcpError("NSE MCP tool schema exceeded the 128 KB safety limit", 502)
         if contains_ref(schema):
             raise NseMcpError("NSE MCP tool schema references are not supported", 502)
         try:
@@ -232,8 +250,7 @@ class NseMcpClient:
         except SchemaError as error:
             raise NseMcpError("NSE MCP published an invalid input schema", 502) from error
         if errors:
-            detail = str(errors[0].message).replace("\\n", " ")[:160]
-            raise NseMcpError(f"NSE MCP arguments do not match the tool schema: {detail}", 422)
+            raise NseMcpError("NSE MCP arguments do not match the tool schema", 422)
 
         request_id = self._next_id()
         payload = await self._post({
