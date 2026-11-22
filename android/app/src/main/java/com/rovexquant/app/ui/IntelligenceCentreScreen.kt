@@ -120,7 +120,13 @@ fun IntelligenceCentreScreen(session: QuantSession, repository: QuantDataReposit
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Column {
                             Eyebrow("Evidence inventory")
-                            Text("${feed.eventCount} distinct events", color = MaterialTheme.colorScheme.onBackground, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                "${feed.eventCount} distinct events",
+                                modifier = Modifier.testTag("intelligence.feed.ready"),
+                                color = MaterialTheme.colorScheme.onBackground,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                             Text("${feed.articleCount} source articles · ${feed.timespan} window", color = Muted, fontSize = 10.sp)
                         }
                         StatusPill("On demand", Gold)
