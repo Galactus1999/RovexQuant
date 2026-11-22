@@ -129,3 +129,25 @@ References:
 - Yahoo personal-use disclaimer: https://github.com/ranaroussi/yfinance
 - Upstox V3 historical candles: https://upstox.com/developer/api-documentation/v3/get-historical-candle-data/
 - GitHub schedule event: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows
+
+
+## Android persisted-data integration (Phase 2)
+
+The authenticated endpoint
+`GET /api/v1/app/market-data/ingestion/snapshot/{exchange}?limit=20`
+builds Market Pulse breadth and movers from the latest successful PostgreSQL
+batch. It does not call TejHQ at request time and does not silently substitute
+unpersisted provider data. If no successful batch exists, the API returns an
+explicit unavailable response.
+
+The Android Market Pulse now consumes this persisted snapshot and separately
+reads `GET /api/v1/app/market-data/ingestion/status?exchange=nse`. The status
+contract exposes the latest run and the most recent successful run independently,
+so a failed later collection does not hide the last successful trading date.
+The UI displays provider, trading date, row count, run state and bounded error
+detail. Live Upstox ticks remain a separate stream and are never described as
+persisted EOD history.
+
+The scheduled workflow now fails when database or direct migration credentials
+are absent. This is intentional: a green no-op would conceal the fact that no
+market data was collected.
