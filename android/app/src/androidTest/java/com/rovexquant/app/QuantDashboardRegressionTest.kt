@@ -97,7 +97,7 @@ class QuantDashboardRegressionTest {
         waitForDashboard()
         composeRule.onNodeWithText("Intel").performClick()
         composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithText("Oil supply disruption raises crude prices")
+            composeRule.onAllNodesWithTag("intelligence.feed.ready")
                 .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithText("AI Intelligence Centre").assertIsDisplayed()
