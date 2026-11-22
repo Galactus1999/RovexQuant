@@ -338,8 +338,11 @@ def health():
 @app.get("/api/v1/health/metrics")
 def health_metrics(x_quant_admin_key: str | None = Header(default=None)):
     """Expose real process-local HTTP metrics only to the configured admin."""
-    authorize_quant_admin(x_quant_admin_key)
-    return request_metrics.snapshot()
+    try:
+        authorize_quant_admin(x_quant_admin_key)
+        return request_metrics.snapshot()
+    except UpstoxCredentialError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
 
 @app.get("/api/v1/health/ready")
