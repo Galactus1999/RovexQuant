@@ -34,10 +34,10 @@ private enum class TerminalSection(val label: String, val glyph: String) {
 }
 
 @Composable
-fun RovexQuantApp() {
+fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
     val application = LocalContext.current.applicationContext as Application
     val workspace: QuantWorkspaceViewModel = viewModel(
-        factory = ViewModelProvider.AndroidViewModelFactory.getInstance(application)
+        factory = viewModelFactory ?: ViewModelProvider.AndroidViewModelFactory.getInstance(application)
     )
     val state by workspace.uiState.collectAsStateWithLifecycle()
     var selected by remember { mutableStateOf(TerminalSection.PULSE) }
