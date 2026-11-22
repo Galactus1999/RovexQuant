@@ -10,8 +10,8 @@ import re
 from typing import Any, Literal
 
 import httpx
-from jsonschema import Draft202012Validator
-from jsonschema.exceptions import SchemaError, ValidationError
+from jsonschema.exceptions import SchemaError
+from jsonschema.validators import validator_for
 
 
 NSE_MCP_ENDPOINTS = {
@@ -226,8 +226,9 @@ class NseMcpClient:
         if contains_ref(schema):
             raise NseMcpError("NSE MCP tool schema references are not supported", 502)
         try:
-            Draft202012Validator.check_schema(schema)
-            errors = list(Draft202012Validator(schema).iter_errors(arguments))
+            validator_class = validator_for(schema)
+            validator_class.check_schema(schema)
+            errors = list(validator_class(schema).iter_errors(arguments))
         except SchemaError as error:
             raise NseMcpError("NSE MCP published an invalid input schema", 502) from error
         if errors:
