@@ -16,3 +16,33 @@ data class MarketTick(
     val receivedAt: String,
     val quality: String
 )
+
+
+data class EodMarketSnapshot(
+    val provider: String,
+    val dataMode: String,
+    val exchange: String,
+    val marketScope: String,
+    val tradingDate: String,
+    val totalRows: Int,
+    val equitySeriesRows: Int,
+    val pricedSymbols: Int,
+    val advances: Int,
+    val declines: Int,
+    val unchanged: Int,
+    val topGainers: List<EodStockMove>,
+    val topLosers: List<EodStockMove>,
+    val mostActiveByVolume: List<EodStockMove>
+)
+
+data class EodStockMove(
+    val symbol: String,
+    val name: String,
+    val series: String?,
+    val close: Double?,
+    val previousClose: Double?,
+    val change: Double?,
+    val changePercent: Double?,
+    val volume: Long,
+    val turnover: Double?
+)
