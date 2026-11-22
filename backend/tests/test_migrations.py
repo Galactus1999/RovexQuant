@@ -38,7 +38,8 @@ def migrated_postgres(monkeypatch):
         )
         connection.execute(
             "INSERT INTO provider_tokens(provider, encrypted_token, updated_at) "
-            "VALUES (%s, %s, %s) ON CONFLICT(provider) DO NOTHING",
+            "VALUES (%s, %s, %s) ON CONFLICT(provider) DO UPDATE "
+            "SET encrypted_token=EXCLUDED.encrypted_token, updated_at=EXCLUDED.updated_at",
             ("phase1-legacy-migration-probe", LEGACY_CIPHERTEXT, 1),
         )
 
