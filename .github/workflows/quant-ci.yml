@@ -260,7 +260,7 @@ jobs:
       - name: Clean Android build outputs
         run: gradle -p android clean --no-daemon --stacktrace
       - name: Bootstrap Android dependency checksums, lockfiles and license inventory
-        run: gradle -p android :app:dependencies :app:licenseReleaseReport :app:assembleDebug :app:assembleDebugAndroidTest --write-locks --write-verification-metadata sha256 --no-daemon --stacktrace
+        run: gradle -p android :app:dependencies :app:licenseReleaseReport :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug :app:testDebugUnitTest --write-locks --write-verification-metadata sha256 --no-daemon --stacktrace
       - name: Enforce Android runtime dependency license allowlist
         run: python android/scripts/check_dependency_licenses.py
       - name: Verify locked dependencies and compile Quant APK with strict verification
