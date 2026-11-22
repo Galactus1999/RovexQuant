@@ -3,7 +3,8 @@ package com.rovexquant.app.data.model
 data class AiProvider(
     val providerId: String,
     val configured: Boolean,
-    val credentialIds: List<String>
+    val credentialIds: List<String>,
+    val defaultModel: String? = null
 )
 
 data class AiChatMessage(
