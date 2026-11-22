@@ -22,7 +22,9 @@ from rovexquant.security.request_controls import (
     RequestBodyLimitMiddleware, login_rate_limit,
 )
 from rovexquant.security.request_context import RequestContextMiddleware, request_metrics
-from rovexquant.security.errors import http_exception_handler, validation_exception_handler
+from rovexquant.security.errors import (
+    http_exception_handler, unhandled_exception_handler, validation_exception_handler,
+)
 from rovexquant.research.router import router as research_router
 from rovexquant.api.research_data import router as research_data_router
 from rovexquant.market_data.streaming import StreamError, stream_upstox_market_data
@@ -52,6 +54,7 @@ app.add_middleware(RequestBodyLimitMiddleware, max_body_size=2 * 1024 * 1024)
 app.add_middleware(RequestContextMiddleware)
 app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(Exception, unhandled_exception_handler)
 app.include_router(research_router)
 app.include_router(research_data_router)
 
