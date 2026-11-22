@@ -50,6 +50,12 @@ fun IntelligenceCentreScreen(session: QuantSession, repository: QuantDataReposit
     var category by rememberSaveable { mutableStateOf("ALL") }
     val uriHandler = LocalUriHandler.current
 
+    // Opening Intelligence Centre performs the first bounded discovery automatically.
+    // Subsequent refreshes remain user-triggered and are deduplicated by the ViewModel.
+    LaunchedEffect(session.baseUrl) {
+        model.refresh(query, "1d")
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("intelligence.screen"),
         contentPadding = PaddingValues(start = 17.dp, end = 17.dp, top = 8.dp, bottom = 20.dp),
