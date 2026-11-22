@@ -1,5 +1,11 @@
 package com.rovexquant.app.ui
 
+import com.rovexquant.app.data.model.NseMcpCatalog
+import com.rovexquant.app.data.model.NseMcpResult
+import com.rovexquant.app.data.model.NseMcpTool
+import com.rovexquant.app.data.model.QuantSession
+import com.rovexquant.app.data.repository.QuantRepository
+
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -34,7 +40,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun NseMcpResearchPanel(session: QuantSession) {
+fun NseMcpResearchPanel(session: QuantSession, repository: QuantRepository) {
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     var server by remember { mutableStateOf("bhavcopy") }
@@ -57,7 +63,7 @@ fun NseMcpResearchPanel(session: QuantSession) {
         arguments = "{}"
         scope.launch {
             try {
-                val loaded = withContext(Dispatchers.IO) { QuantApi.fetchNseMcpTools(session, targetServer) }
+                val loaded = withContext(Dispatchers.IO) { repository.fetchNseMcpTools(session, targetServer) }
                 catalogs = catalogs.filterNot { old -> loaded.any { it.server == old.server } } + loaded
                 val selectedServer = if (targetServer == "both") server else targetServer
                 val selected = loaded.firstOrNull { it.server == selectedServer }?.tools?.firstOrNull { it.readOnly }
@@ -153,7 +159,7 @@ fun NseMcpResearchPanel(session: QuantSession) {
                             scope.launch {
                                 try {
                                     val response = withContext(Dispatchers.IO) {
-                                        QuantApi.callNseMcpTool(session, server, chosen.name, arguments)
+                                        repository.callNseMcpTool(session, server, chosen.name, arguments)
                                     }
                                     result = response
                                 } catch (failure: Exception) {
