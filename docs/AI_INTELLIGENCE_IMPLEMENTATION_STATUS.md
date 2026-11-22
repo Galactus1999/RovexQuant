@@ -1,56 +1,76 @@
-# AI Intelligence implementation status
+# RovexQuant functional and AI intelligence status
 
-**Working branch:** `feat/quant-ai-intelligence-foundation`
-**Last reviewed:** 2026-11-22
-**Authoritative requirement:** [AI Intelligence Centre build prompt](prompts/ROVEXQUANT_AI_INTELLIGENCE_BUILD_PROMPT.md)
+**Reviewed:** 2026-11-22  
+**Working branch:** `feat/quant-eod-market-pulse`  
+**Reviewed head at time of update:** `4a98d5d3ffa73d0ec2af113df0547ebe587c391f`  
+**Current stacked PR:** [#16 — Add automatic NSE EOD market pulse](https://github.com/Galactus1999/RovexQuant/pull/16)  
+**Authoritative product requirement:** [AI Intelligence Centre build prompt](prompts/ROVEXQUANT_AI_INTELLIGENCE_BUILD_PROMPT.md)
 
-## Existing capabilities observed before this work
+This document distinguishes implemented code from features that still depend on credentials, a deployed backend, or unimplemented ingestion/research services. A visible screen is not evidence of a working provider connection.
 
-| Area | Observed implementation | Gap |
+## Implemented in the current development stack
+
+| Area | Current implementation | Runtime qualification / remaining gap |
 |---|---|---|
-| AI provider gateway | Server-side chat-completions adapter for DeepSeek, Groq, OpenRouter, Gemini and OpenAI-compatible OpenAI; named credentials and bounded request handling | Chat only; shared gateway token is not a public multi-tenant auth design |
-| Android AI experience | Existing Research Lab and other research screens | No dedicated AI Intelligence Centre; Android does not call AI gateway |
-| Market data | Upstox/Dhan REST quote adapters and an Upstox streaming backend path | NSE-MCP not registered in quote-provider selection; Android end-to-end provider path must be traced and verified |
-| Technical research | Deterministic indicators, backtesting prototype, local OHLCV CSV research | No event-linked fundamental research engine |
-| Evidence provenance | No complete source/evidence domain service observed | No source registry, document lineage, freshness policy or claim-level citations |
-| Entity resolution | Existing instrument master utilities | No canonical cross-domain entity-resolution service |
-| Event/impact graph | Not implemented | No event → economy → sector → company impact graph |
-| Stock research | Deterministic scanner prototypes and research UI | No complete evidence-backed stock research report |
-| Watchlist/portfolio intelligence | Portfolio risk calculator and app navigation | No event-driven thesis monitoring or exposure-impact pipeline |
+| Authentication | App session API and Android session handling | Login only establishes the app session. It does not prove market or AI provider connectivity. |
+| Market stream | Upstox V3 Protobuf WebSocket bridge; instrument-key validation supports NSE index and NSE cash-equity keys. Android loads official index/equity masters and subscribes to resolved indices plus the equity universe. | Requires server gateway configuration and an owner-provisioned Upstox Analytics Token. Live data is valid only after actual valid ticks are received. No device-level production verification is claimed. |
+| EOD market data | TejHQ keyless NSE/BSE OHLCV, snapshot and corporate-action adapter. PR #16 adds a latest-available EOD snapshot API with bounded date lookback and deterministic market breadth/movers. | EOD only, not live. The new endpoint is on-demand after login/manual refresh and does not yet persist a market history or run a scheduled worker. |
+| Market Pulse | Live benchmark cards, a 20-index NSE sector watchlist, equity watchlist and an EOD breadth/top movers panel. | Live cards show values only when a valid Upstox tick has actually arrived. Historical sector rotation and constituent breadth are not yet implemented. |
+| Technical research | Deterministic SMA, EMA, RSI, MACD, Bollinger Bands, ATR and ADX; deterministic long-only backtest engine; local OHLCV CSV analysis. | Results depend on the quality, completeness and timestamp correctness of supplied OHLCV. The engine is not a validated all-market live scanner. |
+| Strategy scanner | Horizon-based playbook UI and local CSV scan summary with trend, Donchian, relative volume and RSI metrics. | The current scanner reads the locally imported dataset. Several playbooks are explicitly prototypes/research candidates; it does not yet scan the full NSE/BSE universe automatically. |
+| Signals | Signal lifecycle UI and evidence/risk-gate design. | No populated persistent signal-generation pipeline is currently established; the current screen correctly reports no generated signals. |
+| AI provider gateway | Server-side provider-neutral chat completion gateway for supported providers, bounded inputs/outputs and server-side credentials. | A gateway is not itself an autonomous research system. It requires valid provider credentials and a successful live completion request. |
+| Android AI workspace | Provider discovery, masked credential entry, chat interface and AI strategy-brief request workflow. | Provider configuration and successful model connectivity are separate states. No configured provider or successful production completion is inferred from the presence of the UI. |
+| AI Intelligence Centre | Authenticated on-demand GDELT article discovery; deterministic event keyword classification and transparent first-order sector exposure hypotheses. | Not an LLM research agent. No scheduled ingestion, durable event store, verified primary-source claim adjudication, company/instrument mapping, RAG, evidence graph, or stock recommendations. Sector impact text is explicitly a hypothesis. |
+| Research Lab | Local OHLCV CSV import/persistence, deterministic summary and on-demand NSE MCP research panel. | NSE MCP use is restricted to the repository's documented private educational/on-demand scope. It must not be repurposed as an automated market scanner or AI training pipeline. |
+| Portfolio | Risk-based position sizing and portfolio/risk UI. | Not yet integrated with continuously refreshed holdings, corporate actions, live exposure or event-impact monitoring. |
 
-## Changes committed in this foundation batch
+## Important branch integration state
 
-- Added `backend/src/rovexquant/intelligence/contracts.py`.
-- Added immutable, extra-field-forbidden Pydantic contracts for:
-  - Evidence provenance, source class, trust tier, licence scope, content hash and timezone-aware timestamps.
-  - Canonical entity references, aliases, external identifiers, mapping evidence and effective dates.
-  - Event lifecycle, involved entities, evidence references, materiality and extractor version.
-  - Typed temporal impact edges with direction, horizon, assumptions, confidence and evidence.
-  - Research claims that distinguish observed facts, deterministic calculations, inferences and hypotheses.
-- Added a deterministic impact rollup service that groups evidence-linked edges by target entity, preserves opposing impacts as mixed, and never invents an aggregate buy/sell score. Added tests for grouping, evidence preservation, conflict handling and empty input.
-- Added tests for provenance requirements, timezone integrity, event evidence, entity validity periods and hypothesis/fact classification rules.
-- Added the authoritative product/build prompt and architecture document.
-- Linked both from README.
+- PR #16 is stacked on PR #15, which is stacked on PR #13 and the earlier Android AI integration foundations.
+- PR #14 (live NSE MCP smoke/acceptance work) is a separate draft branch and is not part of PR #16's current base chain.
+- PR #12 (typed evidence/entity/event/impact contracts and deterministic impact rollup) is also a separate draft branch and is not integrated into the current PR #16 stack.
+- Do not assume that an open PR is part of the app build. Only merged changes or the exact selected branch are included.
+- No PR is to be merged without explicit owner approval.
 
-## Explicitly not implemented yet
+## Data-source and licence boundaries
 
-These files establish contracts and architectural constraints; they do not claim that the following capabilities exist:
-- Live ingestion of news, filings, macro or NSE-MCP events.
-- Source trust scoring, deduplication, document storage or revision tracking.
-- Entity resolution against NSE/BSE companies and company segment exposure.
-- Graph persistence, graph traversal or event impact propagation.
-- Financial statement ingestion, valuation or fundamental scoring.
-- AI specialist orchestration, RAG, claim verification or evidence-weighted ranking.
-- Android AI Intelligence Centre UI, real API data binding, chat integration or alerts.
-- Watchlist/portfolio event monitoring.
+- TejHQ's keyless endpoints provide NSE/BSE EOD OHLCV, full-market snapshots and corporate actions. Its published terms permit one individual's private research and private dashboard use, prohibit raw-data redistribution, and state that exchange terms continue to apply. The provider does not claim to license NSE/BSE data on the exchanges' behalf.
+- Upstox V3 is the intended optional real-time feed, using the owner's own authorised account/token. Never report live status merely because a token is stored.
+- Official NSE RSS feeds are suitable discovery inputs for corporate announcements, financial results, board meetings, corporate actions, shareholding and circulars. Preserve original filing links and verify material facts against the filing itself.
+- GDELT is a discovery index, not primary-source verification. Preserve publisher URLs and apply rate limits, caching and deduplication.
+- NSE MCP is not an unrestricted data-ingestion licence. Respect the repository's documented private educational/on-demand restrictions; do not persist its raw responses, use them for model training, or turn them into an automated scanner.
+- Never scrape undocumented exchange endpoints or imply that a public web page grants redistribution rights.
 
-## Next implementation slice
+## Not yet implemented / acceptance gaps
 
-1. Verify CI for the contracts and test batch.
-2. Implement source registry and evidence ingestion adapters behind explicit source/licensing policies.
-3. Implement canonical entity mapping with ambiguity and manual-review states.
-4. Build a minimal event lifecycle and persistence layer.
-5. Produce one evidence-linked deterministic impact assessment end-to-end before introducing model-generated causal reasoning.
-6. Expose authenticated, versioned API contracts; then bind the Android Intelligence Centre to real responses.
+1. Durable, restart-safe scheduled EOD ingestion for NSE/BSE, with source freshness checks, deduplication, retries, provenance and persistent PostgreSQL storage.
+2. Historical EOD backfill and a normalized point-in-time market database with corporate-action-aware adjustments and instrument identity history.
+3. Verified sector benchmark historical returns and sector-relative ranking/rotation; a sector index watchlist alone is not this feature.
+4. Full-universe scanner jobs with reproducible strategy versions, point-in-time data, liquidity filters, costs/slippage, out-of-sample tests and persisted signal lifecycle.
+5. Persistent news/filing/macro evidence ingestion, source trust and freshness policies, document lineage and revision handling.
+6. Canonical ISIN/company/instrument mapping and ambiguity review.
+7. Evidence-backed event → economy/commodity → sector → company → instrument impact propagation with counter-evidence and confidence calibration.
+8. RAG and specialist research orchestration with claim-level citations, deterministic verifier, bounded investigations and approval gates.
+9. Durable research reports, alerts, watchlist/portfolio monitoring and user-visible source-health diagnostics.
+10. End-to-end deployment and device validation with real owner-configured provider credentials.
 
-No placeholder stock picks, fabricated events, or fake market metrics are permitted in the UI.
+## Current CI and build rule
+
+- The exact-head GitHub Actions run is the build authority. Do not infer a green build from an earlier commit or from an individual passing job.
+- A verified APK requires successful compile, lint, unit tests, APK identity/archive checks and emulator regression. The CI workflow uploads a debug APK artifact only after its APK verification step succeeds.
+- No local Android build is claimed unless the Android SDK, Gradle toolchain and required dependencies are actually available and the build completes.
+- Never label EOD data as live, a deterministic sector hypothesis as a forecast, or an unconfigured AI provider as connected.
+
+## Required next implementation sequence
+
+1. Complete exact-head CI and fix all failures.
+2. Validate TejHQ EOD API response, NSE/BSE series filtering and Market Pulse rendering against live data in a controlled smoke test.
+3. Add a durable scheduled ingestion worker backed by PostgreSQL; the public repository's GitHub Actions standard runners are a possible free EOD scheduler, but schedule execution is not guaranteed to be real-time and runs only from the default branch.
+4. Add official NSE RSS and selected primary-source ingestion with provenance and source-health state.
+5. Add verified historical sector-index returns and then point-in-time constituent-level sector analytics.
+6. Build scanner and signal persistence only after the underlying universe/history pipeline is validated.
+7. Integrate the separate typed evidence/impact contracts before implementing model-generated causal analysis.
+8. Complete emulator/device validation and publish only verified APKs.
+
+No placeholder stock picks, fabricated events, fabricated prices or unsupported causal claims are permitted.
