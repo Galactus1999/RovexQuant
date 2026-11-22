@@ -279,6 +279,52 @@ object QuantApi {
         }
     }
 
+
+    fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) {
+        require(providerId in setOf("deepseek", "groq", "openrouter", "gemini", "openai")) {
+            "Unsupported AI provider."
+        }
+        require(apiKey.length in 20..4096) { "Provider API key length is invalid." }
+        val body = JSONObject().put("api_key", apiKey)
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/ai/providers/$providerId/credential")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .put(body.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+        }
+    }
+
+    fun saveUpstoxAnalyticsToken(session: QuantSession, token: String) {
+        require(token.length in 20..4096) { "Upstox Analytics Token length is invalid." }
+        val body = JSONObject().put("token", token)
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/integrations/upstox/analytics-token")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .put(body.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+        }
+    }
+
+    fun fetchUpstoxConfigured(session: QuantSession): Boolean {
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/integrations/upstox/status")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            return JSONObject(text).optBoolean("configured", false)
+        }
+    }
+
+
     fun sendAiMessage(
         session: QuantSession,
         providerId: String,
