@@ -1,6 +1,7 @@
 package com.rovexquant.app
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -22,7 +23,14 @@ class QuantDashboardRegressionTest {
 
     private fun waitForLoginForm() {
         composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithTag("login.password").fetchSemanticsNodes().isNotEmpty()
+            val passwordFieldReady =
+                composeRule.onAllNodesWithTag("login.password").fetchSemanticsNodes().isNotEmpty()
+            val connectionRestored = runCatching {
+                composeRule.onNodeWithTag("login.submit").assertIsEnabled()
+                composeRule.onNodeWithTag("login.baseUrl").assertTextEquals("https://quant.test")
+                composeRule.onNodeWithTag("login.username").assertTextEquals("quant-test")
+            }.isSuccess
+            passwordFieldReady && connectionRestored
         }
     }
 
@@ -80,6 +88,7 @@ class QuantDashboardRegressionTest {
             composeRule.onAllNodesWithText("Test credentials rejected.").fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.activity.fakeRepository.rejectLogin = false
+        waitForLoginForm()
         composeRule.onNodeWithTag("login.password").performTextClearance()
         composeRule.onNodeWithTag("login.password").performTextInput("correct-password")
         composeRule.onNodeWithTag("login.submit").performClick()

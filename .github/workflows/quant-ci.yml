@@ -267,12 +267,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -s android/app/gradle.lockfile && -s android/gradle/verification-metadata.xml ]]; then
+          if [[ -s android/app/gradle.lockfile && -s android/gradle/verification-metadata.xml && ! -f android/gradle/ALLOW_DEPENDENCY_METADATA_REFRESH ]]; then
             echo "Using committed Android dependency locks and verification metadata."
           else
             echo "Bootstrapping the complete Android dependency graph for first-time lock persistence."
             gradle -p android help :app:dependencies :app:licenseReleaseReport :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug :app:testDebugUnitTest --refresh-dependencies --write-locks --write-verification-metadata sha256 --no-daemon --stacktrace
           fi
+      - name: Verify Kotlin compiler and daemon dependency alignment
+        run: python android/scripts/verify_kotlin_daemon_alignment.py
       - name: Generate Android dependency license inventory
         run: gradle -p android :app:licenseReleaseReport --dependency-verification=strict --no-daemon --stacktrace
       - name: Enforce Android runtime dependency license allowlist
@@ -387,7 +389,12 @@ jobs:
             echo "Runner identity:"
             id
             echo "ADB version:"
-            adb version 2>&1 || true
+            ADB="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/platform-tools/adb"
+             if [[ -x "$ADB" ]]; then
+               "$ADB" version 2>&1
+             else
+               echo "ADB not found at $ADB before emulator action setup."
+             fi
           } > "$REPORT_DIR/CI-EMULATOR-ENVIRONMENT.txt"
       - name: Run authenticated UI regression suite on Android 15 emulator
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
@@ -466,28 +473,36 @@ jobs:
               f"{len(artifacts)} artifact checksums and {len(module_metadata)} module metadata checksums."
           )
           PY
+          python android/scripts/verify_kotlin_daemon_alignment.py --metadata generated-android-locks/gradle/verification-metadata.xml
       - name: Persist first lock snapshot or reject unreviewed drift
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p android/app android/gradle
-          if [[ -s android/app/gradle.lockfile ]]; then
-            cmp -s android/app/gradle.lockfile generated-android-locks/app/gradle.lockfile || {
-              echo "::error::Generated Android dependency lock differs from the committed lockfile. Review and update it explicitly."
-              exit 1
-            }
-          else
+          if [[ -f android/gradle/ALLOW_DEPENDENCY_METADATA_REFRESH ]]; then
+            echo "Applying the explicitly approved one-time dependency metadata refresh."
             cp generated-android-locks/app/gradle.lockfile android/app/gradle.lockfile
-          fi
-          if [[ -s android/gradle/verification-metadata.xml ]]; then
-            cmp -s android/gradle/verification-metadata.xml generated-android-locks/gradle/verification-metadata.xml || {
-              echo "::error::Generated verification metadata differs from the committed metadata. Review and update it explicitly."
-              exit 1
-            }
-          else
             cp generated-android-locks/gradle/verification-metadata.xml android/gradle/verification-metadata.xml
+            rm android/gradle/ALLOW_DEPENDENCY_METADATA_REFRESH
+          else
+            if [[ -s android/app/gradle.lockfile ]]; then
+              cmp -s android/app/gradle.lockfile generated-android-locks/app/gradle.lockfile || {
+                echo "::error::Generated Android dependency lock differs from the committed lockfile. Review and approve a one-time refresh."
+                exit 1
+              }
+            else
+              cp generated-android-locks/app/gradle.lockfile android/app/gradle.lockfile
+            fi
+            if [[ -s android/gradle/verification-metadata.xml ]]; then
+              cmp -s android/gradle/verification-metadata.xml generated-android-locks/gradle/verification-metadata.xml || {
+                echo "::error::Generated verification metadata differs from the committed metadata. Review and approve a one-time refresh."
+                exit 1
+              }
+            else
+              cp generated-android-locks/gradle/verification-metadata.xml android/gradle/verification-metadata.xml
+            fi
           fi
-          git add android/app/gradle.lockfile android/gradle/verification-metadata.xml
+          git add -A android/app/gradle.lockfile android/gradle/verification-metadata.xml android/gradle/ALLOW_DEPENDENCY_METADATA_REFRESH
           if git diff --cached --quiet; then
             echo "Committed Android dependency integrity metadata matches the verified build artifact."
           else

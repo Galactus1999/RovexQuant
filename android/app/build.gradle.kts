@@ -1,11 +1,29 @@
 import org.gradle.api.artifacts.dsl.LockMode
 
+buildscript {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+    dependencies {
+        // The license plugin is compiled against a newer KGP. It only needs the
+        // app's already-loaded Kotlin/AGP APIs at runtime; exclude its private
+        // compiler/daemon dependency to prevent a second Kotlin daemon client
+        // from shadowing the application's pinned KGP.
+        classpath("com.jaredsburrows:gradle-license-plugin:0.9.91") {
+            exclude(group = "org.jetbrains.kotlin", module = "kotlin-gradle-plugin")
+            exclude(group = "org.jetbrains.kotlin", module = "kotlin-daemon-client")
+        }
+    }
+}
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
-    id("com.jaredsburrows.license")
 }
+
+apply(plugin = "com.jaredsburrows.license")
 
 dependencyLocking {
     lockAllConfigurations()
