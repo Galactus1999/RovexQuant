@@ -76,7 +76,7 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
                         indexKeys = state.indexKeys,
                         streamStatus = state.streamStatus
                     )
-                    TerminalSection.SCANNER -> StrategyScannerScreen()
+                    TerminalSection.SCANNER -> StrategyScannerScreen(onOpenAi = { selected = TerminalSection.AI })
                     TerminalSection.SIGNALS -> SignalsScreen()
                     TerminalSection.LAB -> ResearchLabScreen(
                         session = activeSession,
