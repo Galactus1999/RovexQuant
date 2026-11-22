@@ -2,7 +2,7 @@
 from datetime import date
 from typing import Any
 
-from rovexquant.market_data.tejhq import TejHqEodProvider
+from rovexquant.market_data.tejhq import TejHqEodProvider, TejHqError
 
 
 def provider_status() -> dict[str, Any]:
