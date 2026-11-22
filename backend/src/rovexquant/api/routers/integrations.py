@@ -1,6 +1,6 @@
 """Provider credential administration routes."""
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
 from rovexquant.api.dependencies import require_quant_admin
 from rovexquant.security.dependencies import require_app_session
@@ -16,7 +16,7 @@ router = APIRouter()
 
 
 class UpstoxAnalyticsTokenInput(BaseModel):
-    token: str = Field(min_length=20, max_length=4096)
+    token: SecretStr
 
 
 @router.put(
@@ -26,7 +26,7 @@ class UpstoxAnalyticsTokenInput(BaseModel):
 def save_app_upstox_analytics_token(request: UpstoxAnalyticsTokenInput):
     """Store the owner's read-only Analytics Token using encrypted server-side storage."""
     try:
-        store_upstox_analytics_token(request.token)
+        store_upstox_analytics_token(request.token.get_secret_value())
         return {
             "provider": "upstox",
             "configured": True,
