@@ -125,7 +125,7 @@ class FakeQuantRepository(
             trendContext = "CLOSE_ABOVE_SMA20_AND_SMA50"
         ),
         bars = listOf(AiDailyBar(toDate, 2480.0, 2520.0, 2470.0, 2500.0, 100000)),
-        ai = AiCompletion(providerId, credentialId, model, "Deterministic AI fixture response.", false),
+        ai = AiCompletion(providerId, credentialId, model, "Deterministic EOD strategy fixture response.", false),
         dataRights = "Private personal research only.",
         limitations = listOf("EOD daily bars only.")
     )
