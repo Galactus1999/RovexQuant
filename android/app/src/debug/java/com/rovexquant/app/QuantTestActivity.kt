@@ -10,6 +10,7 @@ import com.rovexquant.app.data.model.AiProvider
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.AiStrategyEvidence
 import com.rovexquant.app.data.model.MarketIndexInstrument
+import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.IntelligenceFeed
 import com.rovexquant.app.data.model.IntelligenceSource
 import com.rovexquant.app.data.model.MarketEvent
@@ -76,6 +77,12 @@ class FakeQuantRepository(
     override suspend fun fetchIndexInstruments(session: QuantSession) = listOf(
         MarketIndexInstrument("NSE_INDEX|Nifty 50", "Nifty 50", "NIFTY 50"),
         MarketIndexInstrument("NSE_INDEX|Nifty Bank", "Nifty Bank", "NIFTY BANK")
+    )
+
+    override suspend fun fetchEquityInstruments(session: QuantSession) = listOf(
+        MarketEquityInstrument("NSE_EQ|INE002A01018", "RELIANCE INDUSTRIES LTD", "RELIANCE", "INE002A01018"),
+        MarketEquityInstrument("NSE_EQ|INE040A01034", "HDFC BANK LTD", "HDFCBANK", "INE040A01034"),
+        MarketEquityInstrument("NSE_EQ|INE009A01021", "INFOSYS LIMITED", "INFY", "INE009A01021")
     )
 
     override suspend fun fetchNseMcpTools(session: QuantSession, server: String): List<NseMcpCatalog> {
