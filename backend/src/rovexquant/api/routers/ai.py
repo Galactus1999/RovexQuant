@@ -149,6 +149,8 @@ def ai_providers(x_quant_ai_gateway_key: str | None = Header(default=None)):
     try:
         authorize_gateway(x_quant_ai_gateway_key)
         return {"providers": configured_providers()}
+    except GatewayError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
 
 @router.post("/api/v1/ai/chat")
