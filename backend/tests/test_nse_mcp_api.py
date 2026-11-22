@@ -109,3 +109,12 @@ def test_nse_mcp_remote_schema_failure_uses_safe_structured_error(monkeypatch):
     assert response.json()["error"]["code"] == "upstream_error"
     assert response.json()["request_id"] == response.headers["X-Request-ID"]
     assert "tool schema references" in response.json()["detail"]
+
+
+def test_extracted_eod_research_routes_require_app_session():
+    client = TestClient(api.app)
+    assert client.get("/api/v1/app/research/market-data/providers").status_code == 401
+    assert client.get(
+        "/api/v1/app/research/market-data/ohlcv/nse/RELIANCE?from=2025-01-01&to=2025-01-31"
+    ).status_code == 401
+    assert client.get("/api/v1/app/research/market-data/status").status_code == 401
