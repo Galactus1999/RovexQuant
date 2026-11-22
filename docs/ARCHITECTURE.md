@@ -51,7 +51,8 @@ Android UI
 ```
 
 Backend rules:
-- Route handlers validate transport input, authorize, call an application service and map the result to a response. They do not implement indicator formulas, strategy rules, provider protocol logic or portfolio accounting.
+- Route handlers validate transport input, authorize, call an application service or provider port, and map the result to a response. Indicator/backtest formulas live behind `research/service.py`; routes do not implement formulas, strategy rules, provider protocol logic or portfolio accounting.
+- Architecture tests reject imports from HTTP/API layers into deterministic domain packages and reject direct engine imports from the API composition and research router.
 - Domain engines do not import FastAPI, Android, provider SDKs or database drivers.
 - Provider adapters normalize provider responses and report capabilities/provenance; they do not select strategies or make risk decisions.
 - Application services orchestrate domain services and ports. Each domain has one authoritative owner.
@@ -97,7 +98,7 @@ NSE MCP is an on-demand informational source. Do not treat it as a licensed comm
 - Use Neon's pooled transaction endpoint for ordinary short-lived application requests; use a direct endpoint for schema migrations and operations needing session-level state.
 - SQLite is local/test-only and must be selected explicitly. Hosted Docker defaults to PostgreSQL and fails closed if its URL or encryption configuration is absent.
 - Migrations have one owner and run as an explicit deployment operation, not during ordinary request handling.
-- FastAPI in-process tasks are not durable background jobs. A recoverable job must have persistent state, idempotency and restart semantics before it is exposed as reliable.
+- No durable job queue or worker is currently implemented. FastAPI in-process tasks are not durable background jobs. A recoverable job must have persistent state, idempotency and restart semantics before it is exposed as reliable; see `docs/JOBS_AND_HOSTING.md`.
 - Render Free is a development/personal pilot tier: no durable filesystem and no dependable always-on WebSocket/worker guarantees.
 - API requests receive a server-generated `X-Request-ID`; readiness checks mandatory credential storage and schema state. Rate limiting is currently process-local for the single-instance pilot and must be replaced with an atomic shared store before horizontal scaling.
 
@@ -116,6 +117,12 @@ The current backtest is a long-only prototype. Do not describe its output as exe
 ## AI boundary
 
 The current AI gateway is backend-only and uses server-configured credentials. Before Android integration, add per-user authorization, encrypted user credential ownership, quotas/budgets, an allow-listed schema-validated tool registry, data-rights checks, bounded workflows, deterministic quant tools, independent verification and provenance. Never ship a global/admin token in the APK.
+
+## Diagnostics and operational boundaries
+
+- HTTP requests receive a server-owned correlation ID, safe structured error envelope and payload-free structured log.
+- Current HTTP count/latency metrics are process-local, admin-protected and reset on restart. Provider/AI/job metrics are not claimed until their authoritative event sources exist.
+- See `docs/OBSERVABILITY.md` for log fields, metric ownership, redaction and OpenTelemetry span boundaries.
 
 ## Phase governance
 
