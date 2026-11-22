@@ -26,21 +26,31 @@ def main() -> int:
         backup_path = Path(directory) / "quant-vault.dump"
         created = False
         try:
-            subprocess.run(
-                ["pg_dump", "--format=custom", "--no-owner", "--no-privileges",
-                 "--file", str(backup_path), source_url],
-                check=True, capture_output=True, text=True,
-            )
+            try:
+                subprocess.run(
+                    ["pg_dump", "--format=custom", "--no-owner", "--no-privileges",
+                     "--file", str(backup_path), source_url],
+                    check=True, capture_output=True, text=True,
+                )
+            except subprocess.CalledProcessError as error:
+                raise RuntimeError(
+                    f"PostgreSQL backup command failed (exit {error.returncode}); connection details redacted"
+                ) from None
             if not backup_path.is_file() or backup_path.stat().st_size == 0:
                 raise RuntimeError("PostgreSQL backup artifact was empty")
             with psycopg.connect(admin_url, autocommit=True) as connection:
                 connection.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(restore_name)))
                 created = True
-            subprocess.run(
-                ["pg_restore", "--exit-on-error", "--no-owner", "--no-privileges",
-                 "--dbname", restore_url, str(backup_path)],
-                check=True, capture_output=True, text=True,
-            )
+            try:
+                subprocess.run(
+                    ["pg_restore", "--exit-on-error", "--no-owner", "--no-privileges",
+                     "--dbname", restore_url, str(backup_path)],
+                    check=True, capture_output=True, text=True,
+                )
+            except subprocess.CalledProcessError as error:
+                raise RuntimeError(
+                    f"PostgreSQL restore command failed (exit {error.returncode}); connection details redacted"
+                ) from None
             with psycopg.connect(restore_url) as connection:
                 revision = connection.execute(
                     "SELECT version_num FROM alembic_version"
