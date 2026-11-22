@@ -128,6 +128,8 @@ def test_login_rate_limit_cannot_be_bypassed_with_forwarded_ip_header():
         ]
         assert [response.status_code for response in responses[:5]] == [200] * 5
         assert responses[5].status_code == 429
+        assert responses[5].json()["error"]["code"] == "rate_limited"
+        assert responses[5].json()["request_id"] == responses[5].headers["X-Request-ID"]
         assert int(responses[5].headers["Retry-After"]) >= 1
     finally:
         rate_limiter.clear()
