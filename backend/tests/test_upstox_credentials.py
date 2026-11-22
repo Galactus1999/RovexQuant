@@ -161,3 +161,34 @@ def test_test_environment_can_use_local_postgres_without_tls(monkeypatch):
     monkeypatch.setenv("QUANT_TOKEN_ENCRYPTION_KEY", Fernet.generate_key().decode())
 
     vault.validate_storage_configuration()
+
+
+def test_ai_provider_keys_are_encrypted_replaceable_and_deletable(monkeypatch, tmp_path):
+    configure_local_vault(monkeypatch, tmp_path)
+    key = "provider-api-key-secret-value-123456789"
+
+    vault.store_ai_provider_api_key("groq", key)
+
+    assert vault.get_ai_provider_api_key("groq") == key
+    raw = (tmp_path / "vault.sqlite3").read_bytes()
+    assert key.encode() not in raw
+    assert vault.delete_ai_provider_api_key("groq") is True
+    assert vault.get_ai_provider_api_key("groq") is None
+    assert vault.delete_ai_provider_api_key("groq") is False
+
+
+def test_ai_provider_vault_rejects_unsupported_provider_and_short_key(monkeypatch, tmp_path):
+    configure_local_vault(monkeypatch, tmp_path)
+    try:
+        vault.store_ai_provider_api_key("unknown", "provider-api-key-secret-value-123456789")
+    except vault.UpstoxCredentialError as error:
+        assert error.status_code == 422
+    else:
+        raise AssertionError("Unknown providers must not be stored")
+
+    try:
+        vault.store_ai_provider_api_key("groq", "too-short")
+    except vault.UpstoxCredentialError as error:
+        assert error.status_code == 422
+    else:
+        raise AssertionError("Short provider keys must be rejected")
