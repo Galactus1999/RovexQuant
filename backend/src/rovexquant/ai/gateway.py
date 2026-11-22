@@ -32,6 +32,12 @@ class GatewayError(Exception):
 def _credentials_for(provider_id: str) -> list[Credential]:
     config = SUPPORTED[provider_id]
     result: list[Credential] = []
+    # Owner-managed mobile credentials are encrypted in PostgreSQL/SQLite and
+    # remain server-side. They take precedence over environment defaults.
+    from rovexquant.market_data.upstox_credentials import get_ai_provider_api_key
+    stored_key = get_ai_provider_api_key(provider_id)
+    if stored_key:
+        result.append(Credential(provider_id, "app", stored_key))
     raw_map = os.getenv(config.api_keys_json_env, "").strip()
     if raw_map:
         try:
@@ -73,9 +79,13 @@ def _select_credential(provider_id: str, requested_id: str | None) -> Credential
         raise GatewayError(f"Credential '{requested_id}' is not configured for {provider_id}", 400)
     if not credentials:
         raise GatewayError(f"No server credential configured for {provider_id}", 503)
-    # Stable selection is intentional. Named credentials are explicitly selectable;
-    # they are never round-robin rotated when a provider returns 429.
-    return next((item for item in credentials if item.credential_id == "default"), credentials[0])
+    # Stable selection is intentional. The owner-managed encrypted app key is
+    # preferred when present; otherwise use the configured default/first key.
+    # Credentials are never round-robin rotated when a provider returns 429.
+    return (
+        next((item for item in credentials if item.credential_id == "app"), None)
+        or next((item for item in credentials if item.credential_id == "default"), credentials[0])
+    )
 
 
 def _provider_headers(provider_id: str, api_key: str) -> dict[str, str]:
