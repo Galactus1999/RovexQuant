@@ -158,7 +158,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                         Text("Checking server-side providers…", color = Muted, fontSize = 11.sp)
                     }
                     configuredProviders.isEmpty() -> Text(
-                        providerError ?: "No AI provider is configured on the Quant backend. Add a provider API key and model configuration to the backend environment; never put keys in the APK.",
+                        providerError ?: "No AI provider is configured on the Quant backend. Add a provider API key on the backend; optionally set its default model there. Never put keys in the APK.",
                         color = Gold, fontSize = 11.sp, lineHeight = 17.sp
                     )
                     else -> {
