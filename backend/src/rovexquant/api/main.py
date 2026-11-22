@@ -9,6 +9,8 @@ from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.openapi.utils import get_openapi
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import BaseModel, Field, model_validator
 
 from rovexquant.ai.gateway import GatewayError, authorize_gateway, complete_chat, configured_providers
@@ -21,7 +23,8 @@ from rovexquant.auth import AppAuthError, bearer_claims, issue_app_session
 from rovexquant.security.request_controls import (
     RequestBodyLimitMiddleware, login_rate_limit, nse_tool_rate_limit,
 )
-from rovexquant.security.request_context import RequestContextMiddleware
+from rovexquant.security.request_context import RequestContextMiddleware, request_metrics
+from rovexquant.security.errors import http_exception_handler, validation_exception_handler
 from rovexquant.research.router import router as research_router
 from rovexquant.market_data.streaming import StreamError, stream_upstox_market_data
 from rovexquant.market_data.tejhq import TejHqEodProvider, TejHqError
@@ -53,6 +56,8 @@ app = FastAPI(
 )
 app.add_middleware(RequestBodyLimitMiddleware, max_body_size=2 * 1024 * 1024)
 app.add_middleware(RequestContextMiddleware)
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.include_router(research_router)
 
 def _quant_openapi():
@@ -328,6 +333,13 @@ async def market_quotes(
 def health():
     """Liveness only; optional providers are not required for process health."""
     return {"status": "ok", "application": "Quant", "mode": "research-only"}
+
+
+@app.get("/api/v1/health/metrics")
+def health_metrics(x_quant_admin_key: str | None = Header(default=None)):
+    """Expose real process-local HTTP metrics only to the configured admin."""
+    authorize_quant_admin(x_quant_admin_key)
+    return request_metrics.snapshot()
 
 
 @app.get("/api/v1/health/ready")
