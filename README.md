@@ -19,7 +19,7 @@ The backend has provider-neutral quote contracts and REST snapshot adapters for 
 
 For a personal development setup, configure `QUANT_MARKET_GATEWAY_TOKEN` and `UPSTOX_ANALYTICS_TOKEN` in the backend secret environment. Dhan is optional and requires `DHAN_CLIENT_ID` plus `DHAN_ACCESS_TOKEN`; its Data API entitlement and pricing apply. Use `POST /api/v1/market/quotes` with provider-specific instrument mappings and `GET /api/v1/market/providers` to inspect safe configuration status.
 
-**This is a REST snapshot integration, not yet the persistent Upstox V3 WebSocket streaming service.** The Android client is not yet connected to these endpoints. Do not embed the market gateway token or provider credentials in the APK. Before public multi-user access, add per-user authentication, tenant-isolated encrypted credential storage, account ownership checks, quotas, audit controls and provider/exchange data licensing approval.
+The Android app currently calls backend app-session authentication, official NSE index-instrument discovery, the authenticated market WebSocket bridge and the on-demand NSE MCP catalogue/tool endpoints. The Android client does **not** yet consume the REST quote gateway or AI chat gateway. The backend Upstox V3 stream bridge and Protobuf decoder exist, but the upstream subscription frame contract and real credentialed/device operation still require verification; do not claim live streaming until that test passes. TejHQ EOD endpoints are backend-only and are not live data. Do not embed the market gateway token or provider credentials in the APK. Before public multi-user access, add per-user identity, tenant-isolated encrypted credential storage, object authorization, quotas, audit controls and provider/exchange data licensing approval.
 
 ## Personal EOD research data
 The backend now includes an authenticated TejHQ EOD research adapter. Keyless endpoints provide daily OHLCV, full-market snapshots and corporate actions; an optional free TejHQ key enables adjusted prices and delivery history. Configure `TEJHQ_API_KEY` only in the backend environment. The API marks all price responses `END_OF_DAY`; this is not a live quote or streaming provider. See [Research data sources](docs/RESEARCH_DATA_SOURCES.md).
@@ -34,7 +34,7 @@ The current shared gateway token is for controlled server-to-server development 
 ## Current limitations
 - No licensed live NSE/BSE feed is connected to the Android UI. Backend quote adapters require valid user credentials and permitted data entitlements.
 - No broker login, portfolio sync, order placement, automated trading or alert delivery is enabled.
-- The Android client does not yet call the backend or AI gateway.
+- The Android client calls app auth, index-master, WebSocket and NSE MCP endpoints; it does not yet call the REST quote gateway or AI gateway.
 - The backtester is a long-only prototype and does not model all execution costs, market impact, partial fills, queue position, short borrow or derivatives margin.
 - AI output is untrusted analysis and cannot authorize a trade or override deterministic risk controls.
 - Use datasets only where their licence permits the intended analysis.
