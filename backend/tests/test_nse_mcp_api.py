@@ -31,7 +31,8 @@ def test_nse_mcp_catalog_is_authenticated_and_labels_both_sources(monkeypatch):
         async def __aexit__(self, *_):
             return None
         async def list_tools(self):
-            return [{"name": "get_history", "inputSchema": {"type": "object"}}]
+            return [{"name": "get_history", "inputSchema": {"type": "object"},
+                     "annotations": {"readOnlyHint": True}}]
 
     monkeypatch.setattr(api, "NseMcpClient", FakeClient)
     response = TestClient(api.app).get(
