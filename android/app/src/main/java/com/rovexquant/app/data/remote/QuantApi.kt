@@ -6,6 +6,8 @@ import com.rovexquant.app.data.model.AiDailyBar
 import com.rovexquant.app.data.model.AiProvider
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.AiStrategyEvidence
+import com.rovexquant.app.data.model.EodMarketSnapshot
+import com.rovexquant.app.data.model.EodStockMove
 import com.rovexquant.app.data.model.IntelligenceFeed
 import com.rovexquant.app.data.model.IntelligenceSource
 import com.rovexquant.app.data.model.MarketEvent
@@ -472,6 +474,71 @@ object QuantApi {
             else -> "Quant API request failed (HTTP $code)."
         }
     }
+
+
+    fun fetchLatestEodMarketSnapshot(
+        session: QuantSession,
+        exchange: String = "nse",
+        limit: Int = 20
+    ): EodMarketSnapshot {
+        require(exchange in setOf("nse", "bse")) { "Unsupported exchange." }
+        require(limit in 1..50) { "Snapshot limit must be between 1 and 50." }
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/market-data/eod/latest/$exchange?max_lookback_days=10&limit=$limit")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            val root = JSONObject(text)
+            val summary = root.getJSONObject("summary")
+            return EodMarketSnapshot(
+                provider = root.optString("provider", "unknown"),
+                dataMode = root.optString("data_mode", "END_OF_DAY"),
+                exchange = root.optString("exchange", exchange.uppercase()),
+                marketScope = root.optString("market_scope", "NSE_EQ"),
+                tradingDate = root.optString("trading_date"),
+                totalRows = summary.optInt("total_rows"),
+                equitySeriesRows = summary.optInt("equity_series_rows"),
+                pricedSymbols = summary.optInt("priced_symbols"),
+                advances = summary.optInt("advances"),
+                declines = summary.optInt("declines"),
+                unchanged = summary.optInt("unchanged"),
+                topGainers = parseEodStockMoves(summary.optJSONArray("top_gainers")),
+                topLosers = parseEodStockMoves(summary.optJSONArray("top_losers")),
+                mostActiveByVolume = parseEodStockMoves(summary.optJSONArray("most_active_by_volume"))
+            )
+        }
+    }
+
+    private fun parseEodStockMoves(array: org.json.JSONArray?): List<EodStockMove> {
+        if (array == null) return emptyList()
+        return buildList {
+            for (index in 0 until array.length()) {
+                val item = array.optJSONObject(index) ?: continue
+                add(
+                    EodStockMove(
+                        symbol = item.optString("symbol"),
+                        name = item.optString("name"),
+                        series = if (item.isNull("series")) null else item.optString("series"),
+                        close = item.optFiniteDouble("close"),
+                        previousClose = item.optFiniteDouble("previous_close"),
+                        change = item.optFiniteDouble("change"),
+                        changePercent = item.optFiniteDouble("change_pct"),
+                        volume = item.optLong("volume"),
+                        turnover = item.optFiniteDouble("turnover")
+                    )
+                )
+            }
+        }
+    }
+
+    private fun JSONObject.optFiniteDouble(name: String): Double? {
+        if (isNull(name)) return null
+        return optDouble(name, Double.NaN).takeIf { it.isFinite() }
+    }
+
 
     fun fetchIndexInstruments(session: QuantSession): List<MarketIndexInstrument> {
         val request = Request.Builder()
