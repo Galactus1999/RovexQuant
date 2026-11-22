@@ -14,6 +14,8 @@ from typing import Callable
 from fastapi import HTTPException, Request
 from starlette.responses import JSONResponse
 
+from rovexquant.security.request_context import current_request_id
+
 
 class SlidingWindowRateLimiter:
     """Thread-safe, bounded, process-local sliding-window limiter."""
@@ -94,7 +96,7 @@ class RequestBodyLimitMiddleware:
             try:
                 declared_length = int(raw_length)
             except ValueError:
-                response = JSONResponse({"detail": "Invalid Content-Length"}, status_code=400)
+                response = JSONResponse({"detail": "Invalid Content-Length", "error": {"code": "bad_request", "message": "Invalid Content-Length"}, "request_id": current_request_id()}, status_code=400)
                 await response(scope, receive, send)
                 return
             if declared_length < 0:
@@ -103,7 +105,9 @@ class RequestBodyLimitMiddleware:
                 return
             if declared_length > self.max_body_size:
                 response = JSONResponse(
-                    {"detail": "Request body exceeds the configured size limit."},
+                    {"detail": "Request body exceeds the configured size limit.",
+                    "error": {"code": "request_too_large", "message": "Request body exceeds the configured size limit."},
+                    "request_id": current_request_id()},
                     status_code=413,
                 )
                 await response(scope, receive, send)
