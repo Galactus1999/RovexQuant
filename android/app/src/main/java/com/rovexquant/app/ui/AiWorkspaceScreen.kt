@@ -180,6 +180,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                                     onClick = {
                                         selectedProvider = provider.providerId
                                         model = provider.defaultModel.orEmpty()
+                                        credentialInput = ""
                                         credentialError = null
                                     },
                                     label = {
