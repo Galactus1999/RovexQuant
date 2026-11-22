@@ -8,23 +8,30 @@ From the repository root:
 docker build -t quant-api ./backend
 ```
 
-The backend uses Neon PostgreSQL for encrypted provider credentials when
-`QUANT_TOKEN_DATABASE_URL` is configured. Without that variable, local development
-falls back to SQLite at `QUANT_TOKEN_DB_PATH` (default:
-`./quant-secrets.sqlite3`). Do not rely on SQLite on an ephemeral hosting filesystem.
+The backend uses Neon PostgreSQL for encrypted provider credentials in the hosted
+Docker image. The image defaults `QUANT_TOKEN_STORAGE_MODE=postgresql`; startup fails
+closed if `QUANT_TOKEN_DATABASE_URL` is missing or invalid. SQLite is permitted only
+when `QUANT_TOKEN_STORAGE_MODE=sqlite` is explicitly selected for local development
+or isolated tests. Its default path is `./quant-secrets.sqlite3`. Never select SQLite
+for Render Free or another ephemeral hosting filesystem.
 
 ## Required environment
 
 - `QUANT_APP_USERNAME`, `QUANT_APP_PASSWORD`: private Android app login.
 - `QUANT_APP_SESSION_SIGNING_KEY`: at least 32 random characters; rotating it invalidates all current app sessions.
 - `QUANT_TOKEN_ENCRYPTION_KEY`: Fernet key for the encrypted Upstox credential vault. Keep this stable across deployments and backups.
-- `QUANT_TOKEN_DATABASE_URL`: Neon PostgreSQL connection URL. Use Neon's pooled connection string and keep the password private. The backend enforces TLS.
+- `QUANT_TOKEN_STORAGE_MODE`: set to `postgresql` for hosted deployments; use `sqlite` only for local development and isolated tests.
+- `QUANT_TOKEN_DATABASE_URL`: Neon PostgreSQL application connection URL. Use Neon's pooled connection string and keep the password private. The backend enforces TLS.
+- `QUANT_TOKEN_MIGRATION_DATABASE_URL`: reserved for the direct (non-pooled) migration connection; migrations are not yet implemented by this phase's first security batch.
 - `QUANT_ADMIN_GATEWAY_TOKEN`: private credential for initial Upstox token provisioning.
 - `UPSTOX_ANALYTICS_TOKEN`: optional environment fallback; prefer encrypted provisioning.
 
-For local-only SQLite use `QUANT_TOKEN_DB_PATH`; it is ignored when
-`QUANT_TOKEN_DATABASE_URL` is set. PostgreSQL table creation is idempotent and runs
-when the vault first connects. Token values remain Fernet-encrypted in either backend.
+For local-only SQLite set `QUANT_TOKEN_STORAGE_MODE=sqlite` and optionally
+`QUANT_TOKEN_DB_PATH`. The storage mode and URL must agree: PostgreSQL mode without
+a URL, or SQLite mode with a PostgreSQL URL, is a startup/configuration error. Token
+values remain Fernet-encrypted in either backend. Schema migration ownership is a
+separate Phase 1 work package; do not run production schema changes manually based
+on this document.
 The application opens short-lived database connections and does not keep a connection
 pool alive across requests.
 
