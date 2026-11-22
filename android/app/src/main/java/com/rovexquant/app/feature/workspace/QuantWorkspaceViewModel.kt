@@ -129,6 +129,11 @@ class QuantWorkspaceViewModel(
         }
     }
 
+    fun reconnectMarketStream() {
+        val session = _uiState.value.session ?: return
+        startMarketStream(session)
+    }
+
     private fun startMarketStream(session: QuantSession) {
         stopMarketStream()
         val controller = repository.createMarketStream(
