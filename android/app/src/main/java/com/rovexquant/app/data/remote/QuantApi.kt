@@ -11,6 +11,7 @@ import com.rovexquant.app.data.model.IntelligenceSource
 import com.rovexquant.app.data.model.MarketEvent
 import com.rovexquant.app.data.model.SectorImpact
 import com.rovexquant.app.data.model.MarketIndexInstrument
+import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.NseMcpTool
@@ -449,6 +450,36 @@ object QuantApi {
                     }
                 }
             }
+        }
+    }
+
+    fun fetchEquityInstruments(session: QuantSession): List<MarketEquityInstrument> {
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/market/equity-instruments")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            require(text.toByteArray(Charsets.UTF_8).size <= 2 * 1024 * 1024) {
+                "NSE equity instrument master exceeds the 2 MB mobile safety limit."
+            }
+            val records = JSONObject(text).optJSONArray("instruments")
+                ?: throw IllegalStateException("Backend returned no NSE equity master.")
+            return buildList {
+                for (index in 0 until records.length()) {
+                    val item = records.optJSONObject(index) ?: continue
+                    val key = item.optString("instrument_key")
+                    val symbol = item.optString("trading_symbol")
+                    val name = item.optString("name")
+                    val isin = item.optString("isin")
+                    if (key.startsWith("NSE_EQ|INE") && symbol.isNotBlank() && name.isNotBlank()
+                        && isin.isNotBlank() && key == "NSE_EQ|$isin") {
+                        add(MarketEquityInstrument(key, name, symbol, isin))
+                    }
+                }
+            }.sortedBy { it.tradingSymbol }
         }
     }
 }
