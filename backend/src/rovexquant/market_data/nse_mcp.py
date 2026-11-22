@@ -31,10 +31,16 @@ _NSE_READ_ONLY_TOOL_ALLOWLIST = frozenset({
     "get_volume_analysis", "get_stock_history", "get_index_snapshot", "search_symbols",
     "get_stock_vs_index", "compare_stocks", "get_index_history", "moving_average",
     "get_52_week_high_low", "get_index_performance",
+    "cm_get_live_market_data", "cm_get_equity_stocks", "nse_get_losers",
+    "cm_get_call_auction_stocks", "nse_get_gainers", "cm_get_data_status",
+    "cm_get_stock_quote", "cm_get_index_quote", "cm_get_sme_stocks",
+    "cm_get_live_gainers", "cm_get_bond_stocks", "cm_get_live_losers",
+    "cm_get_live_indices", "nse_get_market_movers", "cm_get_allstocks_status",
 })
 _READ_ONLY_DESCRIPTION_VERBS = {
     "get", "search", "compare", "calculate", "calculates", "find",
-    "list", "lookup", "retrieve", "fetch",
+    "list", "lookup", "look", "retrieve", "fetch", "returns",
+    "check", "analyse", "analyze",
 }
 _MUTATING_DESCRIPTION_PARTS = (
     "place order", "submit order", "modify order", "cancel order",
@@ -244,10 +250,13 @@ class NseMcpClient:
         tool = next((item for item in tools if item["name"] == name), None)
         if tool is None:
             raise NseMcpError("Tool is not published by this NSE MCP server", 404)
-        annotations = tool.get("annotations")
-        if not isinstance(annotations, dict) or annotations.get("readOnlyHint") is not True:
+        reviewed = {
+            item["name"]: item["read_only"]
+            for item in safe_tool_catalog(tools)
+        }
+        if not reviewed.get(name, False):
             raise NseMcpError(
-                "NSE MCP tool is not marked read-only (readOnlyHint must be true)", 403
+                "NSE MCP tool is not positively identified as read-only", 403
             )
         schema = tool.get("inputSchema")
         if not isinstance(schema, dict) or schema.get("type") != "object":
