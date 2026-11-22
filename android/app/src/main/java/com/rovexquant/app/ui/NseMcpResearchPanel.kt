@@ -35,9 +35,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @Composable
 fun NseMcpResearchPanel(session: QuantSession, repository: QuantRepository) {
@@ -63,7 +61,7 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantRepository) {
         arguments = "{}"
         scope.launch {
             try {
-                val loaded = withContext(Dispatchers.IO) { repository.fetchNseMcpTools(session, targetServer) }
+                val loaded = repository.fetchNseMcpTools(session, targetServer)
                 catalogs = catalogs.filterNot { old -> loaded.any { it.server == old.server } } + loaded
                 val selectedServer = if (targetServer == "both") server else targetServer
                 val selected = loaded.firstOrNull { it.server == selectedServer }?.tools?.firstOrNull { it.readOnly }
@@ -158,9 +156,7 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantRepository) {
                             result = null
                             scope.launch {
                                 try {
-                                    val response = withContext(Dispatchers.IO) {
-                                        repository.callNseMcpTool(session, server, chosen.name, arguments)
-                                    }
+                                    val response = repository.callNseMcpTool(session, server, chosen.name, arguments)
                                     result = response
                                 } catch (failure: Exception) {
                                     error = failure.message ?: "NSE research request failed."
