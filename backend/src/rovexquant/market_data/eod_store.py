@@ -42,8 +42,10 @@ def database_url() -> str:
     ).strip()
     if not value:
         raise EodStoreError("Market database is not configured")
-    if os.getenv("QUANT_ENV") != "test" and (
-        "sslmode=" not in value or "sslmode=disable" in value
+    if os.getenv("QUANT_ENV") != "test" and not re.search(
+        r"(?:[?&])sslmode=(?:require|verify-ca|verify-full)(?:&|$)",
+        value,
+        re.IGNORECASE,
     ):
         raise EodStoreError("Market database URL must explicitly require TLS")
     return value
