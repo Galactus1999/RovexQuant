@@ -1,6 +1,8 @@
 from datetime import date
 from types import SimpleNamespace
 
+import asyncio
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -63,11 +65,11 @@ def test_mobile_chat_uses_app_session_and_server_provider_secret(mobile_client):
     assert response.status_code == 200
     assert response.json()["content"].startswith("The EOD evidence")
     assert FakeAsyncClient.requests[0]["headers"]["Authorization"] == "Bearer groq-server-secret"
+    assert FakeAsyncClient.requests[0]["json"]["messages"][0]["role"] == "system"
     assert "groq-server-secret" not in response.text
 
 
-@pytest.mark.asyncio
-async def test_strategy_evidence_summary_does_not_claim_live_data(monkeypatch):
+def test_strategy_evidence_summary_does_not_claim_live_data(monkeypatch):
     from rovexquant.api.routers import ai as ai_router
 
     bars = [
@@ -91,7 +93,7 @@ async def test_strategy_evidence_summary_does_not_claim_live_data(monkeypatch):
         from_date=date(2026, 1, 1), to_date=date(2026, 4, 1),
         strategy_context="Review a Donchian breakout idea.",
     )
-    result = await app_ai_strategy_brief(request)
+    result = asyncio.run(app_ai_strategy_brief(request))
     assert result["data_mode"] == "END_OF_DAY"
     assert result["bar_count"] == 70
     assert result["ai"]["content"] == "EOD analysis only."
