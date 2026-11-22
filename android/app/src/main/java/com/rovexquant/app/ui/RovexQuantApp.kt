@@ -76,7 +76,10 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
                         ticks = state.ticks,
                         indexKeys = state.indexKeys,
                         equityInstruments = state.equities,
-                        streamStatus = state.streamStatus
+                        streamStatus = state.streamStatus,
+                        session = activeSession,
+                        repository = workspace.repository,
+                        onReconnect = workspace::reconnectMarketStream
                     )
                     TerminalSection.SCANNER -> StrategyScannerScreen(onOpenAi = { selected = TerminalSection.AI })
                     TerminalSection.SIGNALS -> SignalsScreen()
