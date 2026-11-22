@@ -10,7 +10,7 @@ The Android app uses the existing short-lived Quant app session:
 
 All three mobile routes require `Authorization: Bearer <Quant app session>`. They do not accept or expose `QUANT_AI_GATEWAY_TOKEN`. The older `/api/v1/ai/*` routes remain server-to-server routes protected by `X-Quant-AI-Gateway-Key`.
 
-Provider API keys remain server-side. Configure one or more supported provider secrets in the backend environment:
+Provider API keys remain server-side. Configure one or more supported provider secrets in the backend environment. Optionally set the matching `<PROVIDER>_DEFAULT_MODEL` variable so the Android selector can prefill the model ID:
 
 - `GROQ_API_KEY` / `GROQ_API_KEYS_JSON`
 - `DEEPSEEK_API_KEY` / `DEEPSEEK_API_KEYS_JSON`
