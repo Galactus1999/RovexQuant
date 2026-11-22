@@ -18,7 +18,9 @@ _INSTRUMENT_KEY = re.compile(r"^(?:NSE_INDEX\|[A-Za-z0-9 _&()./-]{1,80}|NSE_EQ\|
 
 
 class StreamError(Exception):
-    pass
+    def __init__(self, message: str, *, retryable: bool = False):
+        super().__init__(message)
+        self.retryable = retryable
 
 
 def decode_feed_message(payload: bytes) -> dict[str, object]:
@@ -86,11 +88,23 @@ async def stream_upstox_market_data(client_websocket, instrument_keys: list[str]
     if any(not _INSTRUMENT_KEY.fullmatch(key) for key in instrument_keys):
         raise StreamError("Only verified NSE index or equity instrument keys are allowed")
 
-    async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=5.0)) as client:
-        response = await client.get(
-            "https://api.upstox.com/v3/feed/market-data-feed/authorize",
-            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=5.0)) as client:
+            response = await client.get(
+                "https://api.upstox.com/v3/feed/market-data-feed/authorize",
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+            )
+    except httpx.TimeoutException as error:
+        raise StreamError("Upstox stream authorization timed out", retryable=True) from error
+    except httpx.RequestError as error:
+        raise StreamError("Upstox stream authorization service is unreachable", retryable=True) from error
+    if response.status_code == 429 or response.status_code >= 500:
+        raise StreamError(
+            f"Upstox stream authorization temporarily unavailable (HTTP {response.status_code})",
+            retryable=True,
         )
+    if response.status_code in (401, 403):
+        raise StreamError("Upstox rejected the configured Analytics Token")
     if response.status_code != 200:
         raise StreamError(f"Upstox stream authorization failed (HTTP {response.status_code})")
     try:
