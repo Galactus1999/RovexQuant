@@ -33,6 +33,7 @@ licenseReport {
     copyCsvReportToAssets = false
     copyHtmlReportToAssets = false
     copyJsonReportToAssets = false
+    copyJsonFullReportToAssets = false
     copyTextReportToAssets = false
 }
 
