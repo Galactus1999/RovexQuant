@@ -70,8 +70,6 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("portfolio.quantity").assertTextEquals("8 shares")
         composeRule.onNodeWithTag("portfolio.stopLoss").assertTextEquals("Planned loss at stop  ₹48.00")
     }
-}
-
 
     @Test fun loginFailureRemainsVisibleAndCanBeRetried() {
         waitForLoginForm()
@@ -98,3 +96,4 @@ class QuantDashboardRegressionTest {
         waitForLoginForm()
         composeRule.onNodeWithText("Connect securely").assertIsDisplayed()
     }
+}
