@@ -134,9 +134,9 @@ class QuantWorkspaceViewModel(
         val controller = repository.createMarketStream(
             session = session,
             onStatus = { status -> _uiState.update { it.copy(streamStatus = status) } },
-            onTick = { tick ->
+            onTicks = { ticks ->
                 _uiState.update { current ->
-                    current.copy(ticks = current.ticks + (tick.instrumentKey to tick))
+                    current.copy(ticks = current.ticks + ticks.associateBy { it.instrumentKey })
                 }
             }
         )
