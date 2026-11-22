@@ -40,6 +40,10 @@ jobs:
           python-version: "3.11"
       - name: Install pinned uv resolver
         run: python -m pip install "uv==0.12.9"
+      - name: Install pinned dependency-lock verifier
+        run: uv pip install --system --no-deps packaging==26.3
+      - name: Install pinned dependency-lock verifier
+        run: uv pip install --system --no-deps packaging==26.3
       - name: Verify exact backend dependency lock
         run: python scripts/verify_dependency_lock.py
       - name: Install exact locked backend dependencies
@@ -62,7 +66,7 @@ jobs:
         with:
           name: Quant-Python-Dependency-Lock-and-Licenses
           path: |
-            backend/uv.lock
+            backend/requirements.lock
             /tmp/quant-python-licenses.json
           if-no-files-found: warn
           retention-days: 14
@@ -366,6 +370,9 @@ jobs:
           cache-dependency-path: backend/pyproject.toml
       - name: Install pinned uv resolver
         run: python -m pip install "uv==0.12.9"
+      - name: Install pinned dependency-lock verifier
+        working-directory: backend
+        run: uv pip install --system --no-deps packaging==26.3
       - name: Verify exact backend dependency lock
         working-directory: backend
         run: python scripts/verify_dependency_lock.py
@@ -376,7 +383,7 @@ jobs:
           uv pip install --system --no-deps -e .
       - name: Backend tests
         working-directory: backend
-        run: uv run --locked --extra dev pytest -q -m "not integration"
+        run: python pytest -q -m "not integration"
       - name: Set up JDK 17
         uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
         with:
