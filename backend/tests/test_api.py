@@ -36,7 +36,7 @@ def test_indicator_endpoint_returns_sma_ema_and_bollinger_reference_values():
     assert result["sma"][:2] == [None, None]
     assert result["sma"][2:] == [2.0, 3.0, 4.0]
     assert result["ema"][:2] == [None, None]
-    assert result["ema"][2:] == [2.0, 3.0, 4.25]
+    assert result["ema"][2:] == [2.0, 3.0, 4.0]
     bands = result["bollinger_bands"]
     assert bands["middle"][2] == 2.0
     assert bands["upper"][2] == pytest.approx(2 + 2 * (2 / 3) ** 0.5)
