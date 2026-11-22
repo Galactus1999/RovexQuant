@@ -4,7 +4,7 @@ import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.NseMcpTool
 import com.rovexquant.app.data.model.QuantSession
-import com.rovexquant.app.data.repository.QuantRepository
+import com.rovexquant.app.data.repository.QuantDataRepository
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -38,7 +38,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 
 @Composable
-fun NseMcpResearchPanel(session: QuantSession, repository: QuantRepository) {
+fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository) {
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     var server by remember { mutableStateOf("bhavcopy") }
