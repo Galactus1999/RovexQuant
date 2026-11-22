@@ -179,7 +179,7 @@ class FakeQuantRepository(
     override fun createMarketStream(
         session: QuantSession,
         onStatus: (String) -> Unit,
-        onTick: (MarketTick) -> Unit
+        onTicks: (List<MarketTick>) -> Unit
     ): MarketStream = object : MarketStream {
         override fun start(instrumentKeys: List<String>) {
             onStatus("Connected · deterministic UI test")
