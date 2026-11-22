@@ -20,8 +20,8 @@ from rovexquant.market_data.nse_mcp import (
 
 # Explicitly allowlisted read-only data/status tools. Never select arbitrary tools.
 CANDIDATES = {
-    "bhavcopy": ("get_market_breadth", "get_market_mood", "get_index_snapshot"),
-    "cmmkt": ("cm_get_data_status", "cm_get_allstocks_status", "cm_get_live_indices"),
+    "bhavcopy": ("get_market_breadth", "get_index_snapshot"),
+    "cmmkt": ("cm_get_live_indices", "cm_get_data_status", "cm_get_allstocks_status"),
 }
 
 # Only fixed, low-impact arguments for explicitly allowlisted read-only tools.
@@ -35,7 +35,9 @@ def _safe_arguments(server: str, tool_name: str) -> dict[str, Any] | None:
         return {"date": _today_nse()}
     if server == "bhavcopy" and tool_name == "get_index_snapshot":
         return {"date": _today_nse(), "filter": "Nifty 50"}
-    if server == "cmmkt" and tool_name in {"cm_get_data_status", "cm_get_allstocks_status", "cm_get_live_indices"}:
+    if server == "cmmkt" and tool_name == "cm_get_live_indices":
+        return {"group": "all", "nameFilter": ""}
+    if server == "cmmkt" and tool_name in {"cm_get_data_status", "cm_get_allstocks_status"}:
         return {}
     return None
 
@@ -106,8 +108,7 @@ async def _check_once(server: str) -> None:
 
         by_name = {tool.get("name"): tool for tool in raw_tools}
         eligible_names = {item["name"] for item in eligible}
-        selected = None
-        arguments = None
+        selected_tools: list[tuple[dict[str, Any], dict[str, Any]]] = []
         for name in CANDIDATES[server]:
             if name not in by_name or name not in eligible_names:
                 continue
@@ -116,10 +117,10 @@ async def _check_once(server: str) -> None:
                 continue
             required = set(_required_fields(by_name[name]))
             if required.issubset(candidate_arguments):
-                selected = by_name[name]
-                arguments = candidate_arguments
+                selected_tools.append((by_name[name], candidate_arguments))
+            if len(selected_tools) == 2:
                 break
-        if selected is None or arguments is None:
+        if not selected_tools:
             required_candidates = {
                 name: _required_fields(by_name[name])
                 for name in CANDIDATES[server]
@@ -130,23 +131,24 @@ async def _check_once(server: str) -> None:
                 f"candidate required fields: {required_candidates}"
             )
 
-        result = await client.call_tool(selected["name"], arguments)
-        structured = result.get("structured_content")
-        content = result.get("content")
-        timestamp = extract_source_timestamp(result)
-        print(json.dumps({
-            "validation": "tool_call_completed",
-            "server": server,
-            "tool": selected["name"],
-            "argument_names": sorted(arguments),
-            "data_mode": "END_OF_DAY" if server == "bhavcopy" else "DELAYED",
-            "source_timestamp": timestamp,
-            "source_timestamp_status": "explicit_feed_timestamp" if timestamp is not None else "not_supplied",
-            "structured_content_shape": _summarize(structured),
-            "content_shape": _summarize(content),
-        }, sort_keys=True))
-        if structured is None and not content:
-            raise RuntimeError(f"NSE {server} tool {selected['name']} returned no content")
+        for selected, arguments in selected_tools:
+            result = await client.call_tool(selected["name"], arguments)
+            structured = result.get("structured_content")
+            content = result.get("content")
+            timestamp = extract_source_timestamp(result)
+            print(json.dumps({
+                "validation": "tool_call_completed",
+                "server": server,
+                "tool": selected["name"],
+                "argument_names": sorted(arguments),
+                "data_mode": "END_OF_DAY" if server == "bhavcopy" else "DELAYED",
+                "source_timestamp": timestamp,
+                "source_timestamp_status": "explicit_feed_timestamp" if timestamp is not None else "not_supplied",
+                "structured_content_shape": _summarize(structured),
+                "content_shape": _summarize(content),
+            }, sort_keys=True))
+            if structured is None and not content:
+                raise RuntimeError(f"NSE {server} tool {selected['name']} returned no content")
 
 
 async def check(server: str) -> None:
