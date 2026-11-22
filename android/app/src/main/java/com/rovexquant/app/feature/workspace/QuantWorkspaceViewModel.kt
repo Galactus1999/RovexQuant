@@ -166,8 +166,7 @@ class QuantWorkspaceViewModel(
             } catch (failure: Exception) {
                 _uiState.update {
                     it.copy(
-                        eodSnapshot = null,
-                        eodSnapshotStatus = failure.message ?: "Latest NSE EOD snapshot unavailable"
+                        eodSnapshotStatus = failure.message ?: "Latest NSE EOD snapshot unavailable; showing the last successful snapshot if available"
                     )
                 }
             }
