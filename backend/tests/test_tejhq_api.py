@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from rovexquant.api import main as api
 from rovexquant.auth import issue_app_session
 from rovexquant.market_data.tejhq import TejHqEodProvider
+from rovexquant.market_data import tejhq_service
 
 
 def _session(monkeypatch):
@@ -34,7 +35,7 @@ def test_tejhq_ohlcv_api_explicitly_labels_data_as_eod(monkeypatch):
 
     provider = TejHqEodProvider(transport=httpx.MockTransport(handler))
     monkeypatch.setattr(
-        api.TejHqEodProvider, "from_environment", classmethod(lambda cls: provider)
+        tejhq_service.TejHqEodProvider, "from_environment", classmethod(lambda cls: provider)
     )
     response = TestClient(api.app).get(
         "/api/v1/app/research/market-data/ohlcv/NSE/RELIANCE",
