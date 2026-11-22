@@ -105,6 +105,6 @@ def test_nse_mcp_remote_schema_failure_uses_safe_structured_error(monkeypatch):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 502
-    assert response.json()["error"]["code"] == "internal_error"
+    assert response.json()["error"]["code"] == "upstream_error"
     assert response.json()["request_id"] == response.headers["X-Request-ID"]
     assert "tool schema references" in response.json()["detail"]
