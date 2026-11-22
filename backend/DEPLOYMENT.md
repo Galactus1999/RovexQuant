@@ -54,6 +54,12 @@ Expose the API only through a managed HTTPS endpoint with WebSocket upgrade supp
 - restrict admin credential provisioning to an operator-controlled network or private tunnel;
 - enforce request/body limits and sensible connection idle timeouts.
 
+The application also applies bounded, process-local rate limits to login, authenticated
+research compute and NSE MCP tool calls. This limiter is a single-instance pilot control:
+it resets on restart and is not shared across multiple workers/instances. Keep the
+reverse-proxy rate limit enabled; before scaling horizontally, replace the in-process
+limiter with an atomic shared store and configure trusted proxy CIDRs.
+
 The first version is a private single-install service. Do not run multiple Android streams concurrently against one Upstox account; the bridge does not yet multiplex subscriptions across users.
 
 ## Provision the provider token
@@ -67,6 +73,6 @@ After deployment, create an Upstox read-only Analytics Token in the Upstox devel
 3. Authenticated `GET /api/v1/app/market/index-instruments` returns official `NSE_INDEX` keys from the Upstox BOD file.
 4. Provision the Analytics Token and verify the admin status endpoint reports connected.
 5. Sign in to the Android app with the backend HTTPS URL.
-6. During an active NSE session, confirm Nifty 50 / sector ticks, exchange timestamps, receive timestamps and quality labels update. A closed market or missing credential must remain visibly disconnected, never synthesize prices.
+6. Do not accept live streaming as working yet: the backend currently sends the Upstox V3 subscription as a text frame, while the provider requires a binary frame. After the Phase 2 protocol correction, verify during an active NSE session that Nifty 50 / sector ticks, exchange timestamps, receive timestamps and quality labels update. A closed market or missing credential must remain visibly disconnected, never synthesize prices.
 
 CI validates compilation, lint, static/backend tests and APK integrity. PostgreSQL unit tests use a controlled driver double; a real Neon connection and Render deployment must still be verified after the private connection URL is configured. CI cannot prove a real Upstox account token or live exchange stream without the operator's credential and deployed backend.
