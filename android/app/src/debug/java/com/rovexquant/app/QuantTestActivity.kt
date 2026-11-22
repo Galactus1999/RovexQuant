@@ -95,6 +95,10 @@ class FakeQuantRepository(
     override suspend fun fetchAiProviders(session: QuantSession) =
         listOf(AiProvider("groq", true, listOf("default")))
 
+    override suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) = Unit
+    override suspend fun saveUpstoxAnalyticsToken(session: QuantSession, token: String) = Unit
+    override suspend fun fetchUpstoxConfigured(session: QuantSession): Boolean = false
+
     override suspend fun fetchIntelligenceEvents(
         session: QuantSession, query: String, timespan: String
     ) = IntelligenceFeed(
