@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import math
+from dataclasses import replace
 from datetime import date, datetime, timezone
 from typing import Any, Literal
 
@@ -62,11 +63,35 @@ def _last_finite(values: list[Any]) -> float | None:
     return None
 
 
+def _apply_corporate_action_adjustment(bars: list[Any]) -> list[Any]:
+    adjusted_bars: list[Any] = []
+    for item in bars:
+        factor = item.adjustment_factor
+        adjusted_close = item.adjusted_close
+        if (
+            not isinstance(factor, (int, float))
+            or not math.isfinite(factor)
+            or factor <= 0
+            or not isinstance(adjusted_close, (int, float))
+            or not math.isfinite(adjusted_close)
+            or adjusted_close <= 0
+        ):
+            raise TejHqError("TejHQ adjusted bar is missing a valid corporate-action factor", 502)
+        opening = item.open * factor
+        high = item.high * factor
+        low = item.low * factor
+        if low > min(opening, adjusted_close) or high < max(opening, adjusted_close) or low > high:
+            raise TejHqError("Adjusted EOD OHLC values are inconsistent", 502)
+        adjusted_bars.append(
+            replace(item, open=opening, high=high, low=low, close=adjusted_close)
+        )
+    return adjusted_bars
+
+
 def _build_eod_evidence(bars: list[Any]) -> dict[str, Any]:
     closes = [item.close for item in bars]
     highs = [item.high for item in bars]
     lows = [item.low for item in bars]
-    volumes = [item.volume for item in bars]
     indicators = calculate_indicators(IndicatorRequest(close=closes, high=highs, low=lows))
     sma20 = _last_finite(indicators["sma"])
     sma50 = _last_finite(
@@ -79,17 +104,11 @@ def _build_eod_evidence(bars: list[Any]) -> dict[str, Any]:
     prior_lows = lows[-21:-1] if len(lows) >= 21 else []
     donchian_high = max(prior_highs) if prior_highs else None
     donchian_low = min(prior_lows) if prior_lows else None
-    average_volume_20 = (sum(volumes[-21:-1]) / 20) if len(volumes) >= 21 else None
-    relative_volume = (
-        volumes[-1] / average_volume_20
-        if average_volume_20 is not None and average_volume_20 > 0 else None
-    )
     return {
         "bar_count": len(bars),
         "first_trading_date": bars[0].date.isoformat(),
         "latest_trading_date": bars[-1].date.isoformat(),
         "latest_close": closes[-1],
-        "latest_volume": volumes[-1],
         "sma20": sma20,
         "sma50": sma50,
         "rsi14": rsi14,
@@ -103,7 +122,8 @@ def _build_eod_evidence(bars: list[Any]) -> dict[str, Any]:
             else "INSIDE_PRIOR_20_DAY_RANGE" if donchian_high is not None
             else "INSUFFICIENT_HISTORY"
         ),
-        "relative_volume_vs_prior_20_sessions": relative_volume,
+        "relative_volume_vs_prior_20_sessions": None,
+        "volume_note": "Source volume is raw and unadjusted; excluded from relative-volume inference.",
         "return_21_sessions_fraction": (
             closes[-1] / closes[-22] - 1 if len(closes) >= 22 and closes[-22] > 0 else None
         ),
@@ -222,17 +242,18 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
             request.symbol,
             request.from_date,
             request.to_date,
-            adjusted=False,
+            adjusted=True,
         )
         if len(bars) < 30:
             raise HTTPException(
                 status_code=422,
                 detail=f"Only {len(bars)} validated EOD bars were available; at least 30 are required for a useful research brief.",
             )
+        bars = _apply_corporate_action_adjustment(bars)
         evidence = _build_eod_evidence(bars)
         system_prompt = (
             "You are Quant's evidence-bounded market research assistant. "
-            "Use only the supplied validated end-of-day (EOD) evidence. "
+            "Use only the supplied validated corporate-action-adjusted end-of-day (EOD) price evidence. "
             "Do not invent prices, candles, volume, indicators, dates, corporate actions, "
             "provider entitlements, or backtest results. Do not call the output a live signal. "
             "EOD data is unsuitable for scalping or intraday decisions. "
@@ -254,6 +275,7 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
             "evidence": evidence,
             "interpretation_constraints": [
                 "Daily bars only; never describe as intraday or live.",
+                "OHLC prices are adjusted using TejHQ cumulative corporate-action factors; volume remains raw and is not used for relative-volume claims.",
                 "Indicators and breakout context were calculated deterministically by Quant.",
                 "A research brief is not a validated strategy, backtest, or trade signal.",
                 "Do not infer missing fundamentals, corporate actions, sector breadth, or market depth.",
@@ -273,7 +295,8 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
         )
         return {
             "provider": provider_id,
-            "data_mode": "END_OF_DAY",
+            "data_mode": "END_OF_DAY_ADJUSTED",
+            "price_adjustment": "TejHQ cumulative split, bonus and dividend adjustment factor applied to OHLC.",
             "exchange": request.exchange,
             "symbol": request.symbol.upper(),
             "requested_from": request.from_date.isoformat(),
@@ -301,6 +324,7 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
             ),
             "limitations": [
                 "EOD daily bars only; not suitable for intraday or scalping strategies.",
+                "OHLC prices are corporate-action adjusted; volume is raw/unadjusted and excluded from relative-volume analysis.",
                 "No licensed live feed, order book, market depth, or guaranteed accuracy.",
                 "AI commentary is not a trade signal or investment advice.",
                 "If this application is offered to others or used commercially, obtain the required provider and exchange rights first.",
