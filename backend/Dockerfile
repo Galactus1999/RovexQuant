@@ -3,7 +3,8 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PORT=8000 \
-    QUANT_TOKEN_DB_PATH=/data/quant-secrets.sqlite3
+    QUANT_TOKEN_DB_PATH=/data/quant-secrets.sqlite3 \
+    QUANT_TOKEN_STORAGE_MODE=postgresql
 
 WORKDIR /app
 COPY pyproject.toml ./
