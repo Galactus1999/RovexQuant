@@ -11,6 +11,7 @@ import com.rovexquant.app.data.model.IntelligenceFeed
 import com.rovexquant.app.data.model.MarketIndexInstrument
 import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.MarketTick
+import com.rovexquant.app.data.model.MarketIngestionStatus
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.QuantSession
@@ -64,6 +65,12 @@ class QuantRepository(context: Context) : QuantDataRepository {
 
     override suspend fun fetchLatestEodMarketSnapshot(session: QuantSession, exchange: String): EodMarketSnapshot =
         withContext(Dispatchers.IO) { QuantApi.fetchLatestEodMarketSnapshot(session, exchange) }
+
+    override suspend fun fetchMarketIngestionStatus(
+        session: QuantSession, exchange: String
+    ): MarketIngestionStatus = withContext(Dispatchers.IO) {
+        QuantApi.fetchMarketIngestionStatus(session, exchange)
+    }
 
     override suspend fun fetchIntelligenceEvents(
         session: QuantSession, query: String, timespan: String
