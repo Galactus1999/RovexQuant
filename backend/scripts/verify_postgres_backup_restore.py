@@ -12,6 +12,20 @@ import psycopg
 from psycopg import sql
 
 
+def _run_pg_client(image: str, directory: str, *arguments: str) -> None:
+    """Run version-matched PostgreSQL tools in a disposable official client image."""
+    command = [
+        "docker", "run", "--rm", "--network", "host",
+        "-v", directory + ":/backup", image, *arguments,
+    ]
+    try:
+        subprocess.run(command, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(
+            f"PostgreSQL client command failed (exit {error.returncode}); connection details redacted"
+        ) from None
+
+
 def main() -> int:
     source_url = os.environ.get("QUANT_TOKEN_TEST_DATABASE_URL", "").strip()
     if not source_url.startswith(("postgresql://", "postgres://")):
@@ -24,14 +38,22 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory(prefix="quant-pg-restore-") as directory:
         backup_path = Path(directory) / "quant-vault.dump"
+        client_image = os.environ.get("QUANT_PG_CLIENT_IMAGE", "").strip()
         created = False
         try:
             try:
-                subprocess.run(
-                    ["pg_dump", "--format=custom", "--no-owner", "--no-privileges",
-                     "--file", str(backup_path), source_url],
-                    check=True, capture_output=True, text=True,
-                )
+                if client_image:
+                    _run_pg_client(
+                        client_image, directory,
+                        "pg_dump", "--format=custom", "--no-owner", "--no-privileges",
+                        "--file", "/backup/quant-vault.dump", source_url,
+                    )
+                else:
+                    subprocess.run(
+                        ["pg_dump", "--format=custom", "--no-owner", "--no-privileges",
+                         "--file", str(backup_path), source_url],
+                        check=True, capture_output=True, text=True,
+                    )
             except subprocess.CalledProcessError as error:
                 raise RuntimeError(
                     f"PostgreSQL backup command failed (exit {error.returncode}); connection details redacted"
@@ -42,11 +64,18 @@ def main() -> int:
                 connection.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(restore_name)))
                 created = True
             try:
-                subprocess.run(
-                    ["pg_restore", "--exit-on-error", "--no-owner", "--no-privileges",
-                     "--dbname", restore_url, str(backup_path)],
-                    check=True, capture_output=True, text=True,
-                )
+                if client_image:
+                    _run_pg_client(
+                        client_image, directory,
+                        "pg_restore", "--exit-on-error", "--no-owner", "--no-privileges",
+                        "--dbname", restore_url, "/backup/quant-vault.dump",
+                    )
+                else:
+                    subprocess.run(
+                        ["pg_restore", "--exit-on-error", "--no-owner", "--no-privileges",
+                         "--dbname", restore_url, str(backup_path)],
+                        check=True, capture_output=True, text=True,
+                    )
             except subprocess.CalledProcessError as error:
                 raise RuntimeError(
                     f"PostgreSQL restore command failed (exit {error.returncode}); connection details redacted"
