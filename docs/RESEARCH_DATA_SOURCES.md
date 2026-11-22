@@ -101,3 +101,16 @@ Do not mix adjusted and unadjusted OHLC series in one backtest. Delivery history
 - NSE MCP terms and capability description: https://www.nseindia.com/nse-mcp
 - NSE reports: https://www.nseindia.in/all-reports
 - NSE data policy: https://www.nseindia.com/static/market-data/nse-data-policy
+
+
+## TejHQ EOD
+
+- Official API documentation: https://tejhq.dev/docs/api/market-data
+- Terms: https://tejhq.dev/terms
+- The keyless full-market NSE/BSE snapshot is an end-of-day source. The provider documents a daily refresh (normally around 18:30 IST with a later retry) and a large full-market response; it is not an intraday feed.
+- Current terms permit personal research, private dashboards and local storage, but prohibit redistribution and commercial use. Quant is restricted to the private owner installation unless the provider grants broader rights.
+- The authenticated app endpoint `/api/v1/app/market-data/eod/latest/{exchange}` searches backwards for the latest non-empty trading date (bounded lookback), then returns a deterministic summary: EQ-series coverage, advances/declines/unchanged, top gainers/losers and most-active stocks.
+- Android requests this snapshot automatically after successful login and exposes manual refresh. The UI labels it `END_OF_DAY` and displays the actual trading date; retrieval time is never presented as a market timestamp.
+- This endpoint does not persist raw snapshots or claim continuous scheduled collection. A durable daily ingestion worker and historical snapshot store remain separate roadmap work.
+- Upstox V3 remains the optional live WebSocket provider. A stored token is not proof of a live feed; the app must receive valid ticks before reporting live connectivity.
+
