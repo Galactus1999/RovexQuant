@@ -20,6 +20,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -47,17 +48,17 @@ fun QuantLoginScreen(
         Spacer(Modifier.height(8.dp))
         Text("Your backend and username are remembered on this device. Your password is never saved.", color = Muted, fontSize = 12.sp)
         Spacer(Modifier.height(22.dp))
-        OutlinedTextField(baseUrl, { baseUrl = it }, Modifier.fillMaxWidth(), label = { Text("Backend HTTPS URL") }, singleLine = true)
+        OutlinedTextField(baseUrl, { baseUrl = it }, Modifier.fillMaxWidth().testTag("login.baseUrl"), label = { Text("Backend HTTPS URL") }, singleLine = true)
         Spacer(Modifier.height(10.dp))
-        OutlinedTextField(username, { username = it }, Modifier.fillMaxWidth(), label = { Text("Username") }, singleLine = true)
+        OutlinedTextField(username, { username = it }, Modifier.fillMaxWidth().testTag("login.username"), label = { Text("Username") }, singleLine = true)
         Spacer(Modifier.height(10.dp))
-        OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
+        OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth().testTag("login.password"), label = { Text("Password") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
         Spacer(Modifier.height(14.dp))
         error?.let { Text(it, color = Color(0xFFFF8B80), fontSize = 11.sp) }
         Button(
             onClick = { onLogin(baseUrl, username, password) },
             enabled = !loading && baseUrl.isNotBlank() && username.isNotBlank() && password.isNotBlank(),
-            modifier = Modifier.fillMaxWidth().height(50.dp),
+            modifier = Modifier.fillMaxWidth().height(50.dp).testTag("login.submit"),
             shape = RoundedCornerShape(14.dp)
         ) {
             if (loading) CircularProgressIndicator() else Text("Connect securely")
