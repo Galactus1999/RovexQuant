@@ -10,7 +10,11 @@ from pydantic import BaseModel, Field, model_validator
 
 from rovexquant.api.dependencies import require_market_gateway
 from rovexquant.auth import AppAuthError, bearer_claims
-from rovexquant.market_data.instruments import InstrumentMasterError, get_nse_index_instruments
+from rovexquant.market_data.instruments import (
+    InstrumentMasterError,
+    get_nse_equity_instruments,
+    get_nse_index_instruments,
+)
 from rovexquant.market_data.providers import QuoteInstrument
 from rovexquant.market_data.service import (
     MarketGatewayError,
@@ -90,6 +94,26 @@ async def app_market_index_instruments():
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
 
+@router.get(
+    "/api/v1/app/market/equity-instruments",
+    dependencies=[Depends(require_app_session)],
+)
+async def app_market_equity_instruments():
+    """Return the official NSE cash-equity BOD master for authenticated market subscriptions."""
+    try:
+        instruments = await get_nse_equity_instruments()
+        return {
+            "provider": "upstox_instrument_master",
+            "data_mode": "INSTRUMENT_REFERENCE",
+            "instrument_count": len(instruments),
+            "instruments": instruments,
+        }
+    except InstrumentMasterError as error:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
 @router.post(
     "/api/v1/app/market/quotes",
     dependencies=[Depends(require_app_session)],
@@ -119,7 +143,7 @@ async def app_market_stream(websocket: WebSocket):
         keys = subscription.get("instrument_keys")
         mode = subscription.get("mode", "full")
         if not isinstance(keys, list) or any(not isinstance(key, str) for key in keys):
-            raise StreamError("instrument_keys must be a list of NSE index keys")
+            raise StreamError("instrument_keys must be a list of verified NSE instrument keys")
         await stream_upstox_market_data(websocket, keys, mode)
     except (StreamError, asyncio.TimeoutError) as error:
         await websocket.send_json({"type": "error", "message": str(error)})

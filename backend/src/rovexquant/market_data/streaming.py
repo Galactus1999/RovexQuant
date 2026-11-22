@@ -14,7 +14,7 @@ import websockets
 from rovexquant.market_data import upstox_market_data_pb2
 
 
-_INSTRUMENT_KEY = re.compile(r"^NSE_INDEX\|[A-Za-z0-9 _&()./-]{1,80}$")
+_INSTRUMENT_KEY = re.compile(r"^(?:NSE_INDEX\|[A-Za-z0-9 _&()./-]{1,80}|NSE_EQ\|INE[A-Z0-9]{9})$")
 
 
 class StreamError(Exception):
@@ -76,17 +76,20 @@ async def stream_upstox_market_data(client_websocket, instrument_keys: list[str]
     token = get_upstox_analytics_token() or os.getenv("UPSTOX_ANALYTICS_TOKEN", "").strip()
     if not token:
         raise StreamError("Upstox Analytics Token is not configured")
-    if not instrument_keys or len(instrument_keys) > 100:
-        raise StreamError("Subscribe to between 1 and 100 NSE index instruments")
-    if any(not _INSTRUMENT_KEY.fullmatch(key) for key in instrument_keys):
-        raise StreamError("Only NSE index instrument keys are allowed on this stream")
     if mode not in {"ltpc", "full"}:
         raise StreamError("Unsupported stream mode")
+    maximum_keys = 5000 if mode == "ltpc" else 2000
+    if not instrument_keys or len(instrument_keys) > maximum_keys:
+        raise StreamError(f"Subscribe to between 1 and {maximum_keys} NSE instruments in {mode} mode")
+    if len(set(instrument_keys)) != len(instrument_keys):
+        raise StreamError("Duplicate instrument keys are not allowed")
+    if any(not _INSTRUMENT_KEY.fullmatch(key) for key in instrument_keys):
+        raise StreamError("Only verified NSE index or equity instrument keys are allowed")
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=5.0)) as client:
         response = await client.get(
             "https://api.upstox.com/v3/feed/market-data-feed/authorize",
-            headers={"Authorization": f"Bearer {token}", "Accept": "*/*"},
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
         )
     if response.status_code != 200:
         raise StreamError(f"Upstox stream authorization failed (HTTP {response.status_code})")
@@ -101,11 +104,14 @@ async def stream_upstox_market_data(client_websocket, instrument_keys: list[str]
         authorized_uri, open_timeout=12, ping_interval=20, ping_timeout=20,
         close_timeout=5, max_size=1_048_576,
     ) as upstream:
-        await upstream.send(json.dumps({
+        # Upstox V3 requires the JSON control payload in a WebSocket binary frame.
+        # Passing str sends an RFC 6455 text frame and the feed will not subscribe.
+        subscription = {
             "guid": uuid.uuid4().hex,
             "method": "sub",
             "data": {"mode": mode, "instrumentKeys": instrument_keys},
-        }))
+        }
+        await upstream.send(json.dumps(subscription, separators=(",", ":")).encode("utf-8"))
         async def forward_upstream() -> None:
             async for message in upstream:
                 if isinstance(message, bytes):

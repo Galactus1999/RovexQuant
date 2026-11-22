@@ -133,6 +133,10 @@ def test_stream_bridge_performs_authorized_v3_subscription_and_decodes_tick(monk
     ltpc.ltp = 24000.0
     ltpc.cp = 23900.0
     ltpc.ltt = int(time.time() * 1000)
+    equity_ltpc = response.feeds["NSE_EQ|INE002A01018"].ltpc
+    equity_ltpc.ltp = 1500.0
+    equity_ltpc.cp = 1490.0
+    equity_ltpc.ltt = int(time.time() * 1000)
     payload = response.SerializeToString()
 
     class FakeHttpResponse:
@@ -148,6 +152,7 @@ def test_stream_bridge_performs_authorized_v3_subscription_and_decodes_tick(monk
         async def get(self, url, headers):
             assert url.endswith("/v3/feed/market-data-feed/authorize")
             assert headers["Authorization"] == "Bearer fake-analytics-token"
+            assert headers["Accept"] == "application/json"
             return FakeHttpResponse()
 
     class FakeUpstream:
@@ -183,11 +188,16 @@ def test_stream_bridge_performs_authorized_v3_subscription_and_decodes_tick(monk
     client_socket = FakeClientWebSocket()
 
     asyncio.run(streaming.stream_upstox_market_data(
-        client_socket, ["NSE_INDEX|Nifty 50"], "full"
+        client_socket, ["NSE_INDEX|Nifty 50", "NSE_EQ|INE002A01018"], "ltpc"
     ))
-    subscription = json.loads(context.connection.sent[0])
+    assert isinstance(context.connection.sent[0], bytes), "Upstox V3 control messages must use a binary WebSocket frame"
+    subscription = json.loads(context.connection.sent[0].decode("utf-8"))
     assert subscription["method"] == "sub"
-    assert subscription["data"] == {"mode": "full", "instrumentKeys": ["NSE_INDEX|Nifty 50"]}
+    assert subscription["data"] == {
+        "mode": "ltpc",
+        "instrumentKeys": ["NSE_INDEX|Nifty 50", "NSE_EQ|INE002A01018"],
+    }
+    assert len(client_socket.messages[0]["quotes"]) == 2
     assert client_socket.messages[0]["quotes"][0]["last_price"] == 24000.0
 
 
@@ -196,7 +206,7 @@ def test_stream_bridge_rejects_unapproved_instrument_keys_before_network(monkeyp
     from rovexquant.market_data.streaming import StreamError, stream_upstox_market_data
 
     monkeypatch.setattr(upstox_credentials, "get_upstox_analytics_token", lambda: "fake-analytics-token")
-    with pytest.raises(StreamError, match="Only NSE index"):
+    with pytest.raises(StreamError, match="Only verified NSE index or equity"):
         asyncio.run(stream_upstox_market_data(object(), ["BSE_INDEX|SENSEX"], "full"))
 
 
@@ -239,3 +249,28 @@ def test_mobile_session_validation_rejects_expired_token(monkeypatch):
         headers={"Authorization": f"Bearer {header}.{payload}.{signature}"},
     )
     assert response.status_code == 401
+
+
+
+def test_app_equity_master_requires_session_and_returns_verified_nse_equities(monkeypatch):
+    configure(monkeypatch)
+
+    async def fake_master():
+        return [{
+            "instrument_key": "NSE_EQ|INE002A01018",
+            "name": "RELIANCE INDUSTRIES LTD",
+            "trading_symbol": "RELIANCE",
+            "isin": "INE002A01018",
+        }]
+
+    monkeypatch.setattr(market_routes, "get_nse_equity_instruments", fake_master)
+    client = TestClient(app)
+    assert client.get("/api/v1/app/market/equity-instruments").status_code == 401
+    token, _ = issue_app_session("quant-user", "long-test-password")
+    response = client.get(
+        "/api/v1/app/market/equity-instruments",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["data_mode"] == "INSTRUMENT_REFERENCE"
+    assert response.json()["instruments"][0]["instrument_key"] == "NSE_EQ|INE002A01018"
