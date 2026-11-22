@@ -18,6 +18,7 @@ import com.rovexquant.app.data.model.IntelligenceSource
 import com.rovexquant.app.data.model.MarketEvent
 import com.rovexquant.app.data.model.SectorImpact
 import com.rovexquant.app.data.model.MarketTick
+import com.rovexquant.app.data.model.MarketIngestionStatus
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.QuantSession
@@ -100,6 +101,22 @@ class FakeQuantRepository(
     override suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) = Unit
     override suspend fun saveUpstoxAnalyticsToken(session: QuantSession, token: String) = Unit
     override suspend fun fetchUpstoxConfigured(session: QuantSession): Boolean = false
+    override suspend fun fetchMarketIngestionStatus(
+        session: QuantSession,
+        exchange: String
+    ) = MarketIngestionStatus(
+        exchange = exchange.uppercase(),
+        status = "SUCCEEDED",
+        provider = "tejhq_eod",
+        tradingDate = "2026-11-20",
+        rowsReceived = 3000,
+        rowsSkipped = 500,
+        rowsUpserted = 2500,
+        lastSuccessfulTradingDate = "2026-11-20",
+        lastSuccessfulProvider = "tejhq_eod",
+        lastSuccessfulRows = 2500,
+        lastSuccessfulAt = "2026-11-21T04:30:00Z"
+    )
     override suspend fun fetchLatestEodMarketSnapshot(
         session: QuantSession,
         exchange: String
