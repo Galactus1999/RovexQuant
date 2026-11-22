@@ -14,6 +14,7 @@ import com.rovexquant.app.data.model.MarketEvent
 import com.rovexquant.app.data.model.SectorImpact
 import com.rovexquant.app.data.model.MarketIndexInstrument
 import com.rovexquant.app.data.model.MarketEquityInstrument
+import com.rovexquant.app.data.model.MarketIngestionStatus
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.NseMcpTool
@@ -476,6 +477,41 @@ object QuantApi {
     }
 
 
+    fun fetchMarketIngestionStatus(
+        session: QuantSession,
+        exchange: String = "nse"
+    ): MarketIngestionStatus {
+        require(exchange in setOf("nse", "bse")) { "Unsupported exchange." }
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/market-data/ingestion/status?exchange=$exchange")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            val root = JSONObject(text)
+            fun optionalString(key: String): String? =
+                root.optString(key).takeIf { it.isNotBlank() && it != "null" }
+            return MarketIngestionStatus(
+                exchange = root.optString("exchange", exchange.uppercase()),
+                status = root.optString("status", "UNKNOWN"),
+                provider = optionalString("provider"),
+                tradingDate = optionalString("trading_date"),
+                rowsReceived = root.optInt("rows_received"),
+                rowsSkipped = root.optInt("rows_skipped"),
+                rowsUpserted = root.optInt("rows_upserted"),
+                startedAt = optionalString("started_at"),
+                completedAt = optionalString("completed_at"),
+                errorCode = optionalString("error_code"),
+                errorMessage = optionalString("error_message"),
+                lastSuccessfulTradingDate = optionalString("last_successful_trading_date"),
+                lastSuccessfulProvider = optionalString("last_successful_provider"),
+                lastSuccessfulRows = root.optInt("last_successful_rows"),
+                lastSuccessfulAt = optionalString("last_successful_at")
+            )
+        }
+    }
     fun fetchLatestEodMarketSnapshot(
         session: QuantSession,
         exchange: String = "nse",
