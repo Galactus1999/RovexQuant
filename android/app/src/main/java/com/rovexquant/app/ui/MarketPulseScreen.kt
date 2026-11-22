@@ -126,7 +126,7 @@ fun MarketPulseScreen(
                 )
                 Text(
                     eodSnapshot?.let {
-                        "TejHQ · ${it.tradingDate} · ${it.pricedSymbols} priced EQ symbols"
+                        "PostgreSQL · ${it.provider} · ${it.tradingDate} · ${it.pricedSymbols} priced symbols"
                     } ?: "Automatically retrieving the latest available NSE trading session from TejHQ.",
                     color = Muted, fontSize = 10.sp, lineHeight = 15.sp
                 )
