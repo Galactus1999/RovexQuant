@@ -363,8 +363,10 @@ def provider_status() -> list[dict[str, Any]]:
 def extract_source_timestamp(result: dict[str, Any]) -> str | int | float | None:
     """Read explicit feed-level timestamps, never timestamps from individual data rows."""
     timestamp_keys = {
-        "source_timestamp", "as_of", "asof", "last_updated",
-        "lastupdated", "market_time", "exchange_timestamp",
+        "source_timestamp", "sourcetimestamp", "nsetimestamp", "updatedat",
+        "timestamp", "as_of", "asof", "last_updated", "lastupdated",
+        "last_updated_at", "lastupdatedat", "feed_timestamp", "market_time",
+        "exchange_timestamp",
     }
     metadata_keys = {"meta", "metadata", "freshness", "feed_status", "market_status"}
     roots: list[Any] = [result.get("structured_content")]
