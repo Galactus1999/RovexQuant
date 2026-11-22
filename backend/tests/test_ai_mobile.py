@@ -77,6 +77,7 @@ def test_strategy_evidence_summary_does_not_claim_live_data(monkeypatch):
             date=date.fromordinal(date(2026, 1, 1).toordinal() + i),
             open=100.0 + i, high=102.0 + i, low=99.0 + i,
             close=101.0 + i, volume=1000 + i,
+            adjusted_close=101.0 + i, adjustment_factor=1.0,
         )
         for i in range(70)
     ]
@@ -94,7 +95,7 @@ def test_strategy_evidence_summary_does_not_claim_live_data(monkeypatch):
         strategy_context="Review a Donchian breakout idea.",
     )
     result = asyncio.run(app_ai_strategy_brief(request))
-    assert result["data_mode"] == "END_OF_DAY"
+    assert result["data_mode"] == "END_OF_DAY_ADJUSTED"
     assert result["bar_count"] == 70
     assert result["ai"]["content"] == "EOD analysis only."
     assert "not suitable for intraday" in result["limitations"][0]
