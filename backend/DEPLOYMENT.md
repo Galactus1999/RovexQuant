@@ -76,3 +76,75 @@ After deployment, create an Upstox read-only Analytics Token in the Upstox devel
 6. Do not accept live streaming as working yet: the backend currently sends the Upstox V3 subscription as a text frame, while the provider requires a binary frame. After the Phase 2 protocol correction, verify during an active NSE session that Nifty 50 / sector ticks, exchange timestamps, receive timestamps and quality labels update. A closed market or missing credential must remain visibly disconnected, never synthesize prices.
 
 CI validates compilation, lint, static/backend tests and APK integrity. PostgreSQL unit tests use a controlled driver double; a real Neon connection and Render deployment must still be verified after the private connection URL is configured. CI cannot prove a real Upstox account token or live exchange stream without the operator's credential and deployed backend.
+
+
+## Backup, restore and encryption-key rotation
+
+These are operator-run procedures. CI proves the process against an isolated
+PostgreSQL 16 service; no production Neon backup, restore or key rotation is
+performed by the application or this repository.
+
+### Backup
+
+Use the direct Neon connection URL for administrative backup operations. Keep
+the URL and backup file outside source control and outside the Android app.
+
+```bash
+cd backend
+pg_dump --format=custom --no-owner --no-privileges \
+  --file "$BACKUP_FILE" "$QUANT_TOKEN_MIGRATION_DATABASE_URL"
+```
+
+Store the backup in an access-controlled encrypted backup destination. Keep the
+Fernet encryption key in a separate approved secret manager; a database backup
+without its matching encryption key is not sufficient to recover credentials.
+Define and document the retention window and access owners in the deployment
+environment before production use.
+
+### Restore drill
+
+Restore into a new isolated database first; never test restore over the active
+database.
+
+```bash
+createdb "$RESTORE_DATABASE_NAME"
+pg_restore --exit-on-error --no-owner --no-privileges \
+  --dbname "$RESTORE_DATABASE_URL" "$BACKUP_FILE"
+```
+
+Verify the Alembic revision, expected vault columns, application readiness, and
+decryption of a known non-production credential test record. Keep the source
+database untouched. After validation, remove the isolated restore database.
+The CI integration job runs an equivalent custom-format dump/restore check and
+verifies the restored migration revision and encrypted legacy row.
+
+### Fernet key rotation
+
+The rotation utility performs one transaction across all provider credential
+rows. If any ciphertext cannot be decrypted with the supplied old key, the
+transaction rolls back. It prints only the number of rows rotated.
+
+1. Schedule a maintenance window and stop writes to the credential vault.
+2. Take and verify a database backup; preserve the old Fernet key securely.
+3. Generate a new Fernet key in the secret manager. Never paste either key into
+   chat, logs, source control, CI output or the APK.
+4. Run from `backend/` with the database variables configured and both
+   `QUANT_TOKEN_OLD_ENCRYPTION_KEY` and `QUANT_TOKEN_NEW_ENCRYPTION_KEY`
+   injected by the secret manager:
+
+```bash
+python scripts/rotate_provider_token_key.py
+```
+
+5. Only after a successful rotation, set `QUANT_TOKEN_ENCRYPTION_KEY` to the
+   new key and restart the backend. Validate readiness and the encrypted vault
+   status without exposing the token.
+6. Retain the old key in the approved recovery store until a subsequent backup
+   and restore drill confirms the new key works. Then follow the organization's
+   secure retirement procedure.
+
+Rollback requires restoring the matching pre-rotation database backup together
+with the old key. Do not point the old key at already-rotated ciphertext.
+
+The production Neon procedure has not been executed in this phase. Treat the
+first production restore and rotation as operator-approved change windows.
