@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rovexquant.app.data.model.AiChatMessage
@@ -37,6 +38,9 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
     var providersLoading by remember { mutableStateOf(true) }
     var providers by remember { mutableStateOf(emptyList<com.rovexquant.app.data.model.AiProvider>()) }
     var providerError by remember { mutableStateOf<String?>(null) }
+    var credentialInput by remember { mutableStateOf("") }
+    var credentialSaving by remember { mutableStateOf(false) }
+    var credentialError by remember { mutableStateOf<String?>(null) }
     var selectedProvider by rememberSaveable { mutableStateOf("") }
     var model by rememberSaveable { mutableStateOf("") }
     var messages by remember { mutableStateOf(emptyList<AiChatMessage>()) }
@@ -65,8 +69,8 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
         try {
             providers = repository.fetchAiProviders(session)
             val configured = providers.filter { it.configured }
-            if (selectedProvider.isBlank() && configured.isNotEmpty()) {
-                val firstProvider = configured.first()
+            if (selectedProvider.isBlank() && providers.isNotEmpty()) {
+                val firstProvider = configured.firstOrNull() ?: providers.first()
                 selectedProvider = firstProvider.providerId
                 model = firstProvider.defaultModel.orEmpty()
             }
@@ -157,8 +161,12 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Mint, strokeWidth = 2.dp)
                         Text("Checking server-side providers…", color = Muted, fontSize = 11.sp)
                     }
-                    configuredProviders.isEmpty() -> Text(
-                        providerError ?: "No AI provider is configured on the Quant backend. Add a provider API key there for chat and AI commentary. Adjusted EOD data recovery can still run independently if TEJHQ_API_KEY is configured. Never put keys in the APK.",
+                    providerError != null && providers.isEmpty() -> Text(
+                        providerError ?: "AI provider discovery failed.",
+                        color = Coral, fontSize = 11.sp, lineHeight = 17.sp
+                    )
+                    providers.isEmpty() -> Text(
+                        "No supported AI providers were returned by the backend.",
                         color = Gold, fontSize = 11.sp, lineHeight = 17.sp
                     )
                     else -> {
@@ -166,16 +174,69 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(7.dp)
                         ) {
-                            configuredProviders.forEach { provider ->
+                            providers.forEach { provider ->
                                 FilterChip(
                                     selected = selectedProvider == provider.providerId,
                                     onClick = {
                                         selectedProvider = provider.providerId
                                         model = provider.defaultModel.orEmpty()
+                                        credentialError = null
                                     },
-                                    label = { Text(provider.providerId.replaceFirstChar { it.uppercase() }) }
+                                    label = {
+                                        Text(
+                                            provider.providerId.replaceFirstChar { it.uppercase() } +
+                                                if (provider.configured) " ✓" else " · setup"
+                                        )
+                                    }
                                 )
                             }
+                        }
+                        val selected = providers.firstOrNull { it.providerId == selectedProvider }
+                        Spacer(Modifier.height(9.dp))
+                        StatusPill(
+                            if (selected?.configured == true) "Provider configured" else "Credential required",
+                            if (selected?.configured == true) Mint else Gold
+                        )
+                        Spacer(Modifier.height(7.dp))
+                        OutlinedTextField(
+                            value = credentialInput,
+                            onValueChange = { credentialInput = it.take(4096); credentialError = null },
+                            label = { Text("Provider API key") },
+                            placeholder = { Text("Paste the key from the provider console") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().testTag("ai.provider.key")
+                        )
+                        Button(
+                            onClick = {
+                                val providerId = selectedProvider
+                                val apiKey = credentialInput.trim()
+                                if (providerId.isBlank() || apiKey.length !in 20..4096 || credentialSaving) return@Button
+                                credentialSaving = true
+                                credentialError = null
+                                scope.launch {
+                                    try {
+                                        repository.saveAiProviderCredential(session, providerId, apiKey)
+                                        credentialInput = ""
+                                        providers = repository.fetchAiProviders(session)
+                                        val updated = providers.firstOrNull { it.providerId == providerId }
+                                        model = updated?.defaultModel.orEmpty().ifBlank { model }
+                                    } catch (cancelled: CancellationException) {
+                                        throw cancelled
+                                    } catch (failure: Exception) {
+                                        credentialError = failure.message ?: "Unable to store provider credential."
+                                    } finally {
+                                        credentialSaving = false
+                                    }
+                                }
+                            },
+                            enabled = !credentialSaving && credentialInput.trim().length in 20..4096,
+                            modifier = Modifier.fillMaxWidth().testTag("ai.provider.save")
+                        ) {
+                            Text(if (credentialSaving) "Encrypting on backend…" else "Save encrypted provider key")
+                        }
+                        credentialError?.let {
+                            Text(it, color = Coral, fontSize = 10.sp, lineHeight = 15.sp)
                         }
                     }
                 }
@@ -189,7 +250,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                     modifier = Modifier.fillMaxWidth().testTag("ai.model")
                 )
                 Text(
-                    "Provider credentials stay on the backend. This screen sends only your app-session token.",
+                    "Keys are sent only over HTTPS, encrypted in the server-side vault, and not saved on this device or included in AI prompts. Provider acceptance is verified when you send the first request.",
                     color = Muted, fontSize = 10.sp, lineHeight = 15.sp
                 )
             }
