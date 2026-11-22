@@ -73,6 +73,7 @@ jobs:
             -v "$DATA_DIR:/data" \
             -e PORT=8000 \
             -e QUANT_TOKEN_DB_PATH=/data/quant-secrets.sqlite3 \
+            -e QUANT_TOKEN_STORAGE_MODE=sqlite \
             -e QUANT_APP_USERNAME=quant-ci \
             -e QUANT_APP_PASSWORD=quant-ci-password \
             -e QUANT_APP_SESSION_SIGNING_KEY="$APP_KEY" \
