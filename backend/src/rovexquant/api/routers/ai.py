@@ -8,7 +8,7 @@ from datetime import date, datetime, timezone
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, SecretStr, model_validator
 
 from rovexquant.ai.gateway import GatewayError, authorize_gateway, complete_chat, configured_providers
 from rovexquant.ai.providers import SUPPORTED
@@ -43,7 +43,7 @@ class AIChatRequest(BaseModel):
 
 
 class AIProviderCredentialInput(BaseModel):
-    api_key: str = Field(min_length=20, max_length=4096)
+    api_key: SecretStr
 
 
 
@@ -215,7 +215,7 @@ def save_app_ai_provider_credential(provider_id: str, request: AIProviderCredent
     if provider_id not in SUPPORTED:
         raise HTTPException(status_code=404, detail="Unsupported AI provider")
     try:
-        store_ai_provider_api_key(provider_id, request.api_key)
+        store_ai_provider_api_key(provider_id, request.api_key.get_secret_value())
     except UpstoxCredentialError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
     return {
