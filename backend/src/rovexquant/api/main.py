@@ -12,11 +12,6 @@ from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel, Field, model_validator
 
 from rovexquant.ai.gateway import GatewayError, authorize_gateway, complete_chat, configured_providers
-from rovexquant.backtesting.engine import BacktestBar, BacktestConfig, run_long_only_backtest
-from rovexquant.indicators.momentum import rsi
-from rovexquant.indicators.moving_average import ema, sma
-from rovexquant.indicators.trend import adx, macd
-from rovexquant.indicators.volatility import atr, bollinger_bands
 from rovexquant.market_data.providers import QuoteInstrument
 from rovexquant.market_data.instruments import InstrumentMasterError, get_nse_index_instruments
 from rovexquant.market_data.service import (
@@ -24,10 +19,10 @@ from rovexquant.market_data.service import (
 )
 from rovexquant.auth import AppAuthError, bearer_claims, issue_app_session
 from rovexquant.security.request_controls import (
-    RequestBodyLimitMiddleware, backtest_rate_limit, indicator_rate_limit,
-    login_rate_limit, nse_tool_rate_limit,
+    RequestBodyLimitMiddleware, login_rate_limit, nse_tool_rate_limit,
 )
 from rovexquant.security.request_context import RequestContextMiddleware
+from rovexquant.research.router import router as research_router
 from rovexquant.market_data.streaming import StreamError, stream_upstox_market_data
 from rovexquant.market_data.tejhq import TejHqEodProvider, TejHqError
 from rovexquant.market_data.nse_mcp import (
@@ -58,6 +53,7 @@ app = FastAPI(
 )
 app.add_middleware(RequestBodyLimitMiddleware, max_body_size=2 * 1024 * 1024)
 app.add_middleware(RequestContextMiddleware)
+app.include_router(research_router)
 
 def _quant_openapi():
     """Publish mobile app authentication as a Swagger HTTP Bearer security scheme."""
@@ -103,12 +99,6 @@ def _quant_openapi():
 
 app.openapi = _quant_openapi
 
-
-def require_app_session(authorization: str | None = Header(default=None)) -> None:
-    try:
-        bearer_claims(authorization)
-    except AppAuthError as error:
-        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
 
 
@@ -246,36 +236,6 @@ async def app_market_stream(websocket: WebSocket):
         await websocket.close(code=1011, reason="Market stream unavailable")
 
 
-class IndicatorRequest(BaseModel):
-    close: list[float] = Field(min_length=1, max_length=10000)
-    high: list[float] | None = Field(default=None, max_length=10000)
-    low: list[float] | None = Field(default=None, max_length=10000)
-    sma_period: int = Field(default=20, ge=1, le=500)
-    ema_period: int = Field(default=20, ge=1, le=500)
-    rsi_period: int = Field(default=14, ge=2, le=500)
-    bollinger_period: int = Field(default=20, ge=2, le=500)
-    bollinger_deviations: float = Field(default=2.0, gt=0, le=10)
-    atr_period: int = Field(default=14, ge=2, le=500)
-    adx_period: int = Field(default=14, ge=2, le=500)
-
-
-class BacktestBarInput(BaseModel):
-    timestamp: datetime
-    open: float = Field(gt=0)
-    high: float = Field(gt=0)
-    low: float = Field(gt=0)
-    close: float = Field(gt=0)
-
-
-class BacktestRequest(BaseModel):
-    bars: list[BacktestBarInput] = Field(min_length=2, max_length=10000)
-    signals: list[int] = Field(min_length=2, max_length=10000)
-    initial_capital: float = Field(default=100000, gt=0)
-    risk_fraction: float = Field(default=0.01, gt=0, le=0.05)
-    max_position_fraction: float = Field(default=0.25, gt=0, le=1)
-    stop_fraction: float = Field(default=0.02, gt=0, lt=1)
-    commission_bps: float = Field(default=5, ge=0)
-    slippage_bps: float = Field(default=5, ge=0)
 
 
 class AIMessage(BaseModel):
@@ -419,65 +379,6 @@ async def ai_chat(request: AIChatRequest, x_quant_ai_gateway_key: str | None = H
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
 
-@app.post(
-    "/api/v1/research/indicators",
-    dependencies=[Depends(require_app_session), Depends(indicator_rate_limit)],
-)
-def calculate_indicators(request: IndicatorRequest):
-    try:
-        bb_upper, bb_middle, bb_lower = bollinger_bands(
-            request.close, request.bollinger_period, request.bollinger_deviations
-        )
-        result = {
-            "sma": sma(request.close, request.sma_period),
-            "ema": ema(request.close, request.ema_period),
-            "rsi": rsi(request.close, request.rsi_period),
-            "macd": macd(request.close),
-            "bollinger_bands": {
-                "upper": bb_upper, "middle": bb_middle, "lower": bb_lower,
-            },
-        }
-        if request.high is not None or request.low is not None:
-            if request.high is None or request.low is None:
-                raise ValueError("high and low must be supplied together")
-            if not (len(request.high) == len(request.low) == len(request.close)):
-                raise ValueError("OHLC arrays must have equal lengths")
-            result["atr"] = atr(request.high, request.low, request.close, request.atr_period)
-            result["adx"] = adx(request.high, request.low, request.close, request.adx_period)
-        return result
-    except ValueError as error:
-        raise HTTPException(status_code=422, detail=str(error)) from error
-
-
-@app.post(
-    "/api/v1/research/backtest",
-    dependencies=[Depends(require_app_session), Depends(backtest_rate_limit)],
-)
-def backtest(request: BacktestRequest):
-    if len(request.bars) != len(request.signals):
-        raise HTTPException(status_code=422, detail="bars and signals must have equal lengths")
-    try:
-        config = BacktestConfig(
-            initial_capital=request.initial_capital, risk_fraction=request.risk_fraction,
-            max_position_fraction=request.max_position_fraction, stop_fraction=request.stop_fraction,
-            commission_bps=request.commission_bps, slippage_bps=request.slippage_bps,
-        )
-        bars = [BacktestBar(**bar.model_dump()) for bar in request.bars]
-        result = run_long_only_backtest(bars, request.signals, config)
-        return {
-            "initial_capital": result.initial_capital, "final_equity": result.final_equity,
-            "total_return_fraction": result.total_return_fraction,
-            "max_drawdown_fraction": result.max_drawdown_fraction, "win_rate": result.win_rate,
-            "profit_factor": result.profit_factor, "trade_count": result.trade_count,
-            "trades": [{
-                "entry_time": trade.entry_time, "exit_time": trade.exit_time,
-                "entry_price": trade.entry_price, "exit_price": trade.exit_price,
-                "quantity": trade.quantity, "net_pnl": trade.net_pnl,
-                "return_fraction": trade.return_fraction, "exit_reason": trade.exit_reason,
-            } for trade in result.trades],
-        }
-    except ValueError as error:
-        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 def _tejhq_or_http_error(error: TejHqError) -> HTTPException:
