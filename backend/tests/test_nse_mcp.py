@@ -474,3 +474,52 @@ def test_unknown_nse_tool_without_positive_read_only_evidence_stays_blocked():
         "annotations": {},
     }])
     assert catalog[0]["read_only"] is False
+
+
+def test_call_tool_uses_reviewed_allowlist_when_nse_omits_annotations():
+    seen = []
+    transport = httpx.MockTransport(_handler_for({
+        "tools": [{
+            "name": "get_index_snapshot",
+            "description": "Get the end-of-day values of NSE indices on a specific date.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["date", "filter"],
+                "properties": {"date": {"type": "string"}, "filter": {"type": "string"}},
+                "additionalProperties": False,
+            },
+            "annotations": {},
+        }],
+        "call": {"structuredContent": {"date": "2026-11-20", "indices": []}},
+    }, seen))
+
+    async def run():
+        async with NseMcpClient("bhavcopy", transport=transport) as client:
+            return await client.call_tool(
+                "get_index_snapshot",
+                {"date": "2026-11-22", "filter": "Nifty 50"},
+            )
+
+    result = asyncio.run(run())
+    assert result["structured_content"]["date"] == "2026-11-20"
+    assert seen[-1][0]["method"] == "tools/call"
+
+
+def test_call_tool_blocks_allowlisted_name_with_negative_server_hint():
+    seen = []
+    transport = httpx.MockTransport(_handler_for({
+        "tools": [{
+            "name": "get_index_snapshot",
+            "description": "Get the end-of-day values of NSE indices on a specific date.",
+            "inputSchema": {"type": "object"},
+            "annotations": {"readOnlyHint": False},
+        }],
+    }, seen))
+
+    async def run():
+        async with NseMcpClient("bhavcopy", transport=transport) as client:
+            await client.call_tool("get_index_snapshot", {})
+
+    with pytest.raises(NseMcpError, match="not marked read-only"):
+        asyncio.run(run())
+    assert not any(body["method"] == "tools/call" for body, _ in seen)
