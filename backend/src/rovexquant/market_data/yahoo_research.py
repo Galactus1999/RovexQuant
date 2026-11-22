@@ -1,6 +1,6 @@
 """Explicitly opt-in Yahoo Finance adapter for local personal research only."""
 from __future__ import annotations
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 import math
 import os
 from typing import Any
