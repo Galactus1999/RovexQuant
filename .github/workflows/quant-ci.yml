@@ -113,7 +113,7 @@ jobs:
       - name: Verify PostgreSQL backup and isolated restore with matching client
         env:
           QUANT_PG_CLIENT_IMAGE: postgres:16
-        run: uv run --locked --extra dev python scripts/verify_postgres_backup_restore.py
+        run: python scripts/verify_postgres_backup_restore.py
 
   quant-backend-container:
     name: Quant Backend Container & Auth Smoke
@@ -224,7 +224,7 @@ jobs:
           uv pip install --system --no-deps -r requirements.lock
           uv pip install --system --no-deps -e .
       - name: Run security, API contract and architecture tests
-        run: uv run --locked --extra dev pytest -q tests/test_architecture.py tests/test_api.py tests/test_nse_mcp.py tests/test_nse_mcp_api.py
+        run: pytest -q tests/test_architecture.py tests/test_api.py tests/test_nse_mcp.py tests/test_nse_mcp_api.py
 
   quant-android-build:
     name: Quant Android Compile, Lint & APK Integrity
