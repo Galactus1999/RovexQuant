@@ -98,7 +98,7 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
         }
     }
 
-    LazyColumn(contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(modifier = Modifier.fillMaxSize().testTag("research.lab.list"), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { SectionHeading("Test the idea before risking capital", "Research lab.", "Use official NSE research tools on demand or import permitted historical OHLCV data for transparent local analysis.") }
         if (session != null && repository != null) item { NseMcpResearchPanel(session, repository) }
         item {
