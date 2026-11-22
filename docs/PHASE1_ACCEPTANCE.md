@@ -43,13 +43,13 @@ This contract freezes the Phase 1 scope. Phase 2 must not begin until every appl
 - [x] AND-02: Move network orchestration out of Composable presentation code into repositories and lifecycle-aware state holders/ViewModels where complexity warrants.
 - [x] AND-03: Ensure lifecycle-aware state collection, cancellation and session cleanup.
 - [x] AND-04: Preserve the single Gradle app module; no wholesale UI rewrite.
-- [x] AND-05: Add deterministic authenticated instrumentation setup and execute login/navigation regression tests on a CI emulator.
+- [ ] AND-05: Add deterministic authenticated instrumentation setup and execute login/navigation regression tests on a CI emulator.
 
 ## P1-CI — Quality gates
-- [ ] CI-01: Ruff, Python compile, backend unit/regression tests, Android compile/lint/JVM tests remain required.
+- [x] CI-01: Ruff, Python compile, backend unit/regression tests, Android compile/lint/JVM tests remain required.
 - [ ] CI-02: Add security, architecture and API contract tests as required jobs.
 - [x] CI-03: Add real PostgreSQL integration service/job.
-- [x] CI-04: Add Android emulator instrumentation job with deterministic auth fixture.
+- [ ] CI-04: Add and execute Android emulator instrumentation job with deterministic auth fixture.
 - [ ] CI-05: Pin/lock runtime dependencies and review GitHub Action runtime deprecations.
 - [ ] CI-06: Keep external credentialed live-provider tests optional and never treat skipped tests as passing evidence.
 - [ ] CI-07: Final CI must pass on the Phase 1 branch head; inspect exact job logs and artifacts.
@@ -90,7 +90,7 @@ Evidence already observed on earlier intermediate checkpoints:
 - Backend static/pytest checkpoint passed after correcting the legacy NSE fixture.
 - A disposable PostgreSQL migration/vault integration job passed.
 - Docker startup and credential-vault smoke passed in SQLite test mode.
-These results predate the latest Android and final Phase 1 edits. They are not final-head acceptance evidence.
+The backend and PostgreSQL results above are superseded by the exact PR checkpoint run below; they are not the sole final-head evidence.
 
 Still open:
 - Backend router/use-case extraction and architecture tests.
@@ -103,3 +103,19 @@ Still open:
 - Final full CI on the exact latest branch head.
 
 No production Neon migration or Render deployment was performed. The disposable PostgreSQL job does not prove production Neon state. No live Upstox/Dhan/NSE credentialed connectivity or physical-device validation is claimed.
+
+
+## Verified PR checkpoint — GitHub Actions run 45013572138
+
+- Exact tested commit: `007418ad69952566ffa52b54cd3704c40b726c13`
+- Workflow: Quant Build & APK Integrity CI
+- Backend static quality / full non-integration pytest: PASS
+- Backend container, app-session and encrypted-vault smoke: PASS
+- Disposable PostgreSQL migration and vault integration: PASS
+- Android Gradle compile, lint and JVM unit tests: PASS
+- APK identity, ZIP integrity and application ID verification: PASS
+- Debug APK artifact uploaded: `Quant-Android-Debug-APK`, 9,041,258 bytes
+- Artifact SHA-256: `3f5346df93c07849e3982c2f1bf1926e292f5b5d582c0fad328ef71cfe94c833`
+- Workflow run URL: https://github.com/Galactus1999/RovexQuant/actions/runs/45013572138
+
+Important limitation: this pull-request-triggered run executed the six jobs supplied by the base branch workflow. It did not execute the new emulator instrumentation job present in this branch's workflow file. AND-05 and CI-04 therefore remain open until a branch-push workflow actually runs the emulator suite and passes. The artifact above is a debug APK, not a release-signed APK.
