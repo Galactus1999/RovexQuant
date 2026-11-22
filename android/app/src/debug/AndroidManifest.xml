@@ -4,5 +4,9 @@
             android:name="com.rovexquant.app.QuantTestActivity"
             android:exported="false"
             android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+        <activity
+            android:name="com.rovexquant.app.QuantLoginTestActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
     </application>
 </manifest>
