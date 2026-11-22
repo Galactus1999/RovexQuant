@@ -68,3 +68,16 @@ def test_rejects_naive_retrieval_timestamp():
             [_row()], exchange="NSE", trading_date=date(2026, 11, 20),
             provider="tejhq_eod", retrieved_at=datetime(2026, 11, 20),
         )
+
+
+def test_market_database_url_requires_tls_enforcement(monkeypatch):
+    from rovexquant.market_data.eod_store import database_url
+
+    monkeypatch.setenv("QUANT_ENV", "production")
+    monkeypatch.setenv("QUANT_MARKET_DATABASE_URL", "postgresql://user:pass@db.example/db?sslmode=prefer")
+    monkeypatch.delenv("QUANT_TOKEN_DATABASE_URL", raising=False)
+    with pytest.raises(EodStoreError, match="require TLS"):
+        database_url()
+
+    monkeypatch.setenv("QUANT_MARKET_DATABASE_URL", "postgresql://user:pass@db.example/db?sslmode=require")
+    assert database_url().endswith("sslmode=require")
