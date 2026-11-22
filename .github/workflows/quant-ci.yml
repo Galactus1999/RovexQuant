@@ -55,7 +55,7 @@ jobs:
       - name: Full backend regression suite
         run: pytest -q -m "not integration"
       - name: Audit locked Python dependencies for known vulnerabilities
-        run: uv pip install --system pip-audit==2.9.0 && pip-audit --local
+        run: uvx --from pip-audit==2.9.0 pip-audit -r requirements.lock
       - name: Export Python dependency license inventory
         run: uv pip install --system pip-licenses==5.0.0 && pip-licenses --format=json > /tmp/quant-python-licenses.json
       - name: Upload Python lock and license inventory
