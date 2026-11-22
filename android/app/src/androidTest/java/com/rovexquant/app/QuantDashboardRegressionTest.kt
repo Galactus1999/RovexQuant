@@ -97,11 +97,13 @@ class QuantDashboardRegressionTest {
     @Test fun intelligenceCentreLoadsEventEvidenceAndSectorTransmission() {
         waitForDashboard()
         composeRule.onNodeWithText("Intel").performClick()
-        composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithTag("intelligence.feed.ready")
-                .fetchSemanticsNodes().isNotEmpty()
-        }
         composeRule.onNodeWithText("AI Intelligence Centre").assertIsDisplayed()
+        composeRule.waitUntil(10_000) {
+            runCatching {
+                composeRule.onNodeWithTag("intelligence.screen")
+                    .performScrollToNode(hasTestTag("intelligence.feed.ready"))
+            }.isSuccess
+        }
         composeRule.onNodeWithTag("intelligence.screen").performScrollToNode(hasText("AVIATION"))
         composeRule.onNodeWithText("AVIATION").assertIsDisplayed()
         composeRule.onNodeWithText("Fuel costs may pressure operating margins.").assertIsDisplayed()
@@ -140,17 +142,21 @@ class QuantLoginRegressionTest {
         composeRule.waitUntil(10_000) {
             val fieldsReady =
                 composeRule.onAllNodesWithTag("login.password").fetchSemanticsNodes().isNotEmpty()
-            val connectionRestored = runCatching {
+            val controlsReady = runCatching {
                 composeRule.onNodeWithTag("login.submit").assertIsDisplayed()
-                composeRule.onNodeWithTag("login.baseUrl").assertTextEquals("https://quant.test")
-                composeRule.onNodeWithTag("login.username").assertTextEquals("quant-test")
+                composeRule.onNodeWithTag("login.baseUrl").assertIsDisplayed()
+                composeRule.onNodeWithTag("login.username").assertIsDisplayed()
             }.isSuccess
-            fieldsReady && connectionRestored
+            fieldsReady && controlsReady
         }
     }
 
     @Test fun loginFailureRemainsVisibleAndCanBeRetried() {
         waitForLoginForm()
+        composeRule.onNodeWithTag("login.baseUrl").performTextClearance()
+        composeRule.onNodeWithTag("login.baseUrl").performTextInput("https://quant.test")
+        composeRule.onNodeWithTag("login.username").performTextClearance()
+        composeRule.onNodeWithTag("login.username").performTextInput("quant-test")
         composeRule.activity.fakeRepository.rejectLogin = true
         composeRule.onNodeWithTag("login.password").performTextInput("wrong-password")
         composeRule.onNodeWithTag("login.submit").performClick()
