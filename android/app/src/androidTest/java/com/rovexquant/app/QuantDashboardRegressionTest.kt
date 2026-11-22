@@ -56,7 +56,8 @@ class QuantDashboardRegressionTest {
 
     @Test fun aiWorkspaceConnectsChatAndEodRecoveryActions() {
         waitForDashboard()
-        composeRule.onNodeWithText("AI").performClick()
+        composeRule.onNodeWithText("Scan").performClick()
+        composeRule.onNodeWithText("Open AI data recovery").performScrollTo().performClick()
         composeRule.onNodeWithText("Quant AI.").assertIsDisplayed()
         composeRule.onNodeWithText("Groq").assertIsDisplayed()
         composeRule.onNodeWithTag("ai.model").performTextInput("test-model")
