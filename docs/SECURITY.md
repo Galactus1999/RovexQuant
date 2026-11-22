@@ -22,7 +22,7 @@
 
 - Provider credentials are server-side only. The Android APK must never contain provider keys or the gateway service token.
 - The private owner app may submit an AI provider key over HTTPS to the authenticated provider-credential route. The backend encrypts it in the existing credential vault; the key is never returned, logged, stored in Android preferences, or included in prompts. The app-managed credential is preferred for that provider.
-- The gateway is disabled unless `QUANT_AI_GATEWAY_TOKEN` is configured. Its current shared-token guard is for controlled server-to-server development; production mobile access requires per-user authentication, authorization and rate limits.
+- `QUANT_AI_GATEWAY_TOKEN` protects the legacy server-to-server AI endpoint. Android `/api/v1/app/ai/*` routes use the short-lived Quant app session and do not receive this shared gateway token.
 - Configure one default credential with `PROVIDER_API_KEY`, or named credentials as a JSON object in `PROVIDER_API_KEYS_JSON`. Example: `{"primary":"...","research":"..."}`. Credential IDs are selectors, not secrets.
 - A named credential is selected explicitly. Quant does not round-robin or rotate keys to bypass provider rate limits, quotas or account entitlements.
 - A provider 429, timeout or 5xx can move to a different explicitly configured fallback provider. A 401/403 is treated as a credential/configuration error and does not trigger key rotation.
