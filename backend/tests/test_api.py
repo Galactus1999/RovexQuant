@@ -22,6 +22,34 @@ def test_indicator_endpoint_returns_warmup_values():
     assert len(response.json()["rsi"]) == 49
     assert len(response.json()["macd"][0]) == 49
 
+def test_indicator_endpoint_returns_sma_ema_and_bollinger_reference_values():
+    response = client.post("/api/v1/research/indicators", json={
+        "close": [1, 2, 3, 4, 5],
+        "sma_period": 3,
+        "ema_period": 3,
+        "bollinger_period": 3,
+        "bollinger_deviations": 2,
+    })
+    assert response.status_code == 200
+    result = response.json()
+    assert result["sma"][:2] == [None, None]
+    assert result["sma"][2:] == [2.0, 3.0, 4.0]
+    assert result["ema"][:2] == [None, None]
+    assert result["ema"][2:] == [2.0, 3.0, 4.25]
+    bands = result["bollinger_bands"]
+    assert bands["middle"][2] == 2.0
+    assert bands["upper"][2] == pytest.approx(2 + 2 * (2 / 3) ** 0.5)
+    assert bands["lower"][2] == pytest.approx(2 - 2 * (2 / 3) ** 0.5)
+
+
+def test_indicator_endpoint_rejects_invalid_moving_average_period():
+    response = client.post("/api/v1/research/indicators", json={
+        "close": [10, 11, 12],
+        "sma_period": 0,
+    })
+    assert response.status_code == 422
+
+
 def test_indicator_endpoint_rejects_partial_ohlc():
     response = client.post("/api/v1/research/indicators", json={"close": [10, 11], "high": [11, 12]})
     assert response.status_code == 422
