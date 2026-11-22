@@ -313,7 +313,7 @@ object QuantApi {
         return when (detail) {
             is String -> detail.take(400)
             is JSONObject -> detail.optString("message").takeIf { it.isNotBlank() }
-                ?: "NSE research request failed (HTTP $code)."
+                ?: "Quant API request failed (HTTP $code)."
             else -> "NSE research request failed (HTTP $code)."
         }
     }
