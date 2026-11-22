@@ -141,3 +141,81 @@ def test_rejects_rows_outside_requested_history_window():
         asyncio.run(provider.get_ohlcv(
             "NSE", "RELIANCE", date(2025, 1, 1), date(2025, 1, 2)
         ))
+
+
+def test_fetch_latest_snapshot_skips_non_trading_days(monkeypatch):
+    from rovexquant.market_data import tejhq_service
+
+    calls = []
+
+    class FakeProvider:
+        provider_id = "tejhq_eod"
+
+        async def get_snapshot(self, exchange, trading_date):
+            calls.append((exchange, trading_date))
+            if trading_date == date(2026, 11, 20):
+                return [{"symbol": "RELIANCE", "series": "EQ", "close": 1400, "prev_close": 1390, "volume": 100}]
+            return []
+
+    provider = FakeProvider()
+    monkeypatch.setattr(
+        tejhq_service.TejHqEodProvider,
+        "from_environment",
+        classmethod(lambda _cls: provider),
+    )
+    provider_id, trading_date, rows = asyncio.run(
+        tejhq_service.fetch_latest_snapshot(
+            "nse", as_of=date(2026, 11, 22), max_lookback_days=10
+        )
+    )
+
+    assert provider_id == "tejhq_eod"
+    assert trading_date == date(2026, 11, 20)
+    assert rows[0]["symbol"] == "RELIANCE"
+    assert [day for _exchange, day in calls] == [
+        date(2026, 11, 22), date(2026, 11, 21), date(2026, 11, 20)
+    ]
+
+
+def test_fetch_latest_snapshot_stops_on_transient_provider_failure(monkeypatch):
+    from rovexquant.market_data import tejhq_service
+
+    class FakeProvider:
+        provider_id = "tejhq_eod"
+
+        async def get_snapshot(self, _exchange, _trading_date):
+            raise TejHqError("provider temporarily unavailable", 503, retryable=True)
+
+    monkeypatch.setattr(
+        tejhq_service.TejHqEodProvider,
+        "from_environment",
+        classmethod(lambda _cls: FakeProvider()),
+    )
+    with pytest.raises(TejHqError, match="temporarily unavailable") as failure:
+        asyncio.run(
+            tejhq_service.fetch_latest_snapshot(
+                "nse", as_of=date(2026, 11, 22), max_lookback_days=10
+            )
+        )
+    assert failure.value.retryable is True
+
+
+def test_summarize_snapshot_rows_uses_only_verified_equity_close_fields():
+    from rovexquant.market_data.tejhq_service import summarize_snapshot_rows
+
+    rows = [
+        {"symbol": "GAIN", "name": "Gainer Ltd", "series": "EQ", "close": 110, "prev_close": 100, "volume": 1000},
+        {"symbol": "LOSS", "series": "EQ", "close": 90, "prev_close": 100, "volume": 2000},
+        {"symbol": "FLAT", "series": "EQ", "close": 100, "prev_close": 100, "volume": 3000},
+        {"symbol": "BEONLY", "series": "BE", "close": 120, "prev_close": 100, "volume": 9000},
+        {"symbol": "INVALID", "series": "EQ", "close": 100, "prev_close": 0, "volume": 0},
+    ]
+    summary = summarize_snapshot_rows(rows, limit=5)
+
+    assert summary["total_rows"] == 5
+    assert summary["equity_series_rows"] == 3
+    assert summary["priced_symbols"] == 3
+    assert (summary["advances"], summary["declines"], summary["unchanged"]) == (1, 1, 1)
+    assert summary["top_gainers"][0]["symbol"] == "GAIN"
+    assert summary["top_losers"][0]["symbol"] == "LOSS"
+    assert summary["most_active_by_volume"][0]["symbol"] == "FLAT"
