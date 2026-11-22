@@ -7,7 +7,7 @@ from datetime import date, datetime, timezone
 import json
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, model_validator
 
 from rovexquant.market_data.nse_mcp import NseMcpError, extract_source_timestamp
