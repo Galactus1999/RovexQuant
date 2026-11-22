@@ -8,6 +8,7 @@ from rovexquant.api.openapi import configure_openapi
 from rovexquant.api.routers.ai import router as ai_router
 from rovexquant.api.routers.auth import router as auth_router
 from rovexquant.api.routers.health import router as health_router
+from rovexquant.api.routers.intelligence import router as intelligence_router
 from rovexquant.api.routers.integrations import router as integrations_router
 from rovexquant.api.routers.market import router as market_router
 from rovexquant.api.routers.strategies import router as strategies_router
@@ -39,6 +40,7 @@ for feature_router in (
     market_router,
     integrations_router,
     health_router,
+    intelligence_router,
     strategies_router,
     ai_router,
     research_router,

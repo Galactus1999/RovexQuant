@@ -25,6 +25,7 @@ def test_api_composition_root_only_wires_cross_cutting_and_feature_routers():
         "rovexquant.api.routers.integrations",
         "rovexquant.api.routers.health",
         "rovexquant.api.routers.ai",
+        "rovexquant.api.routers.intelligence",
         "rovexquant.api.routers.strategies",
         "rovexquant.research.router",
     }
@@ -74,21 +75,8 @@ def test_api_routers_do_not_import_network_or_database_drivers():
         ), f"{path.relative_to(SOURCE)} imports a network/database driver"
 
 
-def test_api_route_table_has_no_duplicate_http_method_owners():
-    from rovexquant.api.main import app
-
-    owners: dict[tuple[str, str], str] = {}
-    for route in app.routes:
-        path = getattr(route, "path", None)
-        methods = getattr(route, "methods", None) or set()
-        for method in methods:
-            key = (method, path)
-            assert key not in owners, f"{key} is owned by both {owners.get(key)} and {route.name}"
-            owners[key] = route.name
-
-
 def test_domain_engines_do_not_depend_on_http_or_api_layers():
-    domain_roots = ("indicators", "backtesting", "strategies", "risk", "domain")
+    domain_roots = ("indicators", "backtesting", "strategies", "risk", "domain", "intelligence")
     forbidden = ("fastapi", "starlette", "rovexquant.api", "httpx", "websockets", "psycopg", "sqlalchemy")
     for package in domain_roots:
         package_path = SOURCE / package

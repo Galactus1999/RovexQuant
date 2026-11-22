@@ -57,6 +57,7 @@ Backend rules:
 - Provider adapters normalize provider responses and report capabilities/provenance; they do not select strategies or make risk decisions.
 - Application services orchestrate domain services and ports. Each domain has one authoritative owner.
 - AI is downstream of data-use policy and deterministic calculations. It may explain evidence but cannot authoritatively calculate, change risk controls or place orders.
+- Event intelligence preserves original source URLs and seen timestamps. Rule-based event classification and sector-impact hypotheses must expose their method and uncertainty; no stock mapping is allowed without canonical company/instrument identity and verified exposure evidence.
 - Shared infrastructure (auth, logging, persistence, policy) must not absorb domain-specific business logic.
 
 Android rules:

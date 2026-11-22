@@ -38,3 +38,22 @@ The AI workspace supports chat and an EOD recovery workflow from the scanner's f
 - The backtester is a long-only prototype and does not model all execution costs, market impact, partial fills, queue position, short borrow or derivatives margin.
 - AI output is untrusted analysis and cannot authorize a trade or override deterministic risk controls.
 - Use datasets only where their licence permits the intended analysis.
+
+
+## AI Intelligence Centre — event discovery foundation
+
+The authenticated mobile API `GET /api/v1/app/intelligence/events` performs
+on-demand global-news discovery through the GDELT DOC API. It deduplicates exact
+normalized headlines, classifies event themes using transparent deterministic
+rules, and attaches explainable first-order sector exposure hypotheses for
+conflict, monetary policy, geopolitical trade, commodity supply, technology and
+innovation, regulation and corporate developments.
+
+This first backend slice deliberately does not generate stock recommendations:
+the existing instrument master is not a complete listed-company/ISIN master and
+does not encode verified revenue, geography, supply-chain or commodity exposure.
+The endpoint reports unresolved stock mapping rather than guessing. GDELT is a
+discovery index, not primary-source verification; use original publisher,
+exchange and regulator sources for material claims. This endpoint is on-demand,
+not an always-on ingestion or alert service. See
+[AI Android integration](docs/AI_ANDROID_INTEGRATION.md).

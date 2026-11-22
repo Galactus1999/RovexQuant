@@ -58,3 +58,32 @@ Before using the Android AI workspace:
 8. Confirm the UI labels the recovered dataset `END_OF_DAY_ADJUSTED`, shows the TejHQ source and latest trading date, and displays the data-rights/limitations notice. If the AI provider is unavailable, the adjusted bars and deterministic metrics should still be returned with an AI-unavailable warning.
 
 The CI suite uses deterministic fake providers and data. It does not prove that a real provider API key, TejHQ upstream, Render deployment or physical Android device is working.
+
+
+## AI Intelligence Centre — first backend slice
+
+An authenticated on-demand discovery endpoint is being introduced at
+`GET /api/v1/app/intelligence/events`. It queries the GDELT DOC API for recent
+global-news articles, retains source URLs and GDELT seen timestamps, deduplicates
+exact normalized headlines, and applies transparent deterministic event tags and
+sector-exposure hypotheses.
+
+The first taxonomy covers conflict/war, monetary policy, geopolitical trade,
+commodity supply, technology/innovation, regulation/policy and corporate
+developments. Sector direction is expressed as a potential exposure channel
+(`POTENTIAL_SUPPORTIVE`, `POTENTIAL_NEGATIVE`, `MIXED`), not a stock-return
+prediction. Each result reports its rule-based classification method and an
+uncalibrated heuristic score. Unclassified headlines receive no sector mapping.
+
+This endpoint is intentionally not a stock recommender. The current instrument
+master resolves index instruments, not a complete canonical listed-company and
+ISIN universe. The API therefore reports `stock_mapping_status=NOT_RESOLVED`
+instead of guessing company/ticker matches. Company-level supply-chain, revenue,
+geography and commodity exposure mapping is a subsequent prerequisite.
+
+GDELT is used for discovery only. Its article seen timestamp is not asserted to be
+the publisher's publication time; material claims must be checked against original
+publisher, exchange or regulator disclosures. The endpoint is on-demand, not a
+durable collector or scheduled monitoring service. No continuous monitoring,
+persistent event history, live price correlation or recommendation performance is
+claimed in this first slice.
