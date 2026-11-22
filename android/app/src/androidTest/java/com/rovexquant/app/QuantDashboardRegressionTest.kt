@@ -1,11 +1,9 @@
 package com.rovexquant.app
 
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertTextEquals
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -17,34 +15,22 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
+/**
+ * Workspace tests start from a deterministic authenticated fixture. They do not
+ * exercise the login flow; authentication has its own test host and test class.
+ */
 @RunWith(AndroidJUnit4::class)
 class QuantDashboardRegressionTest {
     @get:Rule val composeRule = createAndroidComposeRule<QuantTestActivity>()
 
-    private fun waitForLoginForm() {
+    private fun waitForDashboard() {
         composeRule.waitUntil(10_000) {
-            val passwordFieldReady =
-                composeRule.onAllNodesWithTag("login.password").fetchSemanticsNodes().isNotEmpty()
-            val connectionRestored = runCatching {
-                composeRule.onNodeWithTag("login.submit").assertIsEnabled()
-                composeRule.onNodeWithTag("login.baseUrl").assertTextEquals("https://quant.test")
-                composeRule.onNodeWithTag("login.username").assertTextEquals("quant-test")
-            }.isSuccess
-            passwordFieldReady && connectionRestored
-        }
-    }
-
-    private fun login() {
-        waitForLoginForm()
-        composeRule.onNodeWithTag("login.password").performTextInput("correct-password")
-        composeRule.onNodeWithTag("login.submit").performClick()
-        composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithText("Market pulse.").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag("quant.header").fetchSemanticsNodes().isNotEmpty()
         }
     }
 
     @Test fun appStartsWithQuantMarketPulseAndHonestOfflineState() {
-        login()
+        waitForDashboard()
         composeRule.onNodeWithTag("quant.header").assertIsDisplayed()
         composeRule.onNodeWithText("Market pulse.").assertIsDisplayed()
         composeRule.onNodeWithTag("market.feed.status").performScrollTo().assertIsDisplayed()
@@ -53,7 +39,7 @@ class QuantDashboardRegressionTest {
     }
 
     @Test fun bottomNavigationOpensAllWorkspacesAndSectorCoverage() {
-        login()
+        waitForDashboard()
         composeRule.onNodeWithText("Scan").performClick()
         composeRule.onNodeWithText("Strategy scanner.").assertIsDisplayed()
         composeRule.onNodeWithText("No local dataset loaded").performScrollTo().assertIsDisplayed()
@@ -68,7 +54,7 @@ class QuantDashboardRegressionTest {
     }
 
     @Test fun portfolioCalculatesRiskBasedShareQuantity() {
-        login()
+        waitForDashboard()
         composeRule.onNodeWithText("Portfolio").performClick()
         composeRule.onNodeWithTag("portfolio.capital").performTextInput("5000")
         composeRule.onNodeWithTag("portfolio.allocation").performTextClearance()
@@ -77,6 +63,34 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("portfolio.stop").performTextInput("244")
         composeRule.onNodeWithTag("portfolio.quantity").assertTextEquals("8 shares")
         composeRule.onNodeWithTag("portfolio.stopLoss").assertTextEquals("Planned loss at stop  ₹48.00")
+    }
+
+    @Test fun signOutReturnsToLoginAndClearsWorkspaceState() {
+        waitForDashboard()
+        composeRule.onNodeWithText("Sign out").performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("login.password").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("Connect securely").assertIsDisplayed()
+    }
+}
+
+/** Authentication is tested independently from dashboard/workspace rendering. */
+@RunWith(AndroidJUnit4::class)
+class QuantLoginRegressionTest {
+    @get:Rule val composeRule = createAndroidComposeRule<QuantLoginTestActivity>()
+
+    private fun waitForLoginForm() {
+        composeRule.waitUntil(10_000) {
+            val fieldsReady =
+                composeRule.onAllNodesWithTag("login.password").fetchSemanticsNodes().isNotEmpty()
+            val connectionRestored = runCatching {
+                composeRule.onNodeWithTag("login.submit").assertIsDisplayed()
+                composeRule.onNodeWithTag("login.baseUrl").assertTextEquals("https://quant.test")
+                composeRule.onNodeWithTag("login.username").assertTextEquals("quant-test")
+            }.isSuccess
+            fieldsReady && connectionRestored
+        }
     }
 
     @Test fun loginFailureRemainsVisibleAndCanBeRetried() {
@@ -96,13 +110,5 @@ class QuantDashboardRegressionTest {
             composeRule.onAllNodesWithText("Market pulse.").fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithText("Market pulse.").assertIsDisplayed()
-    }
-
-
-    @Test fun signOutReturnsToLoginAndClearsWorkspaceState() {
-        login()
-        composeRule.onNodeWithText("Sign out").performClick()
-        waitForLoginForm()
-        composeRule.onNodeWithText("Connect securely").assertIsDisplayed()
     }
 }
