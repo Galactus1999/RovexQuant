@@ -66,6 +66,8 @@ fun MarketPulseScreen(
     onReconnect: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
+    val activeSession = session
+    val activeRepository = repository
     var equitySearch by remember { mutableStateOf("") }
     var upstoxToken by remember { mutableStateOf("") }
     var tokenSaving by remember { mutableStateOf(false) }
@@ -73,9 +75,11 @@ fun MarketPulseScreen(
     var tokenConfigured by remember { mutableStateOf<Boolean?>(null) }
     var showTokenForm by remember { mutableStateOf(true) }
 
-    LaunchedEffect(session, repository) {
-        if (session != null && repository != null) {
-            tokenConfigured = runCatching { repository.fetchUpstoxConfigured(session) }.getOrNull()
+    LaunchedEffect(activeSession, activeRepository) {
+        if (activeSession != null && activeRepository != null) {
+            tokenConfigured = runCatching {
+                activeRepository.fetchUpstoxConfigured(activeSession)
+            }.getOrNull()
             if (tokenConfigured == true) showTokenForm = false
         }
     }
@@ -93,7 +97,7 @@ fun MarketPulseScreen(
 
     LazyColumn(contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item { SectionHeading("The market, without the noise", "Market pulse.", "A clean overview of indices, breadth, sectors and your tracked universe.") }
-        if (session != null && repository != null) {
+        if (activeSession != null && activeRepository != null) {
             item {
                 TerminalCard {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -146,7 +150,7 @@ fun MarketPulseScreen(
                                 tokenError = null
                                 scope.launch {
                                     try {
-                                        repository.saveUpstoxAnalyticsToken(session, token)
+                                        activeRepository.saveUpstoxAnalyticsToken(activeSession, token)
                                         upstoxToken = ""
                                         tokenConfigured = true
                                         showTokenForm = false
