@@ -108,9 +108,9 @@ jobs:
         run: uv sync --locked --extra dev
       - name: Run real PostgreSQL migrations, vault, rollback and key-rotation tests
         run: uv run --locked --extra dev pytest -q -m integration tests/test_migrations.py
-      - name: Install PostgreSQL backup client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
-      - name: Verify PostgreSQL backup and isolated restore
+      - name: Verify PostgreSQL backup and isolated restore with matching client
+        env:
+          QUANT_PG_CLIENT_IMAGE: postgres:16
         run: uv run --locked --extra dev python scripts/verify_postgres_backup_restore.py
 
   quant-backend-container:
@@ -250,7 +250,7 @@ jobs:
       - name: Resolve and lock Android runtime dependencies
         run: gradle -p android :app:dependencies --write-locks --write-verification-metadata sha256 --no-daemon --stacktrace
       - name: Audit Android runtime dependency licenses
-        run: gradle -p android :app:checkLicense :app:generateLicenseReport --no-daemon --stacktrace
+        run: gradle -p android :app:licenseReleaseReport --no-daemon --stacktrace
       - name: Compile Quant APK and run Android lint
         run: gradle -p android clean :app:assembleDebug :app:lintDebug :app:testDebugUnitTest --no-daemon --stacktrace
       - name: Verify APK identity, contents and archive integrity
@@ -304,7 +304,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Quant-Android-License-Inventory
-          path: android/app/build/reports/dependency-license
+          path: android/app/build/reports/licenses
           if-no-files-found: warn
           retention-days: 14
 
