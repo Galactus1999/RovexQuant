@@ -22,16 +22,20 @@ for Render Free or another ephemeral hosting filesystem.
 - `QUANT_TOKEN_ENCRYPTION_KEY`: Fernet key for the encrypted Upstox credential vault. Keep this stable across deployments and backups.
 - `QUANT_TOKEN_STORAGE_MODE`: set to `postgresql` for hosted deployments; use `sqlite` only for local development and isolated tests.
 - `QUANT_TOKEN_DATABASE_URL`: Neon PostgreSQL application connection URL. Use Neon's pooled connection string and keep the password private. The backend enforces TLS.
-- `QUANT_TOKEN_MIGRATION_DATABASE_URL`: reserved for the direct (non-pooled) migration connection; migrations are not yet implemented by this phase's first security batch.
+- `QUANT_TOKEN_MIGRATION_DATABASE_URL`: direct, non-pooled Neon PostgreSQL URL reserved for Alembic migrations. Never use the pooled application URL for schema changes.
 - `QUANT_ADMIN_GATEWAY_TOKEN`: private credential for initial Upstox token provisioning.
 - `UPSTOX_ANALYTICS_TOKEN`: optional environment fallback; prefer encrypted provisioning.
 
 For local-only SQLite set `QUANT_TOKEN_STORAGE_MODE=sqlite` and optionally
 `QUANT_TOKEN_DB_PATH`. The storage mode and URL must agree: PostgreSQL mode without
 a URL, or SQLite mode with a PostgreSQL URL, is a startup/configuration error. Token
-values remain Fernet-encrypted in either backend. Schema migration ownership is a
-separate Phase 1 work package; do not run production schema changes manually based
-on this document.
+values remain Fernet-encrypted in either backend. Alembic is the single migration owner. Before deploying a revision that changes
+the schema, run `alembic -c alembic.ini upgrade head` from the backend directory
+using `QUANT_TOKEN_MIGRATION_DATABASE_URL`. The migration URL must be direct
+(non-pooled); the application URL remains pooled. Hosted migrations require
+`sslmode=require` or stronger. Runtime requests do not issue PostgreSQL DDL, and
+hosted startup refuses a missing or mismatched Alembic schema revision. See
+[migrations/README.md](migrations/README.md).
 The application opens short-lived database connections and does not keep a connection
 pool alive across requests.
 
