@@ -7,6 +7,7 @@ import com.rovexquant.app.data.model.AiProvider
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.IntelligenceFeed
 import com.rovexquant.app.data.model.MarketIndexInstrument
+import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.MarketTick
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
