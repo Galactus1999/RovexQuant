@@ -1,3 +1,4 @@
+import com.jaredsburrows.license.LicenseReportExtension
 import org.gradle.api.artifacts.dsl.LockMode
 
 buildscript {
@@ -45,7 +46,7 @@ android {
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
 }
-licenseReport {
+extensions.configure<LicenseReportExtension>("licenseReport") {
     generateCsvReport = false
     generateHtmlReport = false
     generateJsonReport = true
