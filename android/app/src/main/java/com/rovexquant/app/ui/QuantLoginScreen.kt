@@ -1,5 +1,6 @@
 package com.rovexquant.app.ui
 
+import com.rovexquant.app.data.local.QuantSessionStore
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -7,11 +8,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -20,25 +21,21 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @Composable
-fun QuantLoginScreen(onLogin: (QuantSession) -> Unit) {
-    val context = LocalContext.current
-    val savedConnection = remember { QuantSessionStore.loadConnection(context) }
-    var baseUrl by remember { mutableStateOf(savedConnection.baseUrl) }
-    var username by remember { mutableStateOf(savedConnection.username) }
+fun QuantLoginScreen(
+    savedConnection: QuantSessionStore.SavedConnection,
+    loading: Boolean,
+    error: String?,
+    onLogin: (String, String, String) -> Unit
+) {
+    var baseUrl by remember(savedConnection.baseUrl) { mutableStateOf(savedConnection.baseUrl) }
+    var username by remember(savedConnection.username) { mutableStateOf(savedConnection.username) }
     var password by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
-    var loading by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
 
     Column(
         Modifier.fillMaxSize().background(Ink).imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
@@ -58,22 +55,7 @@ fun QuantLoginScreen(onLogin: (QuantSession) -> Unit) {
         Spacer(Modifier.height(14.dp))
         error?.let { Text(it, color = Color(0xFFFF8B80), fontSize = 11.sp) }
         Button(
-            onClick = {
-                error = null
-                loading = true
-                scope.launch {
-                    try {
-                        val result = withContext(Dispatchers.IO) { QuantApi.login(baseUrl, username, password) }
-                        withContext(Dispatchers.IO) { QuantSessionStore.save(context, result, username) }
-                        password = ""
-                        onLogin(result)
-                    } catch (failure: Exception) {
-                        error = failure.message ?: "Unable to sign in securely."
-                    } finally {
-                        loading = false
-                    }
-                }
-            },
+            onClick = { onLogin(baseUrl, username, password) },
             enabled = !loading && baseUrl.isNotBlank() && username.isNotBlank() && password.isNotBlank(),
             modifier = Modifier.fillMaxWidth().height(50.dp),
             shape = RoundedCornerShape(14.dp)
