@@ -43,6 +43,9 @@ class QuantRepository(context: Context) : QuantDataRepository {
     override suspend fun fetchIndexInstruments(session: QuantSession): List<MarketIndexInstrument> =
         withContext(Dispatchers.IO) { QuantApi.fetchIndexInstruments(session) }
 
+    override suspend fun fetchEquityInstruments(session: QuantSession): List<MarketEquityInstrument> =
+        withContext(Dispatchers.IO) { QuantApi.fetchEquityInstruments(session) }
+
     override suspend fun fetchNseMcpTools(session: QuantSession, server: String): List<NseMcpCatalog> =
         withContext(Dispatchers.IO) { QuantApi.fetchNseMcpTools(session, server) }
 
