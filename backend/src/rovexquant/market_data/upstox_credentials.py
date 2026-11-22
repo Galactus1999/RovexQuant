@@ -1,4 +1,4 @@
-"""Encrypted server-side storage for the Upstox read-only Analytics Token."""
+"""Encrypted server-side Upstox token storage (PostgreSQL on Render, SQLite locally)."""
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -7,7 +7,9 @@ import os
 from pathlib import Path
 import sqlite3
 import time
+from typing import Any
 
+import psycopg
 from cryptography.fernet import Fernet, InvalidToken
 
 
@@ -29,13 +31,37 @@ def _fernet() -> Fernet:
         ) from error
 
 
-def _db_path() -> Path:
-    return Path(os.getenv("QUANT_TOKEN_DB_PATH", "./quant-secrets.sqlite3"))
+def _database_url() -> str:
+    return os.getenv("QUANT_TOKEN_DATABASE_URL", "").strip()
 
 
 @contextmanager
-def _connect() -> Iterator[sqlite3.Connection]:
-    path = _db_path()
+def _connect() -> Iterator[Any]:
+    """Open one short-lived DB connection; never retain a connection across requests."""
+    database_url = _database_url()
+    if database_url:
+        if not database_url.startswith(("postgresql://", "postgres://")):
+            raise UpstoxCredentialError(
+                "QUANT_TOKEN_DATABASE_URL must be a PostgreSQL connection URL", 503
+            )
+        # Neon requires TLS. The pooled endpoint is compatible with short transactions.
+        connection = psycopg.connect(database_url, connect_timeout=10, sslmode="require")
+        try:
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS provider_tokens "
+                "(provider TEXT PRIMARY KEY, encrypted_token BYTEA NOT NULL, "
+                "updated_at BIGINT NOT NULL, expires_at BIGINT)"
+            )
+            yield connection
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+        return
+
+    path = Path(os.getenv("QUANT_TOKEN_DB_PATH", "./quant-secrets.sqlite3"))
     path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(path, timeout=10)
     try:
@@ -65,10 +91,12 @@ def store_upstox_analytics_token(token: str) -> None:
     now = int(time.time())
     # Upstox Analytics Tokens are documented as valid for one year.
     expires_at = now + 365 * 24 * 60 * 60
+    placeholder = "%s" if _database_url() else "?"
     with _connect() as connection:
         connection.execute(
             "INSERT INTO provider_tokens(provider, encrypted_token, updated_at, expires_at) "
-            "VALUES (?, ?, ?, ?) ON CONFLICT(provider) DO UPDATE SET "
+            f"VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}) "
+            "ON CONFLICT(provider) DO UPDATE SET "
             "encrypted_token=excluded.encrypted_token, updated_at=excluded.updated_at, "
             "expires_at=excluded.expires_at",
             ("upstox", encrypted, now, expires_at),
@@ -76,23 +104,30 @@ def store_upstox_analytics_token(token: str) -> None:
 
 
 def get_upstox_analytics_token() -> str | None:
+    placeholder = "%s" if _database_url() else "?"
     try:
         with _connect() as connection:
             row = connection.execute(
-                "SELECT encrypted_token, expires_at FROM provider_tokens WHERE provider='upstox'"
+                "SELECT encrypted_token, expires_at FROM provider_tokens "
+                f"WHERE provider={placeholder}",
+                ("upstox",),
             ).fetchone()
         if not row or row[1] is None or int(row[1]) <= int(time.time()):
             return None
-        return _fernet().decrypt(row[0]).decode()
-    except (sqlite3.Error, InvalidToken, UnicodeDecodeError, UpstoxCredentialError, ValueError):
+        return _fernet().decrypt(bytes(row[0])).decode()
+    except (sqlite3.Error, psycopg.Error, InvalidToken, UnicodeDecodeError,
+            UpstoxCredentialError, ValueError):
         return None
 
 
 def upstox_analytics_status() -> dict[str, object]:
+    placeholder = "%s" if _database_url() else "?"
     try:
         with _connect() as connection:
             row = connection.execute(
-                "SELECT updated_at, expires_at FROM provider_tokens WHERE provider='upstox'"
+                "SELECT updated_at, expires_at FROM provider_tokens "
+                f"WHERE provider={placeholder}",
+                ("upstox",),
             ).fetchone()
         now = int(time.time())
         connected = bool(row and row[1] is not None and int(row[1]) > now
@@ -105,6 +140,6 @@ def upstox_analytics_status() -> dict[str, object]:
             "expires_at": row[1] if row else None,
             "credential_storage": "encrypted_server_side" if connected else "not_connected",
         }
-    except (sqlite3.Error, ValueError):
+    except (sqlite3.Error, psycopg.Error, ValueError, UpstoxCredentialError):
         return {"provider_id": "upstox", "connected": False,
                 "credential_type": "analytics_read_only", "credential_storage": "unavailable"}
