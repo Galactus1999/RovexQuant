@@ -60,8 +60,9 @@ class MarketStreamController(
         handler.post { if (!stopped) onStatus(value) }
     }
 
-    private fun emitTick(value: MarketTick) {
-        handler.post { if (!stopped) onTick(value) }
+    private fun emitTicks(values: List<MarketTick>) {
+        if (values.isEmpty()) return
+        handler.post { if (!stopped) onTicks(values) }
     }
 
     private fun connect() {
