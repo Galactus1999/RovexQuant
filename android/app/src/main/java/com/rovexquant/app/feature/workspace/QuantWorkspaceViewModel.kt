@@ -7,9 +7,13 @@ import com.rovexquant.app.data.local.QuantSessionStore
 import com.rovexquant.app.data.model.MarketIndexInstrument
 import com.rovexquant.app.data.model.MarketTick
 import com.rovexquant.app.data.model.QuantSession
-import com.rovexquant.app.data.remote.MarketStreamController
+import com.rovexquant.app.data.repository.MarketStream
+import com.rovexquant.app.data.repository.QuantDataRepository
 import com.rovexquant.app.data.repository.QuantRepository
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -27,12 +31,18 @@ data class QuantWorkspaceUiState(
 )
 
 /** Owns session, stream lifecycle and workspace state across Compose recompositions. */
-class QuantWorkspaceViewModel(application: Application) : AndroidViewModel(application) {
-    val repository = QuantRepository(application)
+class QuantWorkspaceViewModel(
+    application: Application,
+    val repository: QuantDataRepository
+) : AndroidViewModel(application) {
+    constructor(application: Application) : this(application, QuantRepository(application))
 
     private val _uiState = MutableStateFlow(QuantWorkspaceUiState())
     val uiState = _uiState.asStateFlow()
-    private var marketStream: MarketStreamController? = null
+    private var marketStream: MarketStream? = null
+    private var marketJob: Job? = null
+    private var loginJob: Job? = null
+    private val authMutex = Mutex()
 
     init {
         restoreSession()
@@ -40,19 +50,21 @@ class QuantWorkspaceViewModel(application: Application) : AndroidViewModel(appli
 
     fun login(baseUrl: String, username: String, password: String) {
         if (_uiState.value.loginLoading) return
-        viewModelScope.launch {
+        loginJob = viewModelScope.launch {
             _uiState.update { it.copy(loginLoading = true, loginError = null) }
             try {
-                val session = repository.login(baseUrl, username, password)
-                repository.saveSession(session, username)
-                _uiState.update {
-                    it.copy(
-                        session = session,
-                        savedConnection = QuantSessionStore.SavedConnection(session.baseUrl, username.trim()),
-                        loginError = null
-                    )
+                authMutex.withLock {
+                    val session = repository.login(baseUrl, username, password)
+                    repository.saveSession(session, username)
+                    _uiState.update {
+                        it.copy(
+                            session = session,
+                            savedConnection = QuantSessionStore.SavedConnection(session.baseUrl, username.trim()),
+                            loginError = null
+                        )
+                    }
+                    startMarketStream(session)
                 }
-                startMarketStream(session)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
@@ -66,9 +78,10 @@ class QuantWorkspaceViewModel(application: Application) : AndroidViewModel(appli
     }
 
     fun signOut() {
-        marketStream?.stop()
-        marketStream = null
-        viewModelScope.launch { repository.clearSession() }
+        loginJob?.cancel()
+        loginJob = null
+        stopMarketStream()
+        viewModelScope.launch { authMutex.withLock { repository.clearSession() } }
         _uiState.update {
             it.copy(
                 session = null,
@@ -114,7 +127,7 @@ class QuantWorkspaceViewModel(application: Application) : AndroidViewModel(appli
     }
 
     private fun startMarketStream(session: QuantSession) {
-        marketStream?.stop()
+        stopMarketStream()
         val controller = repository.createMarketStream(
             session = session,
             onStatus = { status -> _uiState.update { it.copy(streamStatus = status) } },
@@ -127,7 +140,7 @@ class QuantWorkspaceViewModel(application: Application) : AndroidViewModel(appli
         marketStream = controller
         _uiState.update { it.copy(streamStatus = "Loading official NSE index master") }
 
-        viewModelScope.launch {
+        marketJob = viewModelScope.launch {
             try {
                 val master = repository.fetchIndexInstruments(session)
                 val resolved = resolveDashboardIndices(master)
@@ -194,9 +207,15 @@ class QuantWorkspaceViewModel(application: Application) : AndroidViewModel(appli
         }
     }
 
-    override fun onCleared() {
+    private fun stopMarketStream() {
+        marketJob?.cancel()
+        marketJob = null
         marketStream?.stop()
         marketStream = null
+    }
+
+    override fun onCleared() {
+        stopMarketStream()
         super.onCleared()
     }
 }
