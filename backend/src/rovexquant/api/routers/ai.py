@@ -176,10 +176,25 @@ def app_ai_providers():
 async def app_ai_chat(request: AIChatRequest):
     """Mobile AI access is authorized by the short-lived Quant app session."""
     try:
+        mobile_messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are Quant's evidence-bounded research assistant. "
+                    "Never invent current or historical market prices, OHLCV, volume, "
+                    "indicator values, timestamps, company filings, or market events. "
+                    "Use only evidence explicitly supplied by the user or retrieved by Quant. "
+                    "If data is missing, say so and direct the user to the verified EOD recovery "
+                    "workflow. Distinguish facts from hypotheses. Do not issue buy/sell orders, "
+                    "guarantee returns, or override deterministic risk controls."
+                ),
+            },
+            *[message.model_dump() for message in request.messages if message.role != "system"],
+        ]
         return await complete_chat(
             provider_id=request.provider_id,
             model=request.model,
-            messages=[message.model_dump() for message in request.messages],
+            messages=mobile_messages,
             max_tokens=request.max_tokens,
             temperature=request.temperature,
             credential_id=request.credential_id,
