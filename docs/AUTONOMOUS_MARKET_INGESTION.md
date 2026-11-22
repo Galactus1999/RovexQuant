@@ -82,6 +82,32 @@ collection; it does not fabricate data or fall back to runner storage.
   strategy ingestion and AI/ML training.
 - No automated trading, broker order placement or stock recommendations added.
 
+## Production deployment and schema ordering
+
+The API validates the exact Alembic schema head at startup. Therefore the new
+database migration must complete before a new backend image receives traffic.
+Do not rely on the scheduled EOD collector to perform the first migration.
+
+The Quant CI workflow now has a production-only migration job. On a push to
+main, it waits for the Phase 1 acceptance gate, requires the GitHub Actions
+secret QUANT_TOKEN_MIGRATION_DATABASE_URL (direct, non-pooled PostgreSQL URL
+with TLS), applies Alembic migrations, and reports the resulting revision.
+It does not run against pull-request branches or expose production credentials
+to PR workflows.
+
+Render's current documentation states that pre-deploy commands are available
+for paid web services, private services and background workers, not Free web
+services. For a Free Render deployment, configure Auto-Deploy to "After CI
+Checks Pass" and require the Quant Production PostgreSQL Migration check before
+allowing the new service deploy. The existing application DATABASE URL should
+remain the pooled runtime URL; the migration secret must use the direct endpoint.
+If the migration secret is absent or migration fails, the deployment gate must
+remain red and the previous healthy deployment should continue serving.
+
+References:
+- Render deploy ordering and CI integration: https://render.com/docs/deploys
+- Render Docker and pre-deploy command support: https://render.com/docs/docker
+
 ## Next gates
 
 1. Apply migration to the configured PostgreSQL database.
