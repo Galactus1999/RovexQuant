@@ -35,7 +35,7 @@ from rovexquant.market_data.nse_mcp import (
 )
 from rovexquant.market_data.upstox_credentials import (
     UpstoxCredentialError, store_upstox_analytics_token, upstox_analytics_status,
-    validate_storage_configuration,
+    validate_storage_configuration, validate_postgres_schema,
 )
 from rovexquant.strategies.registry import default_registry
 
@@ -45,6 +45,7 @@ from rovexquant.strategies.registry import default_registry
 async def lifespan(_app: FastAPI):
     # Hosted Docker defaults to PostgreSQL and must not silently start with SQLite.
     validate_storage_configuration()
+    validate_postgres_schema()
     yield
 
 
