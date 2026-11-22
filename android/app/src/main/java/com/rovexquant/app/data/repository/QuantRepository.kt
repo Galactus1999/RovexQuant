@@ -2,6 +2,8 @@ package com.rovexquant.app.data.repository
 
 import android.content.Context
 import com.rovexquant.app.data.local.QuantSessionStore
+import com.rovexquant.app.data.repository.MarketStream
+import com.rovexquant.app.data.repository.QuantDataRepository
 import com.rovexquant.app.data.model.MarketIndexInstrument
 import com.rovexquant.app.data.model.MarketTick
 import com.rovexquant.app.data.model.NseMcpCatalog
@@ -13,34 +15,34 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /** Coordinates remote and local data sources; presentation code never calls transport directly. */
-class QuantRepository(context: Context) {
+class QuantRepository(context: Context) : QuantDataRepository {
     private val appContext = context.applicationContext
 
-    suspend fun loadSavedConnection(): QuantSessionStore.SavedConnection =
+    override suspend fun loadSavedConnection(): QuantSessionStore.SavedConnection =
         withContext(Dispatchers.IO) { QuantSessionStore.loadConnection(appContext) }
 
-    suspend fun loadSession(): QuantSession? =
+    override suspend fun loadSession(): QuantSession? =
         withContext(Dispatchers.IO) { QuantSessionStore.load(appContext) }
 
-    suspend fun saveSession(session: QuantSession, username: String) =
+    override suspend fun saveSession(session: QuantSession, username: String) =
         withContext(Dispatchers.IO) { QuantSessionStore.save(appContext, session, username) }
 
-    suspend fun clearSession() =
+    override suspend fun clearSession() =
         withContext(Dispatchers.IO) { QuantSessionStore.clearSession(appContext) }
 
-    suspend fun login(baseUrl: String, username: String, password: String): QuantSession =
+    override suspend fun login(baseUrl: String, username: String, password: String): QuantSession =
         withContext(Dispatchers.IO) { QuantApi.login(baseUrl, username, password) }
 
-    suspend fun validateSession(session: QuantSession): Boolean =
+    override suspend fun validateSession(session: QuantSession): Boolean =
         withContext(Dispatchers.IO) { QuantApi.validateSession(session) }
 
-    suspend fun fetchIndexInstruments(session: QuantSession): List<MarketIndexInstrument> =
+    override suspend fun fetchIndexInstruments(session: QuantSession): List<MarketIndexInstrument> =
         withContext(Dispatchers.IO) { QuantApi.fetchIndexInstruments(session) }
 
-    suspend fun fetchNseMcpTools(session: QuantSession, server: String): List<NseMcpCatalog> =
+    override suspend fun fetchNseMcpTools(session: QuantSession, server: String): List<NseMcpCatalog> =
         withContext(Dispatchers.IO) { QuantApi.fetchNseMcpTools(session, server) }
 
-    suspend fun callNseMcpTool(
+    override suspend fun callNseMcpTool(
         session: QuantSession,
         server: String,
         tool: String,
@@ -49,9 +51,9 @@ class QuantRepository(context: Context) {
         QuantApi.callNseMcpTool(session, server, tool, argumentsJson)
     }
 
-    fun createMarketStream(
+    override fun createMarketStream(
         session: QuantSession,
         onStatus: (String) -> Unit,
         onTick: (MarketTick) -> Unit
-    ): MarketStreamController = MarketStreamController(session, onStatus, onTick)
+    ): MarketStream = MarketStreamController(session, onStatus, onTick)
 }
