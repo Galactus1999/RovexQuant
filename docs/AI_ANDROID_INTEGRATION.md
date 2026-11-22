@@ -18,7 +18,7 @@ Provider API keys remain server-side. Configure one or more supported provider s
 - `GEMINI_API_KEY` / `GEMINI_API_KEYS_JSON`
 - `OPENAI_API_KEY` / `OPENAI_API_KEYS_JSON`
 
-The Android AI workspace asks for the provider's model ID because model catalogues change. Optional cross-provider fallback requires both an explicitly selected fallback provider and that provider's `<PROVIDER>_FALLBACK_MODEL` environment variable. Same-provider key rotation is not used to evade rate limits.
+The Android AI workspace asks for the provider's model ID because model catalogues change. Cross-provider fallback is supported by the backend gateway but is not exposed in the current Android UI. When added, it must require an explicitly selected fallback provider and that provider's `<PROVIDER>_FALLBACK_MODEL` environment variable. Same-provider key rotation is not used to evade rate limits.
 
 Do not put provider keys or `QUANT_AI_GATEWAY_TOKEN` in Android resources, BuildConfig, assets, local preferences, or APKs. Do not send secrets in chat.
 
