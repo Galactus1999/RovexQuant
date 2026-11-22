@@ -109,3 +109,27 @@ def test_latest_eod_market_snapshot_bounds_lookback_and_limit(monkeypatch):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 422
+
+
+def test_latest_bse_eod_market_snapshot_uses_bse_equity_series(monkeypatch):
+    token = _session(monkeypatch)
+
+    async def fake_latest(exchange, *, max_lookback_days=10):
+        assert exchange == "bse"
+        return "tejhq_eod", date(2026, 11, 20), [
+            {"symbol": "BSE_A", "series": "A", "close": 110, "prev_close": 100, "volume": 1000},
+            {"symbol": "BSE_B", "series": "B", "close": 90, "prev_close": 100, "volume": 2000},
+            {"symbol": "BSE_T", "series": "T", "close": 100, "prev_close": 100, "volume": 3000},
+            {"symbol": "NOT_EQUITY", "series": "Z", "close": 120, "prev_close": 100, "volume": 9000},
+        ]
+
+    monkeypatch.setattr(tejhq_service, "fetch_latest_snapshot", fake_latest)
+    response = TestClient(api.app).get(
+        "/api/v1/app/market-data/eod/latest/bse",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    summary = response.json()["summary"]
+    assert summary["equity_series_rows"] == 3
+    assert (summary["advances"], summary["declines"], summary["unchanged"]) == (1, 1, 1)
+    assert "NOT_EQUITY" not in response.text
