@@ -81,3 +81,42 @@ def test_market_database_url_requires_tls_enforcement(monkeypatch):
 
     monkeypatch.setenv("QUANT_MARKET_DATABASE_URL", "postgresql://user:pass@db.example/db?sslmode=require")
     assert database_url().endswith("sslmode=require")
+
+
+def test_latest_ingestion_status_preserves_last_success_after_newer_failure(monkeypatch):
+    from rovexquant.market_data import eod_store
+
+    started = datetime(2026, 11, 23, 4, tzinfo=timezone.utc)
+    completed = datetime(2026, 11, 23, 4, 1, tzinfo=timezone.utc)
+    last_success = datetime(2026, 11, 21, 4, 30, tzinfo=timezone.utc)
+    expected_row = (
+        "tejhq_eod", date(2026, 11, 23), "FAILED", 0, 0, 0,
+        started, completed, "TejHqError", "provider temporarily unavailable",
+        date(2026, 11, 20), "tejhq_eod", 2500, last_success,
+    )
+
+    class Result:
+        def fetchone(self):
+            return expected_row
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, query, params):
+            assert "LEFT JOIN LATERAL" in query
+            assert params == ("NSE", "NSE")
+            return Result()
+
+    monkeypatch.setattr(eod_store, "connect", lambda: Connection())
+    status = eod_store.latest_ingestion_status("NSE")
+
+    assert status["status"] == "FAILED"
+    assert status["trading_date"] == date(2026, 11, 23)
+    assert status["last_successful_trading_date"] == date(2026, 11, 20)
+    assert status["last_successful_provider"] == "tejhq_eod"
+    assert status["last_successful_rows"] == 2500
+    assert status["last_successful_at"] == last_success
