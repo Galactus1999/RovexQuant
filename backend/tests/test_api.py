@@ -93,8 +93,16 @@ def test_backtest_rejects_mismatched_signal_count():
 
 
 def test_research_compute_requires_app_session():
-    response = client.post("/api/v1/research/indicators", json={"close": [1, 2, 3]})
-    assert response.status_code == 401
+    indicators = client.post("/api/v1/research/indicators", json={"close": [1, 2, 3]})
+    backtest = client.post("/api/v1/research/backtest", json={
+        "bars": [
+            {"timestamp": "2025-01-01T00:00:00Z", "open": 100, "high": 101, "low": 99, "close": 100},
+            {"timestamp": "2025-01-02T00:00:00Z", "open": 101, "high": 102, "low": 100, "close": 101},
+        ],
+        "signals": [1, 0],
+    })
+    assert indicators.status_code == 401
+    assert backtest.status_code == 401
 
 
 def test_indicator_input_is_bounded():
