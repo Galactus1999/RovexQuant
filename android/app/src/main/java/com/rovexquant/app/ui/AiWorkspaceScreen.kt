@@ -311,7 +311,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
             item {
                 TerminalCard {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Eyebrow("Structurally validated source · ${report.dataMode}")
+                        Eyebrow("Structurally validated · ${report.provider} · ${report.dataMode}")
                         StatusPill("EOD", Gold)
                     }
                     Spacer(Modifier.height(7.dp))
