@@ -2,6 +2,8 @@ package com.rovexquant.app
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -9,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -34,20 +37,25 @@ class QuantDashboardRegressionTest {
         waitForDashboard()
         composeRule.onNodeWithTag("quant.header").assertIsDisplayed()
         composeRule.onNodeWithText("Market pulse.").assertIsDisplayed()
-        composeRule.onNodeWithTag("market.feed.status").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithTag("market.sector.heading").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithTag("sector.index.NIFTY BANK").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("market.feed.status"))
+        composeRule.onNodeWithTag("market.feed.status").assertIsDisplayed()
+        composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("market.sector.heading"))
+        composeRule.onNodeWithTag("market.sector.heading").assertIsDisplayed()
+        composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("sector.index.NIFTY BANK"))
+        composeRule.onNodeWithTag("sector.index.NIFTY BANK").assertIsDisplayed()
     }
 
     @Test fun bottomNavigationOpensAllWorkspacesAndSectorCoverage() {
         waitForDashboard()
         composeRule.onNodeWithText("Scan").performClick()
         composeRule.onNodeWithText("Strategy scanner.").assertIsDisplayed()
-        composeRule.onNodeWithText("No local dataset loaded").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("scanner.list").performScrollToNode(hasText("No local dataset loaded"))
+        composeRule.onNodeWithText("No local dataset loaded").assertIsDisplayed()
         composeRule.onNodeWithText("Signals").performClick()
         composeRule.onNodeWithText("Signal centre.").assertIsDisplayed()
         composeRule.onNodeWithText("Lab").performClick()
         composeRule.onNodeWithText("Research lab.").assertIsDisplayed()
+        composeRule.onNodeWithTag("research.lab.list").performScrollToNode(hasText("Import OHLCV CSV"))
         composeRule.onNodeWithText("Import OHLCV CSV").assertIsDisplayed()
         composeRule.onNodeWithText("Portfolio").performClick()
         composeRule.onNodeWithText("Portfolio & risk.").assertIsDisplayed()
@@ -58,18 +66,24 @@ class QuantDashboardRegressionTest {
     @Test fun aiWorkspaceConnectsChatAndEodRecoveryActions() {
         waitForDashboard()
         composeRule.onNodeWithText("Scan").performClick()
-        composeRule.onNodeWithText("Open AI data recovery").performScrollTo().performClick()
+        composeRule.onNodeWithTag("scanner.list").performScrollToNode(hasText("Open AI data recovery"))
+        composeRule.onNodeWithText("Open AI data recovery").performClick()
         composeRule.onNodeWithText("Quant AI.").assertIsDisplayed()
-        composeRule.onNodeWithText("Groq").assertIsDisplayed()
+        composeRule.onNodeWithText("Groq", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.model"))
         composeRule.onNodeWithTag("ai.model").performTextInput("test-model")
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.chat.input"))
         composeRule.onNodeWithTag("ai.chat.input").performTextInput("Explain the RSI indicator.")
         composeRule.onNodeWithTag("ai.chat.send").performClick()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithText("Deterministic AI fixture response.").fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithTag("ai.recovery.run").performScrollTo().performClick()
-        composeRule.onNodeWithText("Deterministic EOD strategy fixture response.")
-            .performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.recovery.run"))
+        composeRule.onNodeWithTag("ai.recovery.run").performClick()
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(
+            hasText("Deterministic EOD strategy fixture response.")
+        )
+        composeRule.onNodeWithText("Deterministic EOD strategy fixture response.").assertIsDisplayed()
     }
 
     @Test fun intelligenceCentreLoadsEventEvidenceAndSectorTransmission() {
@@ -80,10 +94,10 @@ class QuantDashboardRegressionTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithText("AI Intelligence Centre").assertIsDisplayed()
+        composeRule.onNodeWithTag("intelligence.screen").performScrollToNode(hasText("AVIATION"))
         composeRule.onNodeWithText("AVIATION").assertIsDisplayed()
         composeRule.onNodeWithText("Fuel costs may pressure operating margins.").assertIsDisplayed()
-        composeRule.onNodeWithText("Company and instrument mapping is not yet enabled.")
-            .assertIsDisplayed()
+        composeRule.onNodeWithText("Company and instrument mapping is not yet enabled.").assertIsDisplayed()
         composeRule.onNodeWithText("↗ fixture.example · seen 20261122T090000Z").assertIsDisplayed()
     }
 
