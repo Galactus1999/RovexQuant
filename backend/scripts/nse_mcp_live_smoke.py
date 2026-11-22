@@ -151,12 +151,13 @@ async def _check_once(server: str) -> None:
 
 async def check(server: str) -> None:
     """Retry only transport/temporary upstream failures; schema or permission failures stay hard failures."""
-    for attempt in range(3):
+    max_attempts = 3 if server == "bhavcopy" else 2
+    for attempt in range(max_attempts):
         try:
             await _check_once(server)
             return
         except NseMcpError as error:
-            if not error.retryable or attempt == 2:
+            if not error.retryable or attempt == max_attempts - 1:
                 raise
             delay = 2 ** attempt
             print(f"{server}: transient upstream failure; retrying in {delay}s")
@@ -165,14 +166,30 @@ async def check(server: str) -> None:
 
 async def main() -> None:
     failures: list[str] = []
+    degraded: list[str] = []
     for server in ("bhavcopy", "cmmkt"):
         try:
             await check(server)
+        except NseMcpError as error:
+            if server == "cmmkt" and error.retryable:
+                degraded.append(f"{server}: {error}")
+                print(
+                    "::warning::CMMKT delayed-data service is temporarily unavailable. "
+                    "No live CMMKT data is claimed; Bhavcopy EOD remains independently verified. "
+                    f"Reason: {error}"
+                )
+            else:
+                failures.append(f"{server}: {error}")
+                print(f"{server}: validation blocked: {type(error).__name__}: {error}")
         except Exception as error:
             failures.append(f"{server}: {type(error).__name__}: {error}")
             print(f"{server}: validation blocked: {type(error).__name__}: {error}")
     if failures:
         raise SystemExit("; ".join(failures))
+    if degraded:
+        print("NSE MCP smoke result: Bhavcopy verified; CMMKT explicitly degraded (transient upstream failure).")
+    else:
+        print("NSE MCP smoke result: Bhavcopy and CMMKT both verified.")
 
 
 if __name__ == "__main__":
