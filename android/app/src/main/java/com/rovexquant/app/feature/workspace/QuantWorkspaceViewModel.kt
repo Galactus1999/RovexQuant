@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.rovexquant.app.data.local.QuantSessionStore
 import com.rovexquant.app.data.model.MarketIndexInstrument
+import com.rovexquant.app.data.model.EodMarketSnapshot
 import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.MarketTick
 import com.rovexquant.app.data.model.QuantSession
@@ -29,7 +30,9 @@ data class QuantWorkspaceUiState(
     val ticks: Map<String, MarketTick> = emptyMap(),
     val indexKeys: Map<String, String> = emptyMap(),
     val equities: List<MarketEquityInstrument> = emptyList(),
-    val streamStatus: String = "Not connected"
+    val streamStatus: String = "Not connected",
+    val eodSnapshot: EodMarketSnapshot? = null,
+    val eodSnapshotStatus: String = "EOD snapshot not loaded"
 )
 
 /** Owns session, stream lifecycle and workspace state across Compose recompositions. */
@@ -44,6 +47,7 @@ class QuantWorkspaceViewModel(
     private var marketStream: MarketStream? = null
     private var marketJob: Job? = null
     private var loginJob: Job? = null
+    private var eodSnapshotJob: Job? = null
     private val authMutex = Mutex()
 
     init {
@@ -66,6 +70,7 @@ class QuantWorkspaceViewModel(
                         )
                     }
                     startMarketStream(session)
+                    refreshEodSnapshot(session)
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -82,6 +87,8 @@ class QuantWorkspaceViewModel(
     fun signOut() {
         loginJob?.cancel()
         loginJob = null
+        eodSnapshotJob?.cancel()
+        eodSnapshotJob = null
         stopMarketStream()
         viewModelScope.launch { authMutex.withLock { repository.clearSession() } }
         _uiState.update {
@@ -91,6 +98,8 @@ class QuantWorkspaceViewModel(
                 indexKeys = emptyMap(),
                 equities = emptyList(),
                 streamStatus = "Not connected",
+                eodSnapshot = null,
+                eodSnapshotStatus = "EOD snapshot not loaded",
                 loginError = null
             )
         }
@@ -107,6 +116,7 @@ class QuantWorkspaceViewModel(
                         if (repository.validateSession(stored)) {
                             _uiState.update { it.copy(session = stored) }
                             startMarketStream(stored)
+                            refreshEodSnapshot(stored)
                         } else {
                             repository.clearSession()
                         }
@@ -132,6 +142,36 @@ class QuantWorkspaceViewModel(
     fun reconnectMarketStream() {
         val session = _uiState.value.session ?: return
         startMarketStream(session)
+    }
+
+    fun refreshEodSnapshot() {
+        val session = _uiState.value.session ?: return
+        refreshEodSnapshot(session)
+    }
+
+    private fun refreshEodSnapshot(session: QuantSession) {
+        eodSnapshotJob?.cancel()
+        _uiState.update { it.copy(eodSnapshotStatus = "Loading latest NSE EOD snapshot…") }
+        eodSnapshotJob = viewModelScope.launch {
+            try {
+                val snapshot = repository.fetchLatestEodMarketSnapshot(session, "nse")
+                _uiState.update {
+                    it.copy(
+                        eodSnapshot = snapshot,
+                        eodSnapshotStatus = "EOD snapshot ready · ${snapshot.tradingDate}"
+                    )
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                _uiState.update {
+                    it.copy(
+                        eodSnapshot = null,
+                        eodSnapshotStatus = failure.message ?: "Latest NSE EOD snapshot unavailable"
+                    )
+                }
+            }
+        }
     }
 
     private fun startMarketStream(session: QuantSession) {
