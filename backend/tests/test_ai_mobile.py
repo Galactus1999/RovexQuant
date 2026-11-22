@@ -152,3 +152,62 @@ def test_corporate_action_factor_mismatch_fails_closed():
     )
     with pytest.raises(TejHqError):
         _apply_corporate_action_adjustment([raw])
+
+
+
+def test_adjusted_eod_data_is_returned_when_ai_provider_is_not_configured(monkeypatch):
+    from rovexquant.api.routers import ai as ai_router
+    bars = [
+        TejHqDailyBar(
+            date=date.fromordinal(date(2026, 1, 1).toordinal() + i),
+            open=100.0 + i, high=102.0 + i, low=99.0 + i,
+            close=101.0 + i, volume=1000 + i,
+            adjusted_close=101.0 + i, adjustment_factor=1.0,
+        )
+        for i in range(40)
+    ]
+    async def fake_fetch(*args, **kwargs):
+        assert kwargs["adjusted"] is True
+        return "tejhq_eod", bars
+    async def unexpected_ai_call(**kwargs):
+        raise AssertionError("AI must not be called without a configured provider/model")
+    monkeypatch.setattr(ai_router.tejhq_service, "fetch_ohlcv", fake_fetch)
+    monkeypatch.setattr(ai_router, "complete_chat", unexpected_ai_call)
+    request = ai_router.AIStrategyBriefRequest(
+        provider_id=None, model=None, exchange="NSE", symbol="RELIANCE",
+        from_date=date(2026, 1, 1), to_date=date(2026, 3, 1),
+        strategy_context="Review a swing strategy.",
+    )
+    result = asyncio.run(ai_router.app_ai_strategy_brief(request))
+    assert result["bar_count"] == 40
+    assert result["data_mode"] == "END_OF_DAY_ADJUSTED"
+    assert result["ai"] is None
+    assert "Configure an AI provider" in result["ai_error"]
+
+
+def test_adjusted_eod_data_survives_ai_provider_failure(monkeypatch):
+    from rovexquant.api.routers import ai as ai_router
+    bars = [
+        TejHqDailyBar(
+            date=date.fromordinal(date(2026, 1, 1).toordinal() + i),
+            open=100.0 + i, high=102.0 + i, low=99.0 + i,
+            close=101.0 + i, volume=1000 + i,
+            adjusted_close=101.0 + i, adjustment_factor=1.0,
+        )
+        for i in range(40)
+    ]
+    async def fake_fetch(*args, **kwargs):
+        return "tejhq_eod", bars
+    async def failed_ai(**kwargs):
+        raise ai_router.GatewayError(503, "Provider unavailable")
+    monkeypatch.setattr(ai_router.tejhq_service, "fetch_ohlcv", fake_fetch)
+    monkeypatch.setattr(ai_router, "complete_chat", failed_ai)
+    request = ai_router.AIStrategyBriefRequest(
+        provider_id="groq", model="test-model", exchange="NSE", symbol="RELIANCE",
+        from_date=date(2026, 1, 1), to_date=date(2026, 3, 1),
+        strategy_context="Review a swing strategy.",
+    )
+    result = asyncio.run(ai_router.app_ai_strategy_brief(request))
+    assert result["bar_count"] == 40
+    assert result["ai"] is None
+    assert "Provider unavailable" in result["ai_error"]
