@@ -6,7 +6,7 @@ import hmac
 import os
 from typing import Any, Literal
 
-from fastapi import FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel, Field, model_validator
 
@@ -22,6 +22,10 @@ from rovexquant.market_data.service import (
     MarketGatewayError, authorize_market_gateway, fetch_quotes, provider_status,
 )
 from rovexquant.auth import AppAuthError, bearer_claims, issue_app_session
+from rovexquant.security.request_controls import (
+    RequestBodyLimitMiddleware, backtest_rate_limit, indicator_rate_limit,
+    login_rate_limit, nse_tool_rate_limit,
+)
 from rovexquant.market_data.streaming import StreamError, stream_upstox_market_data
 from rovexquant.market_data.tejhq import TejHqEodProvider, TejHqError
 from rovexquant.market_data.nse_mcp import (
@@ -30,10 +34,27 @@ from rovexquant.market_data.nse_mcp import (
 )
 from rovexquant.market_data.upstox_credentials import (
     UpstoxCredentialError, store_upstox_analytics_token, upstox_analytics_status,
+    validate_storage_configuration,
 )
 from rovexquant.strategies.registry import default_registry
 
-app = FastAPI(title="Quant API", version="0.5.0", description="Evidence-based market research. No order execution.")
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Hosted Docker defaults to PostgreSQL and must not silently start with SQLite.
+    validate_storage_configuration()
+    yield
+
+
+app = FastAPI(
+    title="Quant API",
+    version="0.5.0",
+    description="Evidence-based market research. No order execution.",
+    lifespan=lifespan,
+)
+app.add_middleware(RequestBodyLimitMiddleware, max_body_size=2 * 1024 * 1024)
 
 def _quant_openapi():
     """Publish mobile app authentication as a Swagger HTTP Bearer security scheme."""
@@ -56,7 +77,9 @@ def _quant_openapi():
     }
 
     for path, path_item in schema.get("paths", {}).items():
-        if not path.startswith("/api/v1/app/"):
+        if not path.startswith("/api/v1/app/") and path not in {
+            "/api/v1/research/indicators", "/api/v1/research/backtest",
+        }:
             continue
         for operation in path_item.values():
             if not isinstance(operation, dict) or "responses" not in operation:
@@ -76,6 +99,13 @@ def _quant_openapi():
 
 
 app.openapi = _quant_openapi
+
+
+def require_app_session(authorization: str | None = Header(default=None)) -> None:
+    try:
+        bearer_claims(authorization)
+    except AppAuthError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
 
 
@@ -114,7 +144,7 @@ class AppLoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=256)
 
 
-@app.post("/api/v1/auth/session")
+@app.post("/api/v1/auth/session", dependencies=[Depends(login_rate_limit)])
 def create_app_session(request: AppLoginRequest):
     try:
         token, expires_in = issue_app_session(request.username, request.password)
@@ -214,9 +244,9 @@ async def app_market_stream(websocket: WebSocket):
 
 
 class IndicatorRequest(BaseModel):
-    close: list[float] = Field(min_length=1)
-    high: list[float] | None = None
-    low: list[float] | None = None
+    close: list[float] = Field(min_length=1, max_length=10000)
+    high: list[float] | None = Field(default=None, max_length=10000)
+    low: list[float] | None = Field(default=None, max_length=10000)
     sma_period: int = Field(default=20, ge=1, le=500)
     ema_period: int = Field(default=20, ge=1, le=500)
     rsi_period: int = Field(default=14, ge=2, le=500)
@@ -235,8 +265,8 @@ class BacktestBarInput(BaseModel):
 
 
 class BacktestRequest(BaseModel):
-    bars: list[BacktestBarInput] = Field(min_length=2, max_length=100000)
-    signals: list[int]
+    bars: list[BacktestBarInput] = Field(min_length=2, max_length=10000)
+    signals: list[int] = Field(min_length=2, max_length=10000)
     initial_capital: float = Field(default=100000, gt=0)
     risk_fraction: float = Field(default=0.01, gt=0, le=0.05)
     max_position_fraction: float = Field(default=0.25, gt=0, le=1)
@@ -371,7 +401,10 @@ async def ai_chat(request: AIChatRequest, x_quant_ai_gateway_key: str | None = H
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
 
-@app.post("/api/v1/research/indicators")
+@app.post(
+    "/api/v1/research/indicators",
+    dependencies=[Depends(require_app_session), Depends(indicator_rate_limit)],
+)
 def calculate_indicators(request: IndicatorRequest):
     try:
         bb_upper, bb_middle, bb_lower = bollinger_bands(
@@ -398,7 +431,10 @@ def calculate_indicators(request: IndicatorRequest):
         raise HTTPException(status_code=422, detail=str(error)) from error
 
 
-@app.post("/api/v1/research/backtest")
+@app.post(
+    "/api/v1/research/backtest",
+    dependencies=[Depends(require_app_session), Depends(backtest_rate_limit)],
+)
 def backtest(request: BacktestRequest):
     if len(request.bars) != len(request.signals):
         raise HTTPException(status_code=422, detail="bars and signals must have equal lengths")
@@ -618,7 +654,10 @@ async def app_nse_mcp_tools(
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
 
-@app.post("/api/v1/app/research/nse-mcp/call")
+@app.post(
+    "/api/v1/app/research/nse-mcp/call",
+    dependencies=[Depends(nse_tool_rate_limit)],
+)
 async def app_nse_mcp_call(
     request: NseMcpToolCallRequest,
     authorization: str | None = Header(default=None),
