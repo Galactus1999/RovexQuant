@@ -35,11 +35,34 @@ def _database_url() -> str:
     return os.getenv("QUANT_TOKEN_DATABASE_URL", "").strip()
 
 
+def _storage_mode() -> str:
+    """Resolve storage explicitly; Docker/hosted mode defaults to PostgreSQL."""
+    database_url = _database_url()
+    configured = os.getenv("QUANT_TOKEN_STORAGE_MODE", "").strip().lower()
+    mode = configured or ("postgresql" if database_url else "sqlite")
+    if mode not in {"postgresql", "sqlite"}:
+        raise UpstoxCredentialError("QUANT_TOKEN_STORAGE_MODE must be postgresql or sqlite", 503)
+    if mode == "postgresql" and not database_url:
+        raise UpstoxCredentialError(
+            "PostgreSQL storage is required but QUANT_TOKEN_DATABASE_URL is not configured", 503
+        )
+    if mode == "sqlite" and database_url:
+        raise UpstoxCredentialError(
+            "QUANT_TOKEN_DATABASE_URL is set but QUANT_TOKEN_STORAGE_MODE selects SQLite", 503
+        )
+    return mode
+
+
+def validate_storage_configuration() -> None:
+    """Validate storage mode at application startup without connecting or exposing secrets."""
+    _storage_mode()
+
+
 @contextmanager
 def _connect() -> Iterator[Any]:
     """Open one short-lived DB connection; never retain a connection across requests."""
     database_url = _database_url()
-    if database_url:
+    if _storage_mode() == "postgresql":
         if not database_url.startswith(("postgresql://", "postgres://")):
             raise UpstoxCredentialError(
                 "QUANT_TOKEN_DATABASE_URL must be a PostgreSQL connection URL", 503
@@ -91,7 +114,7 @@ def store_upstox_analytics_token(token: str) -> None:
     now = int(time.time())
     # Upstox Analytics Tokens are documented as valid for one year.
     expires_at = now + 365 * 24 * 60 * 60
-    placeholder = "%s" if _database_url() else "?"
+    placeholder = "%s" if _storage_mode() == "postgresql" else "?"
     with _connect() as connection:
         connection.execute(
             "INSERT INTO provider_tokens(provider, encrypted_token, updated_at, expires_at) "
