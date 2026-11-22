@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -31,7 +32,7 @@ private enum class Horizon(val title: String, val range: String, val summary: St
 private data class StrategyItem(val name: String, val detail: String, val status: String, val implemented: Boolean)
 
 @Composable
-fun StrategyScannerScreen() {
+fun StrategyScannerScreen(onOpenAi: () -> Unit = {}) {
     val context = LocalContext.current
     var localSummary by remember { mutableStateOf<OhlcvResearchSummary?>(null) }
     var loadingLocalData by remember { mutableStateOf(false) }
@@ -137,6 +138,22 @@ fun StrategyScannerScreen() {
                 }
                 Spacer(Modifier.height(10.dp))
                 Text(strategy.status.uppercase(), color = if (strategy.implemented) Mint else Muted, fontSize = 8.sp, letterSpacing = 1.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        item {
+            TerminalCard {
+                Eyebrow("Final strategy stage · fallback")
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "If local CSV import is unavailable, open Quant AI to retrieve validated daily EOD bars and review the strategy with source-labelled evidence.",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 11.sp,
+                    lineHeight = 17.sp
+                )
+                Spacer(Modifier.height(9.dp))
+                Button(onClick = onOpenAi, modifier = Modifier.fillMaxWidth().testTag("scanner.ai.recovery")) {
+                    Text("Open AI data recovery")
+                }
             }
         }
         item { EmptyPanel("Scanner scope", "This build scans one imported historical dataset. Multi-stock universe scanning, licensed live feeds, scheduling and alert delivery are not enabled yet.") }
