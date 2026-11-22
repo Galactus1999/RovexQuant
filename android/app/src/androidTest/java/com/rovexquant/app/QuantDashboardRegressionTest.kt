@@ -1,6 +1,7 @@
 package com.rovexquant.app
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -144,8 +145,8 @@ class QuantLoginRegressionTest {
                 composeRule.onAllNodesWithTag("login.password").fetchSemanticsNodes().isNotEmpty()
             val controlsReady = runCatching {
                 composeRule.onNodeWithTag("login.submit").assertIsDisplayed()
-                composeRule.onNodeWithTag("login.baseUrl").assertIsDisplayed()
-                composeRule.onNodeWithTag("login.username").assertIsDisplayed()
+                composeRule.onNodeWithTag("login.baseUrl").assertTextContains("https://quant.test")
+                composeRule.onNodeWithTag("login.username").assertTextContains("quant-test")
             }.isSuccess
             fieldsReady && controlsReady
         }
