@@ -43,7 +43,7 @@ def app_market_ingestion_history(
             exchange, symbol, from_date=from_date, to_date=to_date, limit=limit
         )
         return {
-            "provider": "multi-source-eod-store",
+            "store": "persistent-eod-store",
             "exchange": exchange.upper(),
             "symbol": symbol.upper(),
             "data_mode": "END_OF_DAY",
