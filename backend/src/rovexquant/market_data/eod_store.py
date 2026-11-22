@@ -198,17 +198,37 @@ def latest_ingestion_status(exchange: str = "NSE") -> dict[str, Any]:
     try:
         with connect() as connection:
             row = connection.execute("""
-                SELECT provider, trading_date, status, rows_received, rows_skipped, rows_upserted,
-                       started_at, completed_at, error_code, error_message
-                FROM market_ingestion_runs WHERE exchange=%s
-                ORDER BY started_at DESC LIMIT 1
-            """, (market,)).fetchone()
+                SELECT latest.provider, latest.trading_date, latest.status,
+                       latest.rows_received, latest.rows_skipped, latest.rows_upserted,
+                       latest.started_at, latest.completed_at, latest.error_code,
+                       latest.error_message, success.trading_date, success.provider,
+                       success.rows_upserted, success.completed_at
+                FROM (
+                    SELECT provider, trading_date, status, rows_received, rows_skipped,
+                           rows_upserted, started_at, completed_at, error_code, error_message
+                    FROM market_ingestion_runs
+                    WHERE exchange=%s
+                    ORDER BY started_at DESC LIMIT 1
+                ) AS latest
+                LEFT JOIN LATERAL (
+                    SELECT trading_date, provider, rows_upserted, completed_at
+                    FROM market_ingestion_runs
+                    WHERE exchange=%s AND status='SUCCEEDED'
+                    ORDER BY completed_at DESC LIMIT 1
+                ) AS success ON TRUE
+            """, (market, market)).fetchone()
     except psycopg.Error as error:
         raise EodStoreError("Market ingestion schema is unavailable; apply database migrations") from error
     if row is None:
-        return {"exchange": market, "status": "NOT_RUN", "trading_date": None}
-    keys = ("provider", "trading_date", "status", "rows_received", "rows_skipped", "rows_upserted",
-            "started_at", "completed_at", "error_code", "error_message")
+        return {
+            "exchange": market, "status": "NOT_RUN", "trading_date": None,
+            "last_successful_trading_date": None, "last_successful_provider": None,
+            "last_successful_rows": 0, "last_successful_at": None,
+        }
+    keys = ("provider", "trading_date", "status", "rows_received", "rows_skipped",
+            "rows_upserted", "started_at", "completed_at", "error_code", "error_message",
+            "last_successful_trading_date", "last_successful_provider",
+            "last_successful_rows", "last_successful_at")
     return {"exchange": market, **dict(zip(keys, row, strict=True))}
 
 
