@@ -158,7 +158,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                         Text("Checking server-side providers…", color = Muted, fontSize = 11.sp)
                     }
                     configuredProviders.isEmpty() -> Text(
-                        providerError ?: "No AI provider is configured on the Quant backend. Add a provider API key on the backend; optionally set its default model there. Never put keys in the APK.",
+                        providerError ?: "No AI provider is configured on the Quant backend. Add a provider API key there for chat and AI commentary. Adjusted EOD data recovery can still run independently if TEJHQ_API_KEY is configured. Never put keys in the APK.",
                         color = Gold, fontSize = 11.sp, lineHeight = 17.sp
                     )
                     else -> {
@@ -253,7 +253,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                 Eyebrow("Final strategy stage · data rescue")
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "If your CSV import is unavailable, Quant can retrieve corporate-action-adjusted daily OHLC from its TejHQ EOD adapter, validate it, calculate deterministic price evidence and ask AI to review the strategy. Raw volume is excluded from relative-volume claims.",
+                    "If your CSV import is unavailable, Quant can retrieve corporate-action-adjusted daily OHLC from its TejHQ EOD adapter and calculate deterministic price evidence. If an AI provider is configured, Quant also asks it to review the strategy. Raw volume is excluded from relative-volume claims.",
                     color = MaterialTheme.colorScheme.onBackground, fontSize = 12.sp, lineHeight = 18.sp
                 )
                 Spacer(Modifier.height(10.dp))
@@ -293,7 +293,11 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                     enabled = symbol.isNotBlank() && fromDate.length == 10 && toDate.length == 10 && !briefLoading,
                     modifier = Modifier.fillMaxWidth().testTag("ai.recovery.run")
                 ) {
-                    Text(if (briefLoading) "Retrieving and analysing…" else "Recover EOD data + analyse")
+                    Text(
+                        if (briefLoading) "Retrieving and analysing…"
+                        else if (canUseAi) "Recover EOD data + analyse"
+                        else "Recover adjusted EOD data"
+                    )
                 }
                 if (briefError != null) Text(briefError!!, color = Coral, fontSize = 11.sp, lineHeight = 16.sp)
                 Text(
