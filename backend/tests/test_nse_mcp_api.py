@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from rovexquant.api import main as api
 from rovexquant.auth import issue_app_session
 from rovexquant.market_data.nse_mcp import NseMcpError
+from rovexquant.market_data import nse_mcp_service
 
 
 def _session(monkeypatch):
@@ -35,7 +36,7 @@ def test_nse_mcp_catalog_is_authenticated_and_labels_both_sources(monkeypatch):
             return [{"name": "get_history", "inputSchema": {"type": "object"},
                      "annotations": {"readOnlyHint": True}}]
 
-    monkeypatch.setattr(api, "NseMcpClient", FakeClient)
+    monkeypatch.setattr(nse_mcp_service, "NseMcpClient", FakeClient)
     response = TestClient(api.app).get(
         "/api/v1/app/research/nse-mcp/tools",
         headers={"Authorization": f"Bearer {token}"},
