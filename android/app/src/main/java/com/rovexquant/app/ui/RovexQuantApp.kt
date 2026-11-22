@@ -75,6 +75,7 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
                     TerminalSection.PULSE -> MarketPulseScreen(
                         ticks = state.ticks,
                         indexKeys = state.indexKeys,
+                        equityInstruments = state.equities,
                         streamStatus = state.streamStatus
                     )
                     TerminalSection.SCANNER -> StrategyScannerScreen(onOpenAi = { selected = TerminalSection.AI })
