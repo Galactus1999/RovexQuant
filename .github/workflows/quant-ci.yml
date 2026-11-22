@@ -257,6 +257,8 @@ jobs:
           test -f android/app/build.gradle.kts
           test -f android/app/src/main/AndroidManifest.xml
           test -f android/app/src/main/java/com/rovexquant/app/MainActivity.kt
+      - name: Clean Android build outputs
+        run: gradle -p android clean --no-daemon --stacktrace
       - name: Resolve and lock Android runtime dependencies
         run: gradle -p android :app:dependencies --write-locks --write-verification-metadata sha256 --no-daemon --stacktrace
       - name: Generate Android release dependency license inventory
@@ -264,7 +266,7 @@ jobs:
       - name: Enforce Android runtime dependency license allowlist
         run: python android/scripts/check_dependency_licenses.py
       - name: Compile Quant APK and run Android lint
-        run: gradle -p android clean :app:assembleDebug :app:lintDebug :app:testDebugUnitTest --no-daemon --stacktrace
+        run: gradle -p android :app:assembleDebug :app:lintDebug :app:testDebugUnitTest --no-daemon --stacktrace
       - name: Verify APK identity, contents and archive integrity
         shell: bash
         run: |
