@@ -54,7 +54,7 @@ def test_tejhq_adjusted_endpoint_reports_missing_free_key_without_network(monkey
     token = _session(monkeypatch)
     provider = TejHqEodProvider()
     monkeypatch.setattr(
-        api.TejHqEodProvider, "from_environment", classmethod(lambda cls: provider)
+        tejhq_service.TejHqEodProvider, "from_environment", classmethod(lambda cls: provider)
     )
     response = TestClient(api.app).get(
         "/api/v1/app/research/market-data/ohlcv/NSE/RELIANCE",
