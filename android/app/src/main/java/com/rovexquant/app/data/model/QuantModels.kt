@@ -46,3 +46,23 @@ data class EodStockMove(
     val volume: Long,
     val turnover: Double?
 )
+
+
+/** Latest ingestion attempt and most recent successful persisted EOD batch. */
+data class MarketIngestionStatus(
+    val exchange: String,
+    val status: String,
+    val provider: String? = null,
+    val tradingDate: String? = null,
+    val rowsReceived: Int = 0,
+    val rowsSkipped: Int = 0,
+    val rowsUpserted: Int = 0,
+    val startedAt: String? = null,
+    val completedAt: String? = null,
+    val errorCode: String? = null,
+    val errorMessage: String? = null,
+    val lastSuccessfulTradingDate: String? = null,
+    val lastSuccessfulProvider: String? = null,
+    val lastSuccessfulRows: Int = 0,
+    val lastSuccessfulAt: String? = null
+)
