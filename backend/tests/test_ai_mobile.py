@@ -1,5 +1,4 @@
 from datetime import date
-from types import SimpleNamespace
 
 import asyncio
 
@@ -9,6 +8,7 @@ from fastapi.testclient import TestClient
 from rovexquant.ai import gateway
 from rovexquant.api.main import app
 from rovexquant.auth import issue_app_session
+from rovexquant.market_data.tejhq import TejHqDailyBar
 
 
 class FakeResponse:
@@ -73,7 +73,7 @@ def test_strategy_evidence_summary_does_not_claim_live_data(monkeypatch):
     from rovexquant.api.routers import ai as ai_router
 
     bars = [
-        SimpleNamespace(
+        TejHqDailyBar(
             date=date.fromordinal(date(2026, 1, 1).toordinal() + i),
             open=100.0 + i, high=102.0 + i, low=99.0 + i,
             close=101.0 + i, volume=1000 + i,
@@ -119,7 +119,7 @@ def test_strategy_brief_rejects_short_history(mobile_client, monkeypatch):
 
 def test_corporate_action_factor_scales_all_ohlc_and_reconciles_close():
     from rovexquant.api.routers.ai import _apply_corporate_action_adjustment
-    raw = SimpleNamespace(
+    raw = TejHqDailyBar(
         date=date(2026, 1, 1),
         open=200.0,
         high=210.0,
@@ -140,7 +140,7 @@ def test_corporate_action_factor_scales_all_ohlc_and_reconciles_close():
 def test_corporate_action_factor_mismatch_fails_closed():
     from rovexquant.api.routers.ai import _apply_corporate_action_adjustment
     from rovexquant.market_data.tejhq_service import TejHqError
-    raw = SimpleNamespace(
+    raw = TejHqDailyBar(
         date=date(2026, 1, 1),
         open=200.0,
         high=210.0,
