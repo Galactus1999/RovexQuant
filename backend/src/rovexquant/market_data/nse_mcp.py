@@ -10,6 +10,8 @@ import re
 from typing import Any, Literal
 
 import httpx
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import SchemaError, ValidationError
 
 
 NSE_MCP_ENDPOINTS = {
@@ -204,11 +206,34 @@ class NseMcpClient:
         if tool is None:
             raise NseMcpError("Tool is not published by this NSE MCP server", 404)
         annotations = tool.get("annotations")
-        if isinstance(annotations, dict) and annotations.get("readOnlyHint") is False:
-            raise NseMcpError("NSE MCP tool is not marked read-only", 403)
+        if not isinstance(annotations, dict) or annotations.get("readOnlyHint") is not True:
+            raise NseMcpError(
+                "NSE MCP tool is not marked read-only (readOnlyHint must be true)", 403
+            )
         schema = tool.get("inputSchema")
-        if not isinstance(schema, dict) or schema.get("type") not in (None, "object"):
+        if not isinstance(schema, dict) or schema.get("type") != "object":
             raise NseMcpError("NSE MCP tool has an unsupported input schema", 502)
+
+        # MCP schemas are remote input. Reject all $ref values so validation cannot
+        # resolve remote URLs or turn a catalogue response into an SSRF primitive.
+        def contains_ref(value: Any) -> bool:
+            if isinstance(value, dict):
+                return "$ref" in value or any(contains_ref(item) for item in value.values())
+            if isinstance(value, list):
+                return any(contains_ref(item) for item in value)
+            return False
+
+        if contains_ref(schema):
+            raise NseMcpError("NSE MCP tool schema references are not supported", 502)
+        try:
+            Draft202012Validator.check_schema(schema)
+            errors = list(Draft202012Validator(schema).iter_errors(arguments))
+        except SchemaError as error:
+            raise NseMcpError("NSE MCP published an invalid input schema", 502) from error
+        if errors:
+            detail = str(errors[0].message).replace("\\n", " ")[:160]
+            raise NseMcpError(f"NSE MCP arguments do not match the tool schema: {detail}", 422)
+
         request_id = self._next_id()
         payload = await self._post({
             "jsonrpc": "2.0",
@@ -240,7 +265,8 @@ def safe_tool_catalog(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "description": str(tool.get("description", ""))[:2000],
             "input_schema": tool.get("inputSchema") if isinstance(tool.get("inputSchema"), dict) else {},
             "read_only": not any(part in name.lower() for part in _BLOCKED_TOOL_PARTS)
-                and not (isinstance(tool.get("annotations"), dict) and tool["annotations"].get("readOnlyHint") is False),
+                and isinstance(tool.get("annotations"), dict)
+                and tool["annotations"].get("readOnlyHint") is True,
         })
     return safe
 
