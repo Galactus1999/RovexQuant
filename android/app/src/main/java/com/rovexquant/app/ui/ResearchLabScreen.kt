@@ -1,7 +1,7 @@
 package com.rovexquant.app.ui
 
 import com.rovexquant.app.data.model.QuantSession
-import com.rovexquant.app.data.repository.QuantRepository
+import com.rovexquant.app.data.repository.QuantDataRepository
 
 import android.content.Context
 import android.net.Uri
@@ -35,7 +35,7 @@ import java.util.Locale
 private const val MAX_CSV_BYTES = 20 * 1024 * 1024
 
 @Composable
-fun ResearchLabScreen(session: QuantSession? = null, repository: QuantRepository? = null) {
+fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataRepository? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var summary by remember { mutableStateOf<OhlcvResearchSummary?>(null) }
