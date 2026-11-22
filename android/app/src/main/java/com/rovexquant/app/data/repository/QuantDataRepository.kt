@@ -22,6 +22,7 @@ interface QuantDataRepository {
     suspend fun login(baseUrl: String, username: String, password: String): QuantSession
     suspend fun validateSession(session: QuantSession): Boolean
     suspend fun fetchIndexInstruments(session: QuantSession): List<MarketIndexInstrument>
+    suspend fun fetchEquityInstruments(session: QuantSession): List<MarketEquityInstrument>
     suspend fun fetchNseMcpTools(session: QuantSession, server: String): List<NseMcpCatalog>
     suspend fun fetchAiProviders(session: QuantSession): List<AiProvider>
     suspend fun fetchIntelligenceEvents(session: QuantSession, query: String, timespan: String): IntelligenceFeed
