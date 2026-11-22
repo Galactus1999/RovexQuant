@@ -7,6 +7,7 @@ from rovexquant.market_data import upstox_credentials as vault
 
 def configure_local_vault(monkeypatch, tmp_path):
     monkeypatch.delenv("QUANT_TOKEN_DATABASE_URL", raising=False)
+    monkeypatch.setenv("QUANT_TOKEN_STORAGE_MODE", "sqlite")
     monkeypatch.setenv("QUANT_TOKEN_DB_PATH", str(tmp_path / "vault.sqlite3"))
     monkeypatch.setenv("QUANT_TOKEN_ENCRYPTION_KEY", Fernet.generate_key().decode())
 
@@ -89,6 +90,7 @@ def test_postgres_backend_uses_tls_and_bytea(monkeypatch):
         "postgresql://quant:private@ep-example-pooler.ap-southeast-1.aws.neon.tech/neondb",
     )
     monkeypatch.setenv("QUANT_TOKEN_ENCRYPTION_KEY", key)
+    monkeypatch.setenv("QUANT_TOKEN_STORAGE_MODE", "postgresql")
     monkeypatch.setattr(vault.psycopg, "connect", fake_connect)
 
     vault.store_upstox_analytics_token(token)
@@ -97,3 +99,33 @@ def test_postgres_backend_uses_tls_and_bytea(monkeypatch):
     assert calls and calls[0][1]["sslmode"] == "require"
     assert any("BYTEA" in sql for sql in connection.ddl)
     assert token.encode() not in connection.stored
+
+
+
+def test_hosted_postgres_mode_fails_closed_without_database_url(monkeypatch):
+    monkeypatch.setenv("QUANT_TOKEN_STORAGE_MODE", "postgresql")
+    monkeypatch.delenv("QUANT_TOKEN_DATABASE_URL", raising=False)
+
+    try:
+        vault.validate_storage_configuration()
+    except vault.UpstoxCredentialError as error:
+        assert error.status_code == 503
+        assert "QUANT_TOKEN_DATABASE_URL" in str(error)
+    else:
+        raise AssertionError("PostgreSQL mode must not silently fall back to SQLite")
+
+
+def test_sqlite_mode_rejects_conflicting_postgres_url(monkeypatch):
+    monkeypatch.setenv("QUANT_TOKEN_STORAGE_MODE", "sqlite")
+    monkeypatch.setenv(
+        "QUANT_TOKEN_DATABASE_URL",
+        "postgresql://quant:private@ep-example-pooler.ap-southeast-1.aws.neon.tech/neondb",
+    )
+
+    try:
+        vault.validate_storage_configuration()
+    except vault.UpstoxCredentialError as error:
+        assert error.status_code == 503
+        assert "selects SQLite" in str(error)
+    else:
+        raise AssertionError("Conflicting SQLite/PostgreSQL configuration must fail closed")
