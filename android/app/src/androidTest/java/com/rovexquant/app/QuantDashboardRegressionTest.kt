@@ -99,11 +99,11 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithText("Intel").performClick()
         composeRule.onNodeWithText("AI Intelligence Centre").assertIsDisplayed()
         composeRule.waitUntil(10_000) {
-            runCatching {
-                composeRule.onNodeWithTag("intelligence.screen")
-                    .performScrollToNode(hasTestTag("intelligence.feed.ready"))
-            }.isSuccess
+            composeRule.onAllNodesWithText("Refresh intelligence")
+                .fetchSemanticsNodes().isNotEmpty()
         }
+        composeRule.onNodeWithTag("intelligence.screen")
+            .performScrollToNode(hasTestTag("intelligence.feed.ready"))
         composeRule.onNodeWithTag("intelligence.screen").performScrollToNode(hasText("AVIATION"))
         composeRule.onNodeWithText("AVIATION").assertIsDisplayed()
         composeRule.onNodeWithText("Fuel costs may pressure operating margins.").assertIsDisplayed()
