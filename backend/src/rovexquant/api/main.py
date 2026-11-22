@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from dataclasses import asdict
 import asyncio
 from datetime import date, datetime, timezone
@@ -38,7 +39,6 @@ from rovexquant.market_data.upstox_credentials import (
 )
 from rovexquant.strategies.registry import default_registry
 
-from contextlib import asynccontextmanager
 
 
 @asynccontextmanager
