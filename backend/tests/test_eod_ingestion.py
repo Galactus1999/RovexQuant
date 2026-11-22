@@ -120,3 +120,54 @@ def test_latest_ingestion_status_preserves_last_success_after_newer_failure(monk
     assert status["last_successful_provider"] == "tejhq_eod"
     assert status["last_successful_rows"] == 2500
     assert status["last_successful_at"] == last_success
+
+
+def test_latest_persisted_snapshot_reads_only_successful_postgres_batch(monkeypatch):
+    from rovexquant.market_data import eod_store
+
+    completed = datetime(2026, 11, 21, 4, 30, tzinfo=timezone.utc)
+    retrieved = datetime(2026, 11, 21, 4, 29, tzinfo=timezone.utc)
+    stored = [
+        ("RELIANCE", "Reliance Industries", "EQ", 110, 100, 1000, 110000, "PROVISIONAL", retrieved),
+        ("HDFCBANK", "HDFC Bank", "EQ", 90, 100, 2000, 180000, "PROVISIONAL", retrieved),
+        ("INFY", "Infosys", "EQ", 100, 100, 3000, 300000, "PROVISIONAL", retrieved),
+    ]
+
+    class Result:
+        def __init__(self, row=None, rows=None):
+            self._row = row
+            self._rows = rows
+
+        def fetchone(self):
+            return self._row
+
+        def fetchall(self):
+            return self._rows
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, query, params):
+            if "FROM market_ingestion_runs" in query:
+                assert params == ("NSE",)
+                return Result(row=(date(2026, 11, 20), "tejhq_eod", completed))
+            assert "FROM market_eod_bars" in query
+            assert params == ("NSE", date(2026, 11, 20), "tejhq_eod")
+            return Result(rows=stored)
+
+    monkeypatch.setattr(eod_store, "connect", lambda: Connection())
+    snapshot = eod_store.latest_persisted_snapshot("NSE", limit=10)
+
+    assert snapshot["data_origin"] == "POSTGRESQL"
+    assert snapshot["data_mode"] == "END_OF_DAY"
+    assert snapshot["trading_date"] == "2026-11-20"
+    assert snapshot["quality_status"] == "PROVISIONAL"
+    assert snapshot["summary"]["priced_symbols"] == 3
+    assert snapshot["summary"]["advances"] == 1
+    assert snapshot["summary"]["declines"] == 1
+    assert snapshot["summary"]["unchanged"] == 1
+    assert snapshot["summary"]["top_gainers"][0]["symbol"] == "RELIANCE"
