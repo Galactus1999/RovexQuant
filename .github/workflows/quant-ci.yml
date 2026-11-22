@@ -261,8 +261,6 @@ jobs:
            test -f android/app/src/debug/java/com/rovexquant/app/QuantTestActivity.kt
            test ! -e android/app/src/androidTest/AndroidManifest.xml
            test ! -e android/app/src/androidTest/java/com/rovexquant/app/QuantTestActivity.kt
-      - name: Clean Android build outputs
-        run: gradle -p android clean --no-daemon --stacktrace
       - name: Bootstrap Android dependency locks and verification metadata when absent
         shell: bash
         run: |
@@ -270,11 +268,13 @@ jobs:
           if [[ -s android/app/gradle.lockfile && -s android/gradle/verification-metadata.xml && ! -f android/gradle/ALLOW_DEPENDENCY_METADATA_REFRESH ]]; then
             echo "Using committed Android dependency locks and verification metadata."
           else
-            echo "Bootstrapping the complete Android dependency graph for first-time lock persistence."
+            echo "Bootstrapping the complete Android dependency graph for first-time lock persistence or an explicitly approved refresh."
             gradle -p android help :app:dependencies :app:licenseReleaseReport :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug :app:testDebugUnitTest --refresh-dependencies --write-locks --write-verification-metadata sha256 --no-daemon --stacktrace
           fi
       - name: Verify Kotlin compiler and daemon dependency alignment
         run: python android/scripts/verify_kotlin_daemon_alignment.py
+      - name: Clean Android build outputs
+        run: gradle -p android clean --no-daemon --stacktrace
       - name: Generate Android dependency license inventory
         run: gradle -p android :app:licenseReleaseReport --dependency-verification=strict --no-daemon --stacktrace
       - name: Enforce Android runtime dependency license allowlist
