@@ -146,7 +146,7 @@ fun StrategyScannerScreen(onOpenAi: () -> Unit = {}) {
                 Eyebrow("Final strategy stage · fallback")
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "If local CSV import is unavailable, open Quant AI to retrieve validated daily EOD bars and review the strategy with source-labelled evidence.",
+                    "If local CSV import is unavailable, open Quant AI to retrieve corporate-action-adjusted daily EOD bars and review the strategy with source-labelled evidence.",
                     color = MaterialTheme.colorScheme.onBackground,
                     fontSize = 11.sp,
                     lineHeight = 17.sp
