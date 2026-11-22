@@ -9,6 +9,7 @@ import com.rovexquant.app.data.model.MarketTick
 import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.data.remote.MarketStreamController
 import com.rovexquant.app.data.repository.QuantRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -52,6 +53,8 @@ class QuantWorkspaceViewModel(application: Application) : AndroidViewModel(appli
                     )
                 }
                 startMarketStream(session)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (failure: Exception) {
                 _uiState.update {
                     it.copy(loginError = failure.message ?: "Unable to sign in securely.")
@@ -91,11 +94,15 @@ class QuantWorkspaceViewModel(application: Application) : AndroidViewModel(appli
                         } else {
                             repository.clearSession()
                         }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
                     } catch (_: Exception) {
                         // Preserve the encrypted token during temporary network/server failures.
                         // The user can retry login; the next launch will validate it again.
                     }
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
                 // A local keystore/storage failure must not crash the workspace.
             } finally {
@@ -130,6 +137,8 @@ class QuantWorkspaceViewModel(application: Application) : AndroidViewModel(appli
                 }
                 controller.start(resolved.values.toList())
                 _uiState.update { it.copy(streamStatus = "Connecting · ${resolved.size} indices") }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
                 // Preserve the existing fallback behaviour for this refactor checkpoint.
                 // Phase 2 replaces guessed keys with fail-closed instrument-master handling.
