@@ -10,7 +10,7 @@ import time
 from typing import Any
 
 import psycopg
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 
 from rovexquant.db.schema import EXPECTED_SCHEMA_REVISION
 
@@ -161,6 +161,40 @@ def _connect() -> Iterator[Any]:
         raise
     finally:
         connection.close()
+
+
+
+def rotate_provider_token_encryption_key(old_key: str, new_key: str) -> int:
+    """Atomically re-encrypt every stored provider token using a new Fernet key.
+
+    The old key remains available only to this operation. If any row cannot be
+    decrypted, the transaction rolls back and no partial rotation is committed.
+    """
+    if not old_key or not new_key or old_key == new_key:
+        raise UpstoxCredentialError("Distinct old and new encryption keys are required", 422)
+    try:
+        old_fernet = Fernet(old_key.encode("ascii"))
+        new_fernet = Fernet(new_key.encode("ascii"))
+        rotating = MultiFernet([new_fernet, old_fernet])
+    except (ValueError, UnicodeEncodeError) as error:
+        raise UpstoxCredentialError("Encryption key rotation received an invalid Fernet key", 422) from error
+
+    placeholder = "%s" if _storage_mode() == "postgresql" else "?"
+    with _connect() as connection:
+        rows = connection.execute(
+            "SELECT provider, encrypted_token FROM provider_tokens"
+        ).fetchall()
+        updates = [
+            (rotating.rotate(bytes(encrypted_token)), provider)
+            for provider, encrypted_token in rows
+        ]
+        for encrypted_token, provider in updates:
+            connection.execute(
+                f"UPDATE provider_tokens SET encrypted_token={placeholder} WHERE provider={placeholder}",
+                (encrypted_token, provider),
+            )
+    return len(updates)
+
 
 
 def store_upstox_analytics_token(token: str) -> None:
