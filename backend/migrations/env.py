@@ -57,13 +57,13 @@ def run_migrations_online() -> None:
     )
     try:
         with connectable.connect() as connection:
-            with connection.begin():
-                context.configure(
-                    connection=connection,
-                    target_metadata=None,
-                    compare_type=True,
-                    transaction_per_migration=True,
-                )
+            context.configure(
+                connection=connection,
+                target_metadata=None,
+                compare_type=True,
+                transaction_per_migration=True,
+            )
+            with context.begin_transaction():
                 context.run_migrations()
     finally:
         connectable.dispose()
