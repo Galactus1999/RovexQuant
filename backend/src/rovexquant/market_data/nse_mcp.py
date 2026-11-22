@@ -126,9 +126,15 @@ class NseMcpClient:
                     if len(body) + len(chunk) > 10_000_000:
                         raise NseMcpError("NSE MCP response exceeded the 10 MB safety limit", 502)
                     body.extend(chunk)
+                # aiter_bytes() has already decoded content-encoding (e.g. gzip).
+                # Reusing the original encoding/length headers makes httpx attempt
+                # a second decompression when response.text is accessed.
+                response_headers = dict(streamed.headers)
+                response_headers.pop("content-encoding", None)
+                response_headers.pop("content-length", None)
                 response = httpx.Response(
                     streamed.status_code,
-                    headers=streamed.headers,
+                    headers=response_headers,
                     content=bytes(body),
                     request=streamed.request,
                 )
