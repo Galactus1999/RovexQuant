@@ -103,11 +103,12 @@ def test_postgres_startup_rejects_schema_revision_mismatch(migrated_postgres):
             ("unknown_revision",),
         )
 
-    with pytest.raises(vault.UpstoxCredentialError, match="revision does not match"):
-        vault.validate_postgres_schema()
-
-    with psycopg.connect(migrated_postgres, sslmode="disable") as connection:
-        connection.execute(
-            "UPDATE alembic_version SET version_num = %s",
-            (EXPECTED_SCHEMA_REVISION,),
-        )
+    try:
+        with pytest.raises(vault.UpstoxCredentialError, match="revision does not match"):
+            vault.validate_postgres_schema()
+    finally:
+        with psycopg.connect(migrated_postgres, sslmode="disable") as connection:
+            connection.execute(
+                "UPDATE alembic_version SET version_num = %s",
+                (EXPECTED_SCHEMA_REVISION,),
+            )
