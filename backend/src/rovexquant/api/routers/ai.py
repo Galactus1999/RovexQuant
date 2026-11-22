@@ -77,6 +77,9 @@ def _apply_corporate_action_adjustment(bars: list[Any]) -> list[Any]:
             or adjusted_close <= 0
         ):
             raise TejHqError("TejHQ adjusted bar is missing a valid corporate-action factor", 502)
+        expected_adjusted_close = item.close * factor
+        if not math.isclose(adjusted_close, expected_adjusted_close, rel_tol=1e-5, abs_tol=1e-6):
+            raise TejHqError("TejHQ adjusted close does not reconcile with its cumulative factor", 502)
         opening = item.open * factor
         high = item.high * factor
         low = item.low * factor
