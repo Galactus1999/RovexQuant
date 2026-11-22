@@ -74,7 +74,7 @@ def test_strategy_evidence_summary_does_not_claim_live_data(monkeypatch):
 
     bars = [
         SimpleNamespace(
-            date=date(2026, 1, 1).fromordinal(date(2026, 1, 1).toordinal() + i),
+            date=date.fromordinal(date(2026, 1, 1).toordinal() + i),
             open=100.0 + i, high=102.0 + i, low=99.0 + i,
             close=101.0 + i, volume=1000 + i,
         )
