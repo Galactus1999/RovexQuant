@@ -254,3 +254,17 @@ def test_body_limit_returns_structured_error_and_correlation_id():
     assert response.status_code == 413
     assert response.json()["error"]["code"] == "request_too_large"
     assert response.json()["request_id"] == response.headers["X-Request-ID"]
+
+
+def test_openapi_exposes_versioned_research_contract_and_bearer_auth():
+    response = client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+    assert schema["info"]["version"] == "0.5.0"
+    security = schema["components"]["securitySchemes"]["QuantAppBearer"]
+    assert security["type"] == "http"
+    assert security["scheme"] == "bearer"
+    for route in ("/api/v1/research/indicators", "/api/v1/research/backtest"):
+        operation = schema["paths"][route]["post"]
+        assert operation["security"] == [{"QuantAppBearer": []}]
+        assert "requestBody" in operation
