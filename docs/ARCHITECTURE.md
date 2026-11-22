@@ -17,22 +17,22 @@ The initial deployment is a private, single-owner pilot. Multi-user tenancy, alw
 | Android WebSocket transport | `data/remote/MarketStreamController.kt` | Owns socket, reconnect and stop semantics behind the stream port |
 | Android session persistence | `data/local/QuantSessionStore.kt` | Encrypted session token storage using Android Keystore; accessed through repository |
 | Android typed data contracts | `data/model/QuantModels.kt` | Session, instrument, MCP and market-tick models shared between data and feature layers |
-| Backend HTTP composition and route registration | `api/main.py` | Current composition point is oversized and still contains request contracts/orchestration; Phase 1 progressively separates routers and application services |
+| Backend HTTP composition and route registration | `api/main.py`, `api/research_data.py`, `research/router.py` | `main.py` composes feature routers and cross-cutting middleware; EOD/NSE research and deterministic compute routes are separate modules |
 | App-session authentication | `auth.py` | Short-lived HMAC-signed app session; single configured owner, not a multi-tenant identity system |
 | Provider-neutral quote selection | `market_data/service.py` | Explicit provider order and transient-error failover; semantic capability/entitlement compatibility remains to be implemented |
 | Upstox and Dhan REST adapters | `market_data/providers.py` | Snapshot quote adapters; real credentialed connectivity is not proven by unit tests |
 | Instrument master | `market_data/instruments.py` | Upstox NSE index instrument resolution; Android must fail closed when official mapping is unavailable |
 | Upstox streaming | `market_data/streaming.py` | Backend bridge and Protobuf decoder exist; protocol/device live verification is outstanding |
-| TejHQ EOD | `market_data/tejhq.py` | Backend-only EOD adapter; not an intraday/live feed |
-| NSE MCP | `market_data/nse_mcp.py` | On-demand informational adapter; explicit read-only allow policy and transient/no-persistence boundary |
+| TejHQ EOD | `market_data/tejhq.py`, `market_data/tejhq_service.py`, `api/research_data.py` | Adapter owns HTTP/provider protocol; service owns use-case calls; API router owns authenticated transport contract; not an intraday/live feed |
+| NSE MCP | `market_data/nse_mcp.py`, `market_data/nse_mcp_service.py`, `api/research_data.py` | Adapter owns MCP protocol/schema safety; service owns discovery/invocation; API router owns auth/rate limit and response mapping |
 | Provider credential vault | `market_data/upstox_credentials.py` | Fernet-encrypted Upstox token; PostgreSQL hosted mode, explicit SQLite local/test mode |
 | Canonical market-bar domain | `domain/market.py` | Decimal/UUID bar contract exists; quote path is not yet fully normalized to this contract |
-| Indicators | `indicators/` | Deterministic calculations; API wrapper currently delegates to these modules |
+| Indicators and research use cases | `indicators/`, `research/contracts.py`, `research/service.py`, `research/router.py` | Deterministic engines remain domain owners; service orchestrates them; route owns HTTP validation, auth and safe response mapping |
 | Strategies | `strategies/` | Versioned registry and strategy implementations; no complete multi-stock scanner workflow yet |
 | Backtesting | `backtesting/engine.py` | Long-only prototype; not a scientifically complete execution simulator |
 | AI gateway | `ai/gateway.py` | Server-side chat adapter; no Android integration, per-user BYOK, research workflow or independent verifier yet |
-| Database schema/migrations | Not yet established | Credential table is currently bootstrapped by vault code; migration system and durable research schemas are Phase 1 work |
-| Jobs/observability | `security/request_context.py`, health routes and deployment config | Server-generated request IDs and liveness/readiness endpoints exist; no durable worker/job queue, structured redacted request logs, metrics or distributed tracing pipeline yet |
+| Database schema/migrations | `db/schema.py`, `migrations/`, `alembic.ini` | Alembic owns PostgreSQL schema evolution; startup checks the expected revision; PostgreSQL integration verifies legacy adoption, rollback, rotation and isolated backup/restore |
+| Jobs/observability | `security/request_context.py`, `security/errors.py`, health routes, `docs/OBSERVABILITY.md`, `docs/JOBS_AND_HOSTING.md` | Server-generated request IDs, redacted JSON request logs, safe error envelopes, process-local HTTP metrics and explicit durable-job exclusion/contract |
 
 ## Dependency direction
 
@@ -52,7 +52,7 @@ Android UI
 
 Backend rules:
 - Route handlers validate transport input, authorize, call an application service or provider port, and map the result to a response. Indicator/backtest formulas live behind `research/service.py`; routes do not implement formulas, strategy rules, provider protocol logic or portfolio accounting.
-- Architecture tests reject imports from HTTP/API layers into deterministic domain packages and reject direct engine imports from the API composition and research router.
+- Architecture tests reject imports from HTTP/API layers into deterministic domain packages, reject direct engine imports from API composition/research transport, and enforce feature-router/service ownership for EOD and NSE MCP endpoints.
 - Domain engines do not import FastAPI, Android, provider SDKs or database drivers.
 - Provider adapters normalize provider responses and report capabilities/provenance; they do not select strategies or make risk decisions.
 - Application services orchestrate domain services and ports. Each domain has one authoritative owner.
@@ -100,7 +100,9 @@ NSE MCP is an on-demand informational source. Do not treat it as a licensed comm
 - Migrations have one owner and run as an explicit deployment operation, not during ordinary request handling.
 - No durable job queue or worker is currently implemented. FastAPI in-process tasks are not durable background jobs. A recoverable job must have persistent state, idempotency and restart semantics before it is exposed as reliable; see `docs/JOBS_AND_HOSTING.md`.
 - Render Free is a development/personal pilot tier: no durable filesystem and no dependable always-on WebSocket/worker guarantees.
-- API requests receive a server-generated `X-Request-ID`; readiness checks mandatory credential storage and schema state. Rate limiting is currently process-local for the single-instance pilot and must be replaced with an atomic shared store before horizontal scaling.
+- API requests receive a server-generated `X-Request-ID`; request logs contain only method, route template, status, duration and exception class. Validation and unhandled errors use bounded structured envelopes without echoing request values or exception text.
+- Admin-protected HTTP count/latency metrics are real but process-local; they reset on restart and are not distributed telemetry. Rate limiting is also process-local for the single-instance pilot and must be replaced with an atomic shared store before horizontal scaling.
+- The backend Python runtime/development dependency set is pinned in `backend/requirements.lock`; CI verifies declared dependency coverage and audits the lock for known vulnerabilities. Android dependency locking and license reporting are generated by CI and retained as artifacts; commit/persistence of the generated Gradle lock and verification metadata remains a close-out item.
 
 ## API and schema compatibility
 
