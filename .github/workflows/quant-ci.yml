@@ -57,7 +57,7 @@ jobs:
       - name: Audit locked Python dependencies for known vulnerabilities
         run: uv run --locked --extra dev --with pip-audit==2.9.0 pip-audit --local
       - name: Export Python dependency license inventory
-        run: uv run --locked --extra dev --with pip-licenses==5.0.0 pip-licenses --format=json --output-file /tmp/quant-python-licenses.json
+        run: uv run --locked --extra dev --with pip-licenses==5.0.0 pip-licenses --format=json > /tmp/quant-python-licenses.json
       - name: Upload Python lock and license inventory
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -104,6 +104,8 @@ jobs:
           cache-dependency-path: backend/pyproject.toml
       - name: Install pinned uv resolver
         run: python -m pip install "uv==0.12.9"
+      - name: Resolve backend lock for isolated PostgreSQL job
+        run: uv lock
       - name: Install exact locked backend dependencies
         run: uv sync --locked --extra dev
       - name: Run real PostgreSQL migrations, vault, rollback and key-rotation tests
@@ -215,6 +217,8 @@ jobs:
           python-version: "3.11"
       - name: Install pinned uv resolver
         run: python -m pip install "uv==0.12.9"
+      - name: Resolve backend lock for security test job
+        run: uv lock
       - name: Install exact locked backend dependencies
         run: uv sync --locked --extra dev
       - name: Run security, API contract and architecture tests
