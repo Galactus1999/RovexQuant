@@ -20,6 +20,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -37,6 +38,7 @@ fun QuantLoginScreen(
     var baseUrl by remember(savedConnection.baseUrl) { mutableStateOf(savedConnection.baseUrl) }
     var username by remember(savedConnection.username) { mutableStateOf(savedConnection.username) }
     var password by remember { mutableStateOf("") }
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     Column(
         Modifier.fillMaxSize().background(Ink).imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
@@ -56,7 +58,7 @@ fun QuantLoginScreen(
         Spacer(Modifier.height(14.dp))
         error?.let { Text(it, color = Color(0xFFFF8B80), fontSize = 11.sp) }
         Button(
-            onClick = { onLogin(baseUrl, username, password) },
+            onClick = { keyboardController?.hide(); onLogin(baseUrl, username, password) },
             enabled = !loading && baseUrl.isNotBlank() && username.isNotBlank() && password.isNotBlank(),
             modifier = Modifier.fillMaxWidth().height(50.dp).testTag("login.submit"),
             shape = RoundedCornerShape(14.dp)
