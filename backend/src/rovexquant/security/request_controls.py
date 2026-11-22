@@ -74,6 +74,17 @@ def rate_limit(bucket: str, *, limit: int, window_seconds: int) -> Callable[[Req
     return enforce
 
 
+def _request_body_error(status: int, code: str, detail: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=status,
+        content={
+            "detail": detail,
+            "error": {"code": code, "message": detail},
+            "request_id": current_request_id(),
+        },
+    )
+
+
 class RequestBodyLimitMiddleware:
     """Buffer and cap HTTP request bodies before application parsing.
 
@@ -96,21 +107,20 @@ class RequestBodyLimitMiddleware:
             try:
                 declared_length = int(raw_length)
             except ValueError:
-                response = JSONResponse({"detail": "Invalid Content-Length", "error": {"code": "bad_request", "message": "Invalid Content-Length"}, "request_id": current_request_id()}, status_code=400)
-                await response(scope, receive, send)
+                await _request_body_error(400, "bad_request", "Invalid Content-Length")(
+                    scope, receive, send
+                )
                 return
             if declared_length < 0:
-                response = JSONResponse({"detail": "Invalid Content-Length"}, status_code=400)
-                await response(scope, receive, send)
+                await _request_body_error(400, "bad_request", "Invalid Content-Length")(
+                    scope, receive, send
+                )
                 return
             if declared_length > self.max_body_size:
-                response = JSONResponse(
-                    {"detail": "Request body exceeds the configured size limit.",
-                    "error": {"code": "request_too_large", "message": "Request body exceeds the configured size limit."},
-                    "request_id": current_request_id()},
-                    status_code=413,
-                )
-                await response(scope, receive, send)
+                await _request_body_error(
+                    413, "request_too_large",
+                    "Request body exceeds the configured size limit.",
+                )(scope, receive, send)
                 return
 
         chunks: list[bytes] = []
@@ -124,11 +134,10 @@ class RequestBodyLimitMiddleware:
             chunk = message.get("body", b"")
             total += len(chunk)
             if total > self.max_body_size:
-                response = JSONResponse(
-                    {"detail": "Request body exceeds the configured size limit."},
-                    status_code=413,
-                )
-                await response(scope, receive, send)
+                await _request_body_error(
+                    413, "request_too_large",
+                    "Request body exceeds the configured size limit.",
+                )(scope, receive, send)
                 return
             chunks.append(chunk)
             if not message.get("more_body", False):
