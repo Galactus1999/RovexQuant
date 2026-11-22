@@ -232,7 +232,7 @@ async def app_ai_chat(request: AIChatRequest):
 async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
     """Last-resort, verified EOD data recovery followed by an evidence-bounded AI brief.
 
-    TejHQ is used only for its documented keyless EOD OHLCV endpoint. The AI model
+    TejHQ's free-key adjusted EOD endpoint is used. The AI model
     receives a compact deterministic summary, not the raw market-data response.
     Intraday/scalping data is never inferred from EOD bars.
     """
@@ -271,7 +271,8 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
             },
             "strategy_context": request.strategy_context,
             "source": provider_id,
-            "data_mode": "END_OF_DAY",
+            "data_mode": "END_OF_DAY_ADJUSTED",
+            "price_adjustment": "TejHQ cumulative split, bonus and dividend adjustment factor applied to OHLC.",
             "evidence": evidence,
             "interpretation_constraints": [
                 "Daily bars only; never describe as intraday or live.",
