@@ -87,6 +87,7 @@ def summarize_snapshot_rows(
     priced: list[dict[str, Any]] = []
     active: list[dict[str, Any]] = []
     advances = declines = unchanged = 0
+    equity_series_rows = 0
 
     for row in rows:
         if not isinstance(row, dict):
@@ -97,6 +98,7 @@ def summarize_snapshot_rows(
         symbol = str(row.get("symbol") or row.get("symbol_code") or "").strip().upper()
         if not symbol:
             continue
+        equity_series_rows += 1
         close = _finite_number(row.get("close"))
         previous_close = _finite_number(row.get("prev_close", row.get("previous_close")))
         volume_value = _finite_number(row.get("volume"))
@@ -146,7 +148,7 @@ def summarize_snapshot_rows(
 
     return {
         "total_rows": len(rows),
-        "equity_series_rows": advances + declines + unchanged,
+        "equity_series_rows": equity_series_rows,
         "priced_symbols": len(priced),
         "advances": advances,
         "declines": declines,
