@@ -66,10 +66,8 @@ class QuantDashboardRegressionTest {
             composeRule.onAllNodesWithText("Deterministic AI fixture response.").fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithTag("ai.recovery.run").performScrollTo().performClick()
-        composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithText("AI STRATEGY REVIEW · GROQ / TEST-MODEL").fetchSemanticsNodes().isNotEmpty()
-        }
-        composeRule.onNodeWithText("RELIANCE").assertIsDisplayed()
+        composeRule.onNodeWithText("Deterministic EOD strategy fixture response.")
+            .performScrollTo().assertIsDisplayed()
     }
 
     @Test fun portfolioCalculatesRiskBasedShareQuantity() {
