@@ -5,6 +5,7 @@ import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiProvider
 import com.rovexquant.app.data.model.AiStrategyBrief
+import com.rovexquant.app.data.model.IntelligenceFeed
 import com.rovexquant.app.data.model.MarketIndexInstrument
 import com.rovexquant.app.data.model.MarketTick
 import com.rovexquant.app.data.model.NseMcpCatalog
@@ -22,6 +23,7 @@ interface QuantDataRepository {
     suspend fun fetchIndexInstruments(session: QuantSession): List<MarketIndexInstrument>
     suspend fun fetchNseMcpTools(session: QuantSession, server: String): List<NseMcpCatalog>
     suspend fun fetchAiProviders(session: QuantSession): List<AiProvider>
+    suspend fun fetchIntelligenceEvents(session: QuantSession, query: String, timespan: String): IntelligenceFeed
     suspend fun sendAiMessage(
         session: QuantSession,
         providerId: String,

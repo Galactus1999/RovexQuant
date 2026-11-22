@@ -6,6 +6,10 @@ import com.rovexquant.app.data.model.AiDailyBar
 import com.rovexquant.app.data.model.AiProvider
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.AiStrategyEvidence
+import com.rovexquant.app.data.model.IntelligenceFeed
+import com.rovexquant.app.data.model.IntelligenceSource
+import com.rovexquant.app.data.model.MarketEvent
+import com.rovexquant.app.data.model.SectorImpact
 import com.rovexquant.app.data.model.MarketIndexInstrument
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
@@ -150,6 +154,99 @@ object QuantApi {
         }
     }
 
+
+    fun fetchIntelligenceEvents(
+        session: QuantSession,
+        query: String,
+        timespan: String,
+        limit: Int = 30
+    ): IntelligenceFeed {
+        require(query.isNotBlank() && query.length <= 160) { "Enter a news search query of at most 160 characters." }
+        require(timespan in setOf("1d", "3d", "7d")) { "Choose a supported news time window." }
+        require(limit in 1..50) { "News result limit is outside the supported range." }
+        val encodedQuery = java.net.URLEncoder.encode(query.trim(), Charsets.UTF_8.name())
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/intelligence/events?query=$encodedQuery&timespan=$timespan&limit=$limit")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            require(text.toByteArray(Charsets.UTF_8).size <= 1024 * 1024) {
+                "Intelligence response exceeds the 1 MB mobile safety limit."
+            }
+            val json = JSONObject(text)
+            val eventRows = json.optJSONArray("events") ?: JSONArray()
+            val events = buildList {
+                for (index in 0 until eventRows.length()) {
+                    val item = eventRows.optJSONObject(index) ?: continue
+                    val sourceRows = item.optJSONArray("sources") ?: JSONArray()
+                    val impactRows = item.optJSONArray("sector_impacts") ?: JSONArray()
+                    val tagRows = item.optJSONArray("event_tags") ?: JSONArray()
+                    val sources = buildList {
+                        for (sourceIndex in 0 until sourceRows.length()) {
+                            val source = sourceRows.optJSONObject(sourceIndex) ?: continue
+                            add(IntelligenceSource(
+                                domain = source.optString("domain"),
+                                url = source.optString("url"),
+                                seenAt = source.optString("seen_at"),
+                                language = source.optString("language"),
+                                sourceCountry = source.optString("source_country")
+                            ))
+                        }
+                    }
+                    val impacts = buildList {
+                        for (impactIndex in 0 until impactRows.length()) {
+                            val impact = impactRows.optJSONObject(impactIndex) ?: continue
+                            add(SectorImpact(
+                                sector = impact.optString("sector"),
+                                direction = impact.optString("direction"),
+                                mechanism = impact.optString("mechanism")
+                            ))
+                        }
+                    }
+                    val tags = buildList {
+                        for (tagIndex in 0 until tagRows.length()) {
+                            tagRows.optString(tagIndex).takeIf { it.isNotBlank() }?.let(::add)
+                        }
+                    }
+                    add(MarketEvent(
+                        eventId = item.optString("event_id"),
+                        headline = item.optString("headline"),
+                        eventCategory = item.optString("event_category"),
+                        eventTags = tags,
+                        sourceArticleCount = item.optInt("source_article_count"),
+                        independentSourceCount = item.optInt("independent_source_count"),
+                        sources = sources,
+                        classificationMethod = item.optString("classification_method"),
+                        classificationConfidence = item.optDouble("classification_confidence", 0.0),
+                        confidenceSemantics = item.optString("confidence_semantics"),
+                        sectorImpacts = impacts,
+                        stockMappingStatus = item.optString("stock_mapping_status"),
+                        stockMappingNote = item.optString("stock_mapping_note"),
+                        impactStatus = item.optString("impact_status")
+                    ))
+                }
+            }
+            val limitationsJson = json.optJSONArray("limitations") ?: JSONArray()
+            val limitations = buildList {
+                for (index in 0 until limitationsJson.length()) {
+                    limitationsJson.optString(index).takeIf { it.isNotBlank() }?.let(::add)
+                }
+            }
+            return IntelligenceFeed(
+                source = json.optString("source"),
+                retrievedAt = json.optString("retrieved_at"),
+                query = json.optString("query"),
+                timespan = json.optString("timespan"),
+                articleCount = json.optInt("article_count"),
+                eventCount = json.optInt("event_count"),
+                events = events,
+                limitations = limitations
+            )
+        }
+    }
 
     fun fetchAiProviders(session: QuantSession): List<AiProvider> {
         val request = Request.Builder()

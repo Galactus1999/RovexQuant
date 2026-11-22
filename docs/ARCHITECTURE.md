@@ -16,7 +16,7 @@ The initial deployment is a private, single-owner pilot. Multi-user tenancy, alw
 | Android HTTP transport | `data/remote/QuantApi.kt` | Typed REST/session/NSE calls; called only by repository implementation |
 | Android WebSocket transport | `data/remote/MarketStreamController.kt` | Owns socket, reconnect and stop semantics behind the stream port |
 | Android session persistence | `data/local/QuantSessionStore.kt` | Encrypted session token storage using Android Keystore; accessed through repository |
-| Android typed data contracts | `data/model/QuantModels.kt` | Session, instrument, MCP and market-tick models shared between data and feature layers |
+| Android typed data contracts | `data/model/QuantModels.kt`, `AiModels.kt`, `IntelligenceModels.kt` | Session, instrument, MCP, market-tick, AI and source-linked intelligence contracts |
 | Backend HTTP composition and route registration | `api/main.py`, `api/routers/`, `api/research_data.py`, `research/router.py` | `main.py` is a composition root; feature routes are split by auth, market, integrations, health, AI and strategies; EOD/NSE research routes remain separate |
 | App-session authentication | `auth.py` | Short-lived HMAC-signed app session; single configured owner, not a multi-tenant identity system |
 | Provider-neutral quote selection | `market_data/service.py` | Explicit provider order and transient-error failover; semantic capability/entitlement compatibility remains to be implemented |
@@ -30,6 +30,7 @@ The initial deployment is a private, single-owner pilot. Multi-user tenancy, alw
 | Indicators and research use cases | `indicators/`, `research/contracts.py`, `research/service.py`, `research/router.py` | Deterministic engines remain domain owners; service orchestrates them; route owns HTTP validation, auth and safe response mapping |
 | Strategies | `strategies/` | Versioned registry and strategy implementations; no complete multi-stock scanner workflow yet |
 | Backtesting | `backtesting/engine.py` | Long-only prototype; not a scientifically complete execution simulator |
+| Android intelligence feature | `feature/intelligence/IntelligenceCentreViewModel.kt`, `ui/IntelligenceCentreScreen.kt` | Dedicated authenticated event-to-sector analytical workspace; chat remains optional |
 | AI gateway | `ai/gateway.py` | Server-side chat adapter; no Android integration, per-user BYOK, research workflow or independent verifier yet |
 | Database schema/migrations | `db/schema.py`, `migrations/`, `alembic.ini` | Alembic owns PostgreSQL schema evolution; startup checks the expected revision; PostgreSQL integration verifies legacy adoption, rollback, rotation and isolated backup/restore |
 | Jobs/observability | `security/request_context.py`, `security/errors.py`, health routes, `docs/OBSERVABILITY.md`, `docs/JOBS_AND_HOSTING.md` | Server-generated request IDs, redacted JSON request logs, safe error envelopes, process-local HTTP metrics and explicit durable-job exclusion/contract |

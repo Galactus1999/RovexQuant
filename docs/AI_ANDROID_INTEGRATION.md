@@ -62,7 +62,7 @@ The CI suite uses deterministic fake providers and data. It does not prove that 
 
 ## AI Intelligence Centre — first backend slice
 
-An authenticated on-demand discovery endpoint is being introduced at
+The Android navigation now includes a dedicated **Intel** workspace, separate from the optional **Chat** workspace. It calls an authenticated on-demand discovery endpoint at
 `GET /api/v1/app/intelligence/events`. It queries the GDELT DOC API for recent
 global-news articles, retains source URLs and GDELT seen timestamps, deduplicates
 exact normalized headlines, and applies transparent deterministic event tags and
@@ -87,3 +87,14 @@ publisher, exchange or regulator disclosures. The endpoint is on-demand, not a
 durable collector or scheduled monitoring service. No continuous monitoring,
 persistent event history, live price correlation or recommendation performance is
 claimed in this first slice.
+
+
+### Android analytical panel
+
+The Intel screen is backed by a dedicated repository method and
+`IntelligenceCentreViewModel`. It supports query and 1d/3d/7d windows, latest
+request cancellation, loading/error states, event-category filtering, sector
+transmission explanations and opening original publisher URLs. It renders the
+source's seen timestamp and explicitly labels the rule-match score as a heuristic,
+not a probability. The screen does not fabricate sample live events; the debug
+instrumentation host supplies a deterministic fixture only for UI regression.

@@ -10,6 +10,10 @@ import com.rovexquant.app.data.model.AiProvider
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.AiStrategyEvidence
 import com.rovexquant.app.data.model.MarketIndexInstrument
+import com.rovexquant.app.data.model.IntelligenceFeed
+import com.rovexquant.app.data.model.IntelligenceSource
+import com.rovexquant.app.data.model.MarketEvent
+import com.rovexquant.app.data.model.SectorImpact
 import com.rovexquant.app.data.model.MarketTick
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
@@ -83,6 +87,34 @@ class FakeQuantRepository(
 
     override suspend fun fetchAiProviders(session: QuantSession) =
         listOf(AiProvider("groq", true, listOf("default")))
+
+    override suspend fun fetchIntelligenceEvents(
+        session: QuantSession, query: String, timespan: String
+    ) = IntelligenceFeed(
+        source = "GDELT_DOC_API",
+        retrievedAt = "2026-11-22T10:00:00Z",
+        query = query,
+        timespan = timespan,
+        articleCount = 2,
+        eventCount = 1,
+        events = listOf(MarketEvent(
+            eventId = "event-fixture-001",
+            headline = "Oil supply disruption raises crude prices",
+            eventCategory = "COMMODITY_SUPPLY",
+            eventTags = listOf("COMMODITY_SUPPLY"),
+            sourceArticleCount = 2,
+            independentSourceCount = 2,
+            sources = listOf(IntelligenceSource("fixture.example", "https://fixture.example/oil", "20261122T090000Z", "English", "India")),
+            classificationMethod = "DETERMINISTIC_KEYWORD_RULES",
+            classificationConfidence = 0.64,
+            confidenceSemantics = "Heuristic rule-match score; not a calibrated probability.",
+            sectorImpacts = listOf(SectorImpact("AVIATION", "POTENTIAL_NEGATIVE", "Fuel costs may pressure operating margins.")),
+            stockMappingStatus = "NOT_RESOLVED",
+            stockMappingNote = "Company and instrument mapping is not yet enabled.",
+            impactStatus = "HYPOTHESIS_REQUIRES_COMPANY_LEVEL_VERIFICATION"
+        )),
+        limitations = listOf("Global news discovery is not primary-source verification.")
+    )
 
     override suspend fun sendAiMessage(
         session: QuantSession,

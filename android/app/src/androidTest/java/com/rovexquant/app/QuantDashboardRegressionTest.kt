@@ -71,6 +71,21 @@ class QuantDashboardRegressionTest {
             .performScrollTo().assertIsDisplayed()
     }
 
+    @Test fun intelligenceCentreLoadsEventEvidenceAndSectorTransmission() {
+        waitForDashboard()
+        composeRule.onNodeWithText("Intel").performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("Oil supply disruption raises crude prices")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("AI Intelligence Centre").assertIsDisplayed()
+        composeRule.onNodeWithText("AVIATION").assertIsDisplayed()
+        composeRule.onNodeWithText("Fuel costs may pressure operating margins.").assertIsDisplayed()
+        composeRule.onNodeWithText("Company and instrument mapping is not yet enabled.")
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("fixture.example").assertIsDisplayed()
+    }
+
     @Test fun portfolioCalculatesRiskBasedShareQuantity() {
         waitForDashboard()
         composeRule.onNodeWithText("Portfolio").performClick()
