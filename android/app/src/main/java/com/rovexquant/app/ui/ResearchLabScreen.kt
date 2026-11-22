@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rovexquant.app.domain.OhlcvCsvResearch
 import com.rovexquant.app.domain.OhlcvResearchSummary
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -64,6 +65,8 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
                 }
                 summary = loaded
                 datasetName = uri.lastPathSegment?.substringAfterLast('/') ?: "Imported CSV"
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (failure: Exception) {
                 error = failure.message ?: "Could not import this CSV"
             } finally {
