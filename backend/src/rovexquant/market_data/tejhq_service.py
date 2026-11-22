@@ -1,4 +1,5 @@
 """Application services for the TejHQ EOD provider adapter."""
+import asyncio
 from datetime import date, datetime, timedelta
 import math
 from typing import Any
@@ -60,12 +61,17 @@ async def fetch_latest_snapshot(
     anchor = as_of or datetime.now(ZoneInfo("Asia/Kolkata")).date()
     for offset in range(max_lookback_days + 1):
         trading_date = anchor - timedelta(days=offset)
-        try:
-            rows = await provider.get_snapshot(exchange, trading_date)
-        except TejHqError as error:
-            if error.status_code in (400, 404, 422) and not error.retryable:
-                continue
-            raise
+        for attempt in range(3):
+            try:
+                rows = await provider.get_snapshot(exchange, trading_date)
+                break
+            except TejHqError as error:
+                if error.status_code in (400, 404, 422) and not error.retryable:
+                    rows = []
+                    break
+                if not error.retryable or attempt == 2:
+                    raise
+                await asyncio.sleep(0.5 * (2 ** attempt))
         if rows:
             return provider.provider_id, trading_date, rows
     raise TejHqError(
