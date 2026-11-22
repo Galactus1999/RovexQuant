@@ -111,7 +111,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
     }
 
     fun recoverEodData() {
-        if (!canUseAi || briefLoading) return
+        if (briefLoading) return
         brief = null
         briefError = null
         briefLoading = true
@@ -290,7 +290,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                 Spacer(Modifier.height(8.dp))
                 Button(
                     onClick = ::recoverEodData,
-                    enabled = canUseAi && symbol.isNotBlank() && fromDate.length == 10 && toDate.length == 10 && !briefLoading,
+                    enabled = symbol.isNotBlank() && fromDate.length == 10 && toDate.length == 10 && !briefLoading,
                     modifier = Modifier.fillMaxWidth().testTag("ai.recovery.run")
                 ) {
                     Text(if (briefLoading) "Retrieving and analysing…" else "Recover EOD data + analyse")
@@ -327,12 +327,22 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
             }
             item {
                 TerminalCard {
-                    Eyebrow("AI strategy review · ${report.ai.providerId} / ${report.ai.model}")
-                    Spacer(Modifier.height(7.dp))
-                    Text(report.ai.content, color = MaterialTheme.colorScheme.onBackground, fontSize = 12.sp, lineHeight = 19.sp)
-                    if (report.ai.fallbackUsed) {
+                    val aiResult = report.ai
+                    if (aiResult != null) {
+                        Eyebrow("AI strategy review · ${aiResult.providerId} / ${aiResult.model}")
                         Spacer(Modifier.height(7.dp))
-                        StatusPill("AI provider fallback used", Gold)
+                        Text(aiResult.content, color = MaterialTheme.colorScheme.onBackground, fontSize = 12.sp, lineHeight = 19.sp)
+                        if (aiResult.fallbackUsed) {
+                            Spacer(Modifier.height(7.dp))
+                            StatusPill("AI provider fallback used", Gold)
+                        }
+                    } else {
+                        Eyebrow("Data recovered · AI review unavailable")
+                        Spacer(Modifier.height(7.dp))
+                        Text(
+                            report.aiError ?: "The adjusted EOD data is available. Configure a backend AI provider and model to generate commentary.",
+                            color = Gold, fontSize = 11.sp, lineHeight = 17.sp
+                        )
                     }
                 }
             }
