@@ -278,7 +278,7 @@ def test_unhandled_server_error_returns_safe_correlated_envelope():
     def explode():
         raise RuntimeError(secret)
 
-    route = app.add_api_route("/_test/unhandled-error", explode, methods=["GET"])
+    app.add_api_route("/_test/unhandled-error", explode, methods=["GET"])
     try:
         response = TestClient(app, raise_server_exceptions=False).get("/_test/unhandled-error")
         assert response.status_code == 500
@@ -286,7 +286,10 @@ def test_unhandled_server_error_returns_safe_correlated_envelope():
         assert response.json()["request_id"] == response.headers["X-Request-ID"]
         assert secret not in response.text
     finally:
-        app.router.routes.remove(route)
+        app.router.routes[:] = [
+            route for route in app.router.routes
+            if getattr(route, "path", None) != "/_test/unhandled-error"
+        ]
 
 
 def test_api_route_table_has_no_duplicate_http_method_owners():
