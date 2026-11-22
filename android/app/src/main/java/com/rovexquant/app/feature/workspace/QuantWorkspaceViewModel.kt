@@ -8,6 +8,7 @@ import com.rovexquant.app.data.model.MarketIndexInstrument
 import com.rovexquant.app.data.model.EodMarketSnapshot
 import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.MarketTick
+import com.rovexquant.app.data.model.MarketIngestionStatus
 import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.data.repository.MarketStream
 import com.rovexquant.app.data.repository.QuantDataRepository
@@ -32,7 +33,9 @@ data class QuantWorkspaceUiState(
     val equities: List<MarketEquityInstrument> = emptyList(),
     val streamStatus: String = "Not connected",
     val eodSnapshot: EodMarketSnapshot? = null,
-    val eodSnapshotStatus: String = "EOD snapshot not loaded"
+    val eodSnapshotStatus: String = "EOD snapshot not loaded",
+    val marketIngestionStatus: MarketIngestionStatus? = null,
+    val marketIngestionStatusLabel: String = "Persistent database status not checked"
 )
 
 /** Owns session, stream lifecycle and workspace state across Compose recompositions. */
@@ -48,6 +51,7 @@ class QuantWorkspaceViewModel(
     private var marketJob: Job? = null
     private var loginJob: Job? = null
     private var eodSnapshotJob: Job? = null
+    private var ingestionStatusJob: Job? = null
     private val authMutex = Mutex()
 
     init {
@@ -71,6 +75,7 @@ class QuantWorkspaceViewModel(
                     }
                     startMarketStream(session)
                     refreshEodSnapshot(session)
+                    refreshMarketIngestionStatus(session)
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -89,6 +94,8 @@ class QuantWorkspaceViewModel(
         loginJob = null
         eodSnapshotJob?.cancel()
         eodSnapshotJob = null
+        ingestionStatusJob?.cancel()
+        ingestionStatusJob = null
         stopMarketStream()
         viewModelScope.launch { authMutex.withLock { repository.clearSession() } }
         _uiState.update {
@@ -100,6 +107,8 @@ class QuantWorkspaceViewModel(
                 streamStatus = "Not connected",
                 eodSnapshot = null,
                 eodSnapshotStatus = "EOD snapshot not loaded",
+                marketIngestionStatus = null,
+                marketIngestionStatusLabel = "Persistent database status not checked",
                 loginError = null
             )
         }
@@ -117,6 +126,7 @@ class QuantWorkspaceViewModel(
                             _uiState.update { it.copy(session = stored) }
                             startMarketStream(stored)
                             refreshEodSnapshot(stored)
+                            refreshMarketIngestionStatus(stored)
                         } else {
                             repository.clearSession()
                         }
@@ -147,6 +157,44 @@ class QuantWorkspaceViewModel(
     fun refreshEodSnapshot() {
         val session = _uiState.value.session ?: return
         refreshEodSnapshot(session)
+        refreshMarketIngestionStatus(session)
+    }
+
+    fun refreshMarketIngestionStatus() {
+        val session = _uiState.value.session ?: return
+        refreshMarketIngestionStatus(session)
+    }
+
+    private fun refreshMarketIngestionStatus(session: QuantSession) {
+        ingestionStatusJob?.cancel()
+        _uiState.update {
+            it.copy(marketIngestionStatusLabel = "Checking PostgreSQL ingestion status…")
+        }
+        ingestionStatusJob = viewModelScope.launch {
+            try {
+                val status = repository.fetchMarketIngestionStatus(session, "nse")
+                val label = when (status.status) {
+                    "SUCCEEDED" -> "Latest collection completed"
+                    "FAILED" -> "Latest collection failed"
+                    "RUNNING" -> "Collection currently running"
+                    "EMPTY" -> "Collection returned no usable rows"
+                    "NOT_RUN" -> "No collection recorded yet"
+                    else -> "Ingestion status: ${status.status}"
+                }
+                _uiState.update {
+                    it.copy(marketIngestionStatus = status, marketIngestionStatusLabel = label)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                _uiState.update {
+                    it.copy(
+                        marketIngestionStatusLabel = failure.message
+                            ?: "Persistent ingestion status unavailable"
+                    )
+                }
+            }
+        }
     }
 
     private fun refreshEodSnapshot(session: QuantSession) {
