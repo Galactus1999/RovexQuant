@@ -180,19 +180,31 @@ def rotate_provider_token_encryption_key(old_key: str, new_key: str) -> int:
         raise UpstoxCredentialError("Encryption key rotation received an invalid Fernet key", 422) from error
 
     placeholder = "%s" if _storage_mode() == "postgresql" else "?"
-    with _connect() as connection:
-        rows = connection.execute(
-            "SELECT provider, encrypted_token FROM provider_tokens"
-        ).fetchall()
-        updates = [
-            (rotating.rotate(bytes(encrypted_token)), provider)
-            for provider, encrypted_token in rows
-        ]
-        for encrypted_token, provider in updates:
-            connection.execute(
-                f"UPDATE provider_tokens SET encrypted_token={placeholder} WHERE provider={placeholder}",
-                (encrypted_token, provider),
-            )
+    try:
+        with _connect() as connection:
+            rows = connection.execute(
+                "SELECT provider, encrypted_token FROM provider_tokens"
+            ).fetchall()
+            try:
+                updates = [
+                    (rotating.rotate(bytes(encrypted_token)), provider)
+                    for provider, encrypted_token in rows
+                ]
+            except InvalidToken as error:
+                raise UpstoxCredentialError(
+                    "Vault key rotation failed; verify the old key. No changes were committed.",
+                    409,
+                ) from error
+            for encrypted_token, provider in updates:
+                connection.execute(
+                    f"UPDATE provider_tokens SET encrypted_token={placeholder} WHERE provider={placeholder}",
+                    (encrypted_token, provider),
+                )
+    except (psycopg.Error, sqlite3.Error) as error:
+        raise UpstoxCredentialError(
+            "Vault key rotation failed because credential storage was unavailable; no changes were committed.",
+            503,
+        ) from error
     return len(updates)
 
 
