@@ -211,3 +211,99 @@ def test_adjusted_eod_data_survives_ai_provider_failure(monkeypatch):
     assert result["bar_count"] == 40
     assert result["ai"] is None
     assert "Provider unavailable" in result["ai_error"]
+
+
+def test_app_ai_provider_credential_management_requires_session_and_never_echoes(
+    mobile_client, monkeypatch
+):
+    client, headers = mobile_client
+    from rovexquant.api.routers import ai as ai_router
+
+    secret = "owner-groq-api-key-secret-value-123456"
+    stored = []
+    monkeypatch.setattr(
+        ai_router, "store_ai_provider_api_key",
+        lambda provider_id, api_key: stored.append((provider_id, api_key)),
+    )
+    unauthorized = client.put(
+        "/api/v1/app/ai/providers/groq/credential",
+        json={"api_key": secret},
+    )
+    assert unauthorized.status_code == 401
+
+    response = client.put(
+        "/api/v1/app/ai/providers/groq/credential",
+        headers=headers,
+        json={"api_key": secret},
+    )
+    assert response.status_code == 200
+    assert stored == [("groq", secret)]
+    assert secret not in response.text
+    assert response.json()["credential_storage"] == "encrypted_server_side"
+
+    monkeypatch.setattr(ai_router, "delete_ai_provider_api_key", lambda provider_id: provider_id == "groq")
+    deleted = client.delete(
+        "/api/v1/app/ai/providers/groq/credential",
+        headers=headers,
+    )
+    assert deleted.status_code == 200
+    assert deleted.json() == {"provider_id": "groq", "deleted": True}
+
+
+def test_app_ai_provider_credential_rejects_unknown_provider(mobile_client):
+    client, headers = mobile_client
+    response = client.put(
+        "/api/v1/app/ai/providers/not-a-provider/credential",
+        headers=headers,
+        json={"api_key": "owner-api-key-secret-value-123456789"},
+    )
+    assert response.status_code == 404
+
+
+def test_app_upstox_credential_setup_is_authenticated_and_never_echoes_token(
+    mobile_client, monkeypatch
+):
+    client, headers = mobile_client
+    from rovexquant.api.routers import integrations
+
+    token = "owner-upstox-analytics-token-secret-123456789"
+    stored = []
+    monkeypatch.setattr(
+        integrations, "store_upstox_analytics_token",
+        lambda value: stored.append(value),
+    )
+    unauthorized = client.put(
+        "/api/v1/app/integrations/upstox/analytics-token",
+        json={"token": token},
+    )
+    assert unauthorized.status_code == 401
+
+    response = client.put(
+        "/api/v1/app/integrations/upstox/analytics-token",
+        headers=headers,
+        json={"token": token},
+    )
+    assert response.status_code == 200
+    assert stored == [token]
+    assert token not in response.text
+    assert response.json()["credential_storage"] == "encrypted_server_side"
+
+    monkeypatch.setattr(integrations, "upstox_analytics_status", lambda: {
+        "connected": True,
+        "credential_type": "analytics_read_only",
+        "credential_storage": "encrypted_server_side",
+        "expires_at": 4102444800,
+    })
+    status = client.get("/api/v1/app/integrations/upstox/status", headers=headers)
+    assert status.status_code == 200
+    assert status.json()["configured"] is True
+    assert status.json()["connection_verified"] is False
+    assert token not in status.text
+
+    monkeypatch.setattr(integrations, "delete_upstox_analytics_token", lambda: True)
+    deleted = client.delete(
+        "/api/v1/app/integrations/upstox/analytics-token",
+        headers=headers,
+    )
+    assert deleted.status_code == 200
+    assert deleted.json()["deleted"] is True
