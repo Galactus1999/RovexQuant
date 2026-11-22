@@ -96,6 +96,6 @@ class QuantRepository(context: Context) : QuantDataRepository {
     override fun createMarketStream(
         session: QuantSession,
         onStatus: (String) -> Unit,
-        onTick: (MarketTick) -> Unit
+        onTicks: (List<MarketTick>) -> Unit
     ): MarketStream = MarketStreamController(session, onStatus, onTick)
 }
