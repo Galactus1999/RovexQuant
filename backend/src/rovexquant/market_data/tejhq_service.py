@@ -74,7 +74,12 @@ async def fetch_latest_snapshot(
     )
 
 
-def summarize_snapshot_rows(rows: list[dict[str, Any]], *, limit: int = 20) -> dict[str, Any]:
+def summarize_snapshot_rows(
+    rows: list[dict[str, Any]],
+    *,
+    limit: int = 20,
+    allowed_series: frozenset[str] | set[str] | None = frozenset({"EQ"}),
+) -> dict[str, Any]:
     """Calculate transparent market breadth and movers from source EOD rows."""
     if not 1 <= limit <= 50:
         raise TejHqError("Snapshot summary limit must be between 1 and 50", 422)
@@ -87,7 +92,7 @@ def summarize_snapshot_rows(rows: list[dict[str, Any]], *, limit: int = 20) -> d
         if not isinstance(row, dict):
             continue
         series = str(row.get("series") or "").upper()
-        if series and series != "EQ":
+        if allowed_series is not None and series and series not in allowed_series:
             continue
         symbol = str(row.get("symbol") or row.get("symbol_code") or "").strip().upper()
         if not symbol:
