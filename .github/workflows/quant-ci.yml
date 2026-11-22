@@ -524,6 +524,7 @@ jobs:
       - quant-android-build
       - quant-android-instrumentation
       - quant-android-lock-persist
+      - quant-nse-mcp-live-smoke
     runs-on: ubuntu-latest
     steps:
       - name: Require every Phase 1 gate to pass
@@ -536,6 +537,8 @@ jobs:
           ANDROID_BUILD: ${{ needs.quant-android-build.result }}
           ANDROID_EMULATOR: ${{ needs.quant-android-instrumentation.result }}
           LOCK_PERSIST: ${{ needs.quant-android-lock-persist.result }}
+          NSE_MCP_LIVE: ${{ needs.quant-nse-mcp-live-smoke.result }}
+          RUN_NSE_LIVE_SMOKE: ${{ inputs.run_nse_live_smoke }}
           EVENT_NAME: ${{ github.event_name }}
           REF_FULL: ${{ github.ref }}
         run: |
@@ -546,6 +549,12 @@ jobs:
               exit 1
             }
           done
+          if [[ "$EVENT_NAME" != "workflow_dispatch" || "$RUN_NSE_LIVE_SMOKE" == "true" ]]; then
+            test "$NSE_MCP_LIVE" = "success" || {
+              echo "Phase 1 acceptance requires a successful live NSE MCP schema/tool smoke."
+              exit 1
+            }
+          fi
           if [[ "$EVENT_NAME" == "push" && "$REF_FULL" == "refs/heads/feat/quant-phase1-engineering-foundations" ]]; then
             test "$LOCK_PERSIST" = "success" || {
               echo "Phase 1 acceptance requires persisted Android dependency locks on the implementation branch."
@@ -604,7 +613,7 @@ jobs:
 
   quant-nse-mcp-live-smoke:
     name: Quant Official NSE MCP Live Connectivity
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_nse_live_smoke == true }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_nse_live_smoke == true) }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
