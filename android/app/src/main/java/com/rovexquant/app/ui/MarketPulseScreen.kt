@@ -207,7 +207,7 @@ fun MarketPulseScreen(
                 if (persistedDate != null) {
                     Text(
                         "Persisted EOD data · $persistedDate · " +
-                            "${marketIngestionStatus.lastSuccessfulRows} rows · " +
+                            "${marketIngestionStatus?.lastSuccessfulRows ?: 0} rows · " +
                             "${marketIngestionStatus.lastSuccessfulProvider ?: "source unknown"}",
                         color = Mint,
                         fontSize = 10.sp,
@@ -223,8 +223,8 @@ fun MarketPulseScreen(
                 }
                 if (marketIngestionStatus?.status == "FAILED") {
                     Text(
-                        "Latest run error · ${marketIngestionStatus.errorCode ?: "unknown"}: " +
-                            (marketIngestionStatus.errorMessage ?: "No safe error detail supplied."),
+                        "Latest run error · ${marketIngestionStatus?.errorCode ?: "unknown"}: " +
+                            (marketIngestionStatus?.errorMessage ?: "No safe error detail supplied."),
                         color = Coral,
                         fontSize = 9.sp,
                         lineHeight = 14.sp
