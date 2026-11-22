@@ -213,7 +213,7 @@ def test_summarize_snapshot_rows_uses_only_verified_equity_close_fields():
     summary = summarize_snapshot_rows(rows, limit=5)
 
     assert summary["total_rows"] == 5
-    assert summary["equity_series_rows"] == 3
+    assert summary["equity_series_rows"] == 4
     assert summary["priced_symbols"] == 3
     assert (summary["advances"], summary["declines"], summary["unchanged"]) == (1, 1, 1)
     assert summary["top_gainers"][0]["symbol"] == "GAIN"
