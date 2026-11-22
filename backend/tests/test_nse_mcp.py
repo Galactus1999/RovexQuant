@@ -395,3 +395,48 @@ def test_remote_json_rpc_error_text_is_not_reflected():
     with pytest.raises(NseMcpError) as error:
         asyncio.run(run())
     assert remote_secret not in str(error.value)
+
+
+def test_gzip_encoded_mcp_response_is_decompressed_exactly_once():
+    import gzip
+
+    def handler(request):
+        message = json.loads(request.content)
+        if message["method"] == "initialize":
+            return _response(request, {
+                "jsonrpc": "2.0", "id": message["id"],
+                "result": {"protocolVersion": "2025-03-26", "capabilities": {},
+                           "serverInfo": {"name": "NSE", "version": "1"}},
+            })
+        if message["method"] == "notifications/initialized":
+            return httpx.Response(202)
+        if message["method"] == "tools/list":
+            payload = json.dumps({
+                "jsonrpc": "2.0",
+                "id": message["id"],
+                "result": {"tools": [{
+                    "name": "get_market_breadth",
+                    "inputSchema": {"type": "object"},
+                    "annotations": {"readOnlyHint": True},
+                }]},
+            }).encode("utf-8")
+            return httpx.Response(
+                200,
+                headers={
+                    "content-type": "application/json",
+                    "content-encoding": "gzip",
+                    "content-length": str(len(gzip.compress(payload))),
+                    "Mcp-Session-Id": "gzip-session",
+                },
+                content=gzip.compress(payload),
+            )
+        raise AssertionError(message["method"])
+
+    transport = httpx.MockTransport(handler)
+
+    async def run():
+        async with NseMcpClient("bhavcopy", transport=transport) as client:
+            return await client.list_tools()
+
+    tools = asyncio.run(run())
+    assert tools[0]["name"] == "get_market_breadth"
