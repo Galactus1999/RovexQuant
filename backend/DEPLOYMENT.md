@@ -8,18 +8,29 @@ From the repository root:
 docker build -t quant-api ./backend
 ```
 
-Run with a persistent volume mounted at `/data` and provide the server-only environment variables listed in `.env.example`. Set `QUANT_TOKEN_DB_PATH=/data/quant-secrets.sqlite3`.
+The backend uses Neon PostgreSQL for encrypted provider credentials when
+`QUANT_TOKEN_DATABASE_URL` is configured. Without that variable, local development
+falls back to SQLite at `QUANT_TOKEN_DB_PATH` (default:
+`./quant-secrets.sqlite3`). Do not rely on SQLite on an ephemeral hosting filesystem.
 
 ## Required environment
 
 - `QUANT_APP_USERNAME`, `QUANT_APP_PASSWORD`: private Android app login.
 - `QUANT_APP_SESSION_SIGNING_KEY`: at least 32 random characters; rotating it invalidates all current app sessions.
-- `QUANT_TOKEN_ENCRYPTION_KEY`: Fernet key for the encrypted Upstox credential vault.
-- `QUANT_TOKEN_DB_PATH`: persistent SQLite database path.
+- `QUANT_TOKEN_ENCRYPTION_KEY`: Fernet key for the encrypted Upstox credential vault. Keep this stable across deployments and backups.
+- `QUANT_TOKEN_DATABASE_URL`: Neon PostgreSQL connection URL. Use Neon's pooled connection string and keep the password private. The backend enforces TLS.
 - `QUANT_ADMIN_GATEWAY_TOKEN`: private credential for initial Upstox token provisioning.
 - `UPSTOX_ANALYTICS_TOKEN`: optional environment fallback; prefer encrypted provisioning.
 
-Generate secrets outside source control. Never commit a populated `.env`, pass secrets as Docker build arguments, or put them in the APK.
+For local-only SQLite use `QUANT_TOKEN_DB_PATH`; it is ignored when
+`QUANT_TOKEN_DATABASE_URL` is set. PostgreSQL table creation is idempotent and runs
+when the vault first connects. Token values remain Fernet-encrypted in either backend.
+The application opens short-lived database connections and does not keep a connection
+pool alive across requests.
+
+Generate secrets outside source control. Never commit a populated `.env`, pass secrets as
+Docker build arguments, or put them in the APK. Configure the Neon URL only in the
+Render service's private environment settings.
 
 ## Reverse proxy and transport
 
@@ -47,4 +58,4 @@ After deployment, create an Upstox read-only Analytics Token in the Upstox devel
 5. Sign in to the Android app with the backend HTTPS URL.
 6. During an active NSE session, confirm Nifty 50 / sector ticks, exchange timestamps, receive timestamps and quality labels update. A closed market or missing credential must remain visibly disconnected, never synthesize prices.
 
-CI validates compilation, lint, static/backend tests and APK integrity. It cannot prove a real Upstox account token or live exchange stream without the operator's credential and deployed backend.
+CI validates compilation, lint, static/backend tests and APK integrity. PostgreSQL unit tests use a controlled driver double; a real Neon connection and Render deployment must still be verified after the private connection URL is configured. CI cannot prove a real Upstox account token or live exchange stream without the operator's credential and deployed backend.
