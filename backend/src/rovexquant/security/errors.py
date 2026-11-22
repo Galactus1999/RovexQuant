@@ -31,11 +31,13 @@ async def validation_exception_handler(request: Request, error: RequestValidatio
 async def unhandled_exception_handler(request: Request, _error: Exception) -> JSONResponse:
     """Return a stable generic envelope; never serialize exception text or traceback."""
     detail = "The service encountered an unexpected error."
+    request_id = _request_id(request)
     return JSONResponse(
         status_code=500,
+        headers={"X-Request-ID": request_id},
         content={
             "detail": detail,
             "error": {"code": "internal_error", "message": detail},
-            "request_id": _request_id(request),
+            "request_id": request_id,
         },
     )
