@@ -32,13 +32,13 @@ _NSE_READ_ONLY_TOOL_ALLOWLIST = frozenset({
     "get_stock_vs_index", "compare_stocks", "get_index_history", "moving_average",
     "get_52_week_high_low", "get_index_performance",
 })
-_READ_ONLY_DESCRIPTION = re.compile(
-    r"^(get|search|compare|calculate|calculates|find|list|lookup|look up|retrieve|fetch)\\b",
-    re.IGNORECASE,
-)
-_MUTATING_DESCRIPTION = re.compile(
-    r"\\b(place order|submit order|modify order|cancel order|delete|create order|write|execute trade)\\b",
-    re.IGNORECASE,
+_READ_ONLY_DESCRIPTION_VERBS = {
+    "get", "search", "compare", "calculate", "calculates", "find",
+    "list", "lookup", "retrieve", "fetch",
+}
+_MUTATING_DESCRIPTION_PARTS = (
+    "place order", "submit order", "modify order", "cancel order",
+    "delete", "create order", "write", "execute trade",
 )
 
 
@@ -314,11 +314,16 @@ def safe_tool_catalog(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
             # Some official NSE deployments omit MCP annotations entirely.
             # Fall back only for exact locally reviewed names with a data-query
             # description. This is not a general "get_*" allow rule.
+            description_words = description.strip().lower().split()
+            first_verb = description_words[0] if description_words else ""
+            description_is_safe = (
+                first_verb in _READ_ONLY_DESCRIPTION_VERBS
+                and not any(part in description.lower() for part in _MUTATING_DESCRIPTION_PARTS)
+            )
             read_only = (
                 name in _NSE_READ_ONLY_TOOL_ALLOWLIST
                 and name_is_safe
-                and bool(_READ_ONLY_DESCRIPTION.search(description.strip()))
-                and not _MUTATING_DESCRIPTION.search(description)
+                and description_is_safe
             )
         safe.append({
             "name": name,
