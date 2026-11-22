@@ -82,7 +82,10 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
                         onReconnect = workspace::reconnectMarketStream,
                         eodSnapshot = state.eodSnapshot,
                         eodSnapshotStatus = state.eodSnapshotStatus,
-                        onRefreshEodSnapshot = workspace::refreshEodSnapshot
+                        onRefreshEodSnapshot = workspace::refreshEodSnapshot,
+                        marketIngestionStatus = state.marketIngestionStatus,
+                        marketIngestionStatusLabel = state.marketIngestionStatusLabel,
+                        onRefreshMarketIngestionStatus = workspace::refreshMarketIngestionStatus
                     )
                     TerminalSection.SCANNER -> StrategyScannerScreen(onOpenAi = { selected = TerminalSection.AI })
                     TerminalSection.SIGNALS -> SignalsScreen()
