@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
@@ -35,10 +36,17 @@ fun QuantLoginScreen(
     error: String?,
     onLogin: (String, String, String) -> Unit
 ) {
-    var baseUrl by remember(savedConnection.baseUrl) { mutableStateOf(savedConnection.baseUrl) }
-    var username by remember(savedConnection.username) { mutableStateOf(savedConnection.username) }
+    var baseUrl by rememberSaveable { mutableStateOf("") }
+    var username by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     val keyboardController = LocalSoftwareKeyboardController.current
+
+    LaunchedEffect(savedConnection.baseUrl) {
+        if (baseUrl.isBlank()) baseUrl = savedConnection.baseUrl
+    }
+    LaunchedEffect(savedConnection.username) {
+        if (username.isBlank()) username = savedConnection.username
+    }
 
     Column(
         Modifier.fillMaxSize().background(Ink).imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
