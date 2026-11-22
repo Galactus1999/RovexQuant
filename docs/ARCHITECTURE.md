@@ -129,3 +129,29 @@ The current AI gateway is backend-only and uses server-configured credentials. B
 ## Phase governance
 
 Implementation is governed by `docs/PHASE1_ACCEPTANCE.md`. A phase closes only when each agreed requirement has an owner, test and exact evidence. Unverified external connectivity and skipped device tests remain unverified, not passed.
+
+
+## API composition and feature ownership
+
+The FastAPI application entry point is a composition root only. It configures
+middleware, exception handlers, startup validation and OpenAPI metadata, then
+includes feature routers from the API package. HTTP contracts and response
+mapping live in the feature router that owns the endpoint family:
+
+- auth and app-session routes: api/routers/auth.py
+- market quotes, index-instrument lookup and WebSocket transport: api/routers/market.py
+- provider credential administration: api/routers/integrations.py
+- liveness, readiness and protected process metrics: api/routers/health.py
+- AI gateway transport: api/routers/ai.py
+- strategy catalogue transport: api/routers/strategies.py
+- existing research and NSE/TejHQ research routes remain in their existing
+  research/API router modules.
+
+Routers may validate transport schemas and map application-service errors to
+HTTP/WebSocket responses. They must not implement indicator, strategy, risk or
+backtest calculations, open network clients, or access database drivers
+directly. Provider protocols remain in market-data adapters; application
+services own provider selection and data-quality policy. Domain engines remain
+independent of FastAPI, network transports and persistence drivers. The
+architecture regression tests enforce these import and ownership boundaries,
+and the route-table test rejects duplicate HTTP-method/path owners.
