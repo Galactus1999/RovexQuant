@@ -115,3 +115,20 @@ def test_chat_requires_gateway_authentication(client):
         "messages": [{"role": "user", "content": "test"}],
     })
     assert response.status_code == 401
+
+
+def test_encrypted_app_credential_is_preferred_without_exposing_it(monkeypatch):
+    from rovexquant.market_data import upstox_credentials
+
+    secret = "owner-managed-groq-key-secret-value-123456"
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.delenv("GROQ_API_KEYS_JSON", raising=False)
+    monkeypatch.setattr(
+        upstox_credentials, "get_ai_provider_api_key",
+        lambda provider_id: secret if provider_id == "groq" else None,
+    )
+
+    credentials = gateway._credentials_for("groq")
+    assert credentials[0].credential_id == "app"
+    assert credentials[0].api_key == secret
+    assert secret not in repr(gateway.configured_providers())
