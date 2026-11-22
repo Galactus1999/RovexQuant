@@ -93,24 +93,27 @@ class MarketStreamController(
                         return
                     }
                     val quotes = json.optJSONArray("quotes") ?: return
-                    for (index in 0 until quotes.length()) {
-                        val quote = quotes.optJSONObject(index) ?: continue
-                        val key = quote.optString("instrument_key")
-                        val ltp = quote.optDouble("last_price", Double.NaN)
-                        if (key.isBlank() || !ltp.isFinite() || ltp <= 0.0) continue
-                        emitTick(MarketTick(
-                            instrumentKey = key,
-                            lastPrice = ltp,
-                            previousClose = quote.optDouble("previous_close").takeIf { it.isFinite() && it > 0 },
-                            changePercent = quote.optDouble("change_percent").takeIf { it.isFinite() },
-                            exchangeTimestamp = quote.optString("exchange_timestamp").takeIf { it.isNotBlank() && it != "null" },
-                            receivedAt = quote.optString("received_at"),
-                            quality = quote.optString("quality", "UNKNOWN")
-                        ))
+                    val parsedTicks = buildList {
+                        for (index in 0 until quotes.length()) {
+                            val quote = quotes.optJSONObject(index) ?: continue
+                            val key = quote.optString("instrument_key")
+                            val ltp = quote.optDouble("last_price", Double.NaN)
+                            if (key.isBlank() || !ltp.isFinite() || ltp <= 0.0) continue
+                            add(MarketTick(
+                                instrumentKey = key,
+                                lastPrice = ltp,
+                                previousClose = quote.optDouble("previous_close").takeIf { it.isFinite() && it > 0 },
+                                changePercent = quote.optDouble("change_percent").takeIf { it.isFinite() },
+                                exchangeTimestamp = quote.optString("exchange_timestamp").takeIf { it.isNotBlank() && it != "null" },
+                                receivedAt = quote.optString("received_at"),
+                                quality = quote.optString("quality", "UNKNOWN")
+                            ))
+                        }
                     }
+                    emitTicks(parsedTicks)
                     if (json.optString("type") == "initial_feed" || json.optString("type") == "live_feed") {
                         attempts = 0
-                        emitStatus("Live · Upstox V3")
+                        emitStatus(if (parsedTicks.isNotEmpty()) "Live · Upstox V3" else "Connected · waiting for verified quotes")
                     }
                 }.onFailure { emitStatus("Invalid market message") }
             }
