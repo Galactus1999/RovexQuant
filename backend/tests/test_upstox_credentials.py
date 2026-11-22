@@ -97,7 +97,7 @@ def test_postgres_backend_uses_tls_and_bytea(monkeypatch):
     assert vault.get_upstox_analytics_token() == token
     assert vault.upstox_analytics_status()["connected"] is True
     assert calls and calls[0][1]["sslmode"] == "require"
-    assert any("BYTEA" in sql for sql in connection.ddl)
+    assert not any(sql.startswith("CREATE TABLE") for sql in connection.ddl)
     assert token.encode() not in connection.stored
 
 
@@ -129,3 +129,35 @@ def test_sqlite_mode_rejects_conflicting_postgres_url(monkeypatch):
         assert "selects SQLite" in str(error)
     else:
         raise AssertionError("Conflicting SQLite/PostgreSQL configuration must fail closed")
+
+
+
+def test_database_tls_cannot_be_disabled_outside_test_environment(monkeypatch):
+    monkeypatch.setenv("QUANT_TOKEN_STORAGE_MODE", "postgresql")
+    monkeypatch.setenv(
+        "QUANT_TOKEN_DATABASE_URL",
+        "postgresql://quant:private@ep-example.ap-southeast-1.aws.neon.tech/neondb?sslmode=disable",
+    )
+    monkeypatch.setenv("QUANT_TOKEN_DATABASE_SSLMODE", "disable")
+    monkeypatch.delenv("QUANT_ENV", raising=False)
+
+    try:
+        vault.validate_storage_configuration()
+    except vault.UpstoxCredentialError as error:
+        assert error.status_code == 503
+        assert "enforce TLS" in str(error)
+    else:
+        raise AssertionError("TLS must not be disabled outside the test environment")
+
+
+def test_test_environment_can_use_local_postgres_without_tls(monkeypatch):
+    monkeypatch.setenv("QUANT_TOKEN_STORAGE_MODE", "postgresql")
+    monkeypatch.setenv(
+        "QUANT_TOKEN_DATABASE_URL",
+        "postgresql://quant:private@localhost:5432/quant_test?sslmode=disable",
+    )
+    monkeypatch.setenv("QUANT_TOKEN_DATABASE_SSLMODE", "disable")
+    monkeypatch.setenv("QUANT_ENV", "test")
+    monkeypatch.setenv("QUANT_TOKEN_ENCRYPTION_KEY", Fernet.generate_key().decode())
+
+    vault.validate_storage_configuration()
