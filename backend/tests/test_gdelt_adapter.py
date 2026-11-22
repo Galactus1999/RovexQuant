@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from rovexquant.market_data import gdelt
@@ -44,10 +46,9 @@ class FakeAsyncClient:
         return FakeResponse()
 
 
-@pytest.mark.asyncio
-async def test_gdelt_adapter_bounds_query_and_preserves_source_provenance(monkeypatch):
+def test_gdelt_adapter_bounds_query_and_preserves_source_provenance(monkeypatch):
     monkeypatch.setattr(gdelt.httpx, "AsyncClient", FakeAsyncClient)
-    articles = await gdelt.search_articles("  India   OR   RBI ", timespan="3d", limit=12)
+    articles = asyncio.run(gdelt.search_articles("  India   OR   RBI ", timespan="3d", limit=12))
     assert len(articles) == 1
     assert articles[0]["domain"] == "publisher.example"
     assert articles[0]["seen_at"] == "20261122T093000Z"
@@ -58,11 +59,10 @@ async def test_gdelt_adapter_bounds_query_and_preserves_source_provenance(monkey
     assert FakeAsyncClient.captured["client"]["timeout"].connect == 3.0
 
 
-@pytest.mark.asyncio
-async def test_gdelt_adapter_rejects_unbounded_or_unsupported_requests():
+def test_gdelt_adapter_rejects_unbounded_or_unsupported_requests():
     with pytest.raises(ValueError):
-        await gdelt.search_articles(" ", timespan="7d", limit=10)
+        asyncio.run(gdelt.search_articles(" ", timespan="7d", limit=10))
     with pytest.raises(ValueError):
-        await gdelt.search_articles("India", timespan="30d", limit=10)
+        asyncio.run(gdelt.search_articles("India", timespan="30d", limit=10))
     with pytest.raises(ValueError):
-        await gdelt.search_articles("India", timespan="7d", limit=100)
+        asyncio.run(gdelt.search_articles("India", timespan="7d", limit=100))

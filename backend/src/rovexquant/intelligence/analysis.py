@@ -103,7 +103,8 @@ def _classify(title: str) -> tuple[str, list[str]]:
             matches.append((category, hits))
     if not matches:
         return "GENERAL_MARKET_NEWS", []
-    matches.sort(key=lambda item: item[1], reverse=True)
+    priority = {name: index for index, (name, _) in enumerate(_EVENT_RULES)}
+    matches.sort(key=lambda item: priority[item[0]])
     return matches[0][0], [category for category, _ in matches]
 
 
