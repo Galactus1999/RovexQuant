@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 
 from rovexquant.api import main as api
 from rovexquant.auth import issue_app_session
+from rovexquant.market_data.nse_mcp import NseMcpError
 
 
 def _session(monkeypatch):
@@ -83,3 +84,27 @@ def test_nse_mcp_arguments_are_size_bounded(monkeypatch):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 422
+
+def test_nse_mcp_remote_schema_failure_uses_safe_structured_error(monkeypatch):
+    token = _session(monkeypatch)
+
+    class FakeClient:
+        def __init__(self, _server):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *_):
+            return None
+        async def call_tool(self, _name, _arguments):
+            raise NseMcpError("NSE MCP tool schema references are not supported", 502)
+
+    monkeypatch.setattr(api, "NseMcpClient", FakeClient)
+    response = TestClient(api.app).post(
+        "/api/v1/app/research/nse-mcp/call",
+        json={"server": "bhavcopy", "tool": "get_history", "arguments": {}},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 502
+    assert response.json()["error"]["code"] == "internal_error"
+    assert response.json()["request_id"] == response.headers["X-Request-ID"]
+    assert "tool schema references" in response.json()["detail"]
