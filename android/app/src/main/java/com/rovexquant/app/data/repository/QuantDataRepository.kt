@@ -5,6 +5,7 @@ import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiProvider
 import com.rovexquant.app.data.model.AiStrategyBrief
+import com.rovexquant.app.data.model.EodMarketSnapshot
 import com.rovexquant.app.data.model.IntelligenceFeed
 import com.rovexquant.app.data.model.MarketIndexInstrument
 import com.rovexquant.app.data.model.MarketEquityInstrument
@@ -28,6 +29,7 @@ interface QuantDataRepository {
     suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String)
     suspend fun saveUpstoxAnalyticsToken(session: QuantSession, token: String)
     suspend fun fetchUpstoxConfigured(session: QuantSession): Boolean
+    suspend fun fetchLatestEodMarketSnapshot(session: QuantSession, exchange: String = "nse"): EodMarketSnapshot
     suspend fun fetchIntelligenceEvents(session: QuantSession, query: String, timespan: String): IntelligenceFeed
     suspend fun sendAiMessage(
         session: QuantSession,
