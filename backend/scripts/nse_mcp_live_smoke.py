@@ -7,10 +7,13 @@ without persisting or dumping raw market data.
 """
 import asyncio
 import json
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from rovexquant.market_data.nse_mcp import (
     NseMcpClient,
+    NseMcpError,
     extract_source_timestamp,
     safe_tool_catalog,
 )
@@ -22,15 +25,16 @@ CANDIDATES = {
 }
 
 # Only fixed, low-impact arguments for explicitly allowlisted read-only tools.
+def _today_nse() -> str:
+    return datetime.now(ZoneInfo("Asia/Kolkata")).date().isoformat()
+
 # The Bhavcopy tools require an as-of date; use today's ISO date and let NSE
 # return its documented nearest available trading day when the market is shut.
 def _safe_arguments(server: str, tool_name: str) -> dict[str, Any] | None:
     if server == "bhavcopy" and tool_name in {"get_market_breadth", "get_market_mood"}:
-        from datetime import date
-        return {"date": date.today().isoformat()}
+        return {"date": _today_nse()}
     if server == "bhavcopy" and tool_name == "get_index_snapshot":
-        from datetime import date
-        return {"date": date.today().isoformat(), "filter": "Nifty 50"}
+        return {"date": _today_nse(), "filter": "Nifty 50"}
     if server == "cmmkt" and tool_name in {"cm_get_data_status", "cm_get_allstocks_status", "cm_get_live_indices"}:
         return {}
     return None
@@ -83,7 +87,7 @@ def _summarize(value: Any) -> dict[str, Any]:
     return {"type": type(value).__name__}
 
 
-async def check(server: str) -> None:
+async def _check_once(server: str) -> None:
     async with NseMcpClient(server, timeout=25.0) as client:
         raw_tools = await client.list_tools()
         tools = safe_tool_catalog(raw_tools)
@@ -143,6 +147,20 @@ async def check(server: str) -> None:
         }, sort_keys=True))
         if structured is None and not content:
             raise RuntimeError(f"NSE {server} tool {selected['name']} returned no content")
+
+
+async def check(server: str) -> None:
+    """Retry only transport/temporary upstream failures; schema or permission failures stay hard failures."""
+    for attempt in range(3):
+        try:
+            await _check_once(server)
+            return
+        except NseMcpError as error:
+            if not error.retryable or attempt == 2:
+                raise
+            delay = 2 ** attempt
+            print(f"{server}: transient upstream failure; retrying in {delay}s")
+            await asyncio.sleep(delay)
 
 
 async def main() -> None:
