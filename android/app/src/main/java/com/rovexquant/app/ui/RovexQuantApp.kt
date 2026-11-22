@@ -1,5 +1,6 @@
 package com.rovexquant.app.ui
 
+import android.app.Application
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -9,59 +10,20 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.foundation.layout.Box
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-
-private val dashboardIndexAliases = mapOf(
-    "NIFTY 50" to listOf("NIFTY 50"),
-    "NIFTY BANK" to listOf("NIFTY BANK"),
-    "NIFTY FINANCIAL SERVICES" to listOf("NIFTY FINANCIAL SERVICES", "NIFTY FIN SERVICE"),
-    "NIFTY IT" to listOf("NIFTY IT"),
-    "NIFTY AUTO" to listOf("NIFTY AUTO"),
-    "NIFTY PHARMA" to listOf("NIFTY PHARMA"),
-    "NIFTY HEALTHCARE" to listOf("NIFTY HEALTHCARE"),
-    "NIFTY FMCG" to listOf("NIFTY FMCG"),
-    "NIFTY METAL" to listOf("NIFTY METAL"),
-    "NIFTY OIL & GAS" to listOf("NIFTY OIL & GAS", "NIFTY OIL AND GAS"),
-    "NIFTY REALTY" to listOf("NIFTY REALTY"),
-    "NIFTY POWER" to listOf("NIFTY POWER"),
-    "NIFTY MEDIA" to listOf("NIFTY MEDIA"),
-    "NIFTY PSU BANK" to listOf("NIFTY PSU BANK"),
-    "NIFTY PRIVATE BANK" to listOf("NIFTY PRIVATE BANK"),
-    "NIFTY CONSUMER DURABLES" to listOf("NIFTY CONSUMER DURABLES"),
-    "NIFTY CAPITAL GOODS" to listOf("NIFTY CAPITAL GOODS"),
-    "NIFTY CHEMICALS" to listOf("NIFTY CHEMICALS"),
-    "NIFTY CEMENT" to listOf("NIFTY CEMENT"),
-    "NIFTY TELECOMMUNICATIONS" to listOf("NIFTY TELECOMMUNICATIONS", "NIFTY TELECOM")
-)
-
-private fun normalizeIndexName(value: String): String =
-    value.uppercase().filter { it.isLetterOrDigit() }
-
-private fun resolveDashboardIndices(master: List<MarketIndexInstrument>): Map<String, String> {
-    val result = linkedMapOf<String, String>()
-    for ((dashboardName, aliases) in dashboardIndexAliases) {
-        val normalizedAliases = aliases.map(::normalizeIndexName).toSet()
-        val match = master.firstOrNull { instrument ->
-            normalizeIndexName(instrument.name) in normalizedAliases ||
-                normalizeIndexName(instrument.tradingSymbol) in normalizedAliases
-        }
-        if (match != null) result[dashboardName] = match.instrumentKey
-    }
-    return result
-}
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.rovexquant.app.feature.workspace.QuantWorkspaceViewModel
 
 private enum class TerminalSection(val label: String, val glyph: String) {
     PULSE("Pulse", "◈"),
@@ -73,93 +35,52 @@ private enum class TerminalSection(val label: String, val glyph: String) {
 
 @Composable
 fun RovexQuantApp() {
-    val context = LocalContext.current
-    var session by remember { mutableStateOf<QuantSession?>(null) }
-    var restoringSession by remember { mutableStateOf(true) }
-    LaunchedEffect(Unit) {
-        val stored = withContext(Dispatchers.IO) { QuantSessionStore.load(context) }
-        if (stored != null) {
-            try {
-                val valid = withContext(Dispatchers.IO) { QuantApi.validateSession(stored) }
-                if (valid) session = stored else withContext(Dispatchers.IO) { QuantSessionStore.clearSession(context) }
-            } catch (_: Exception) {
-                // Preserve the encrypted token during temporary network/server failures.
-                // The user can retry login; the next launch will validate it again.
-            }
-        }
-        restoringSession = false
-    }
+    val application = LocalContext.current.applicationContext as Application
+    val workspace: QuantWorkspaceViewModel = viewModel(
+        factory = ViewModelProvider.AndroidViewModelFactory.getInstance(application)
+    )
+    val state by workspace.uiState.collectAsStateWithLifecycle()
     var selected by remember { mutableStateOf(TerminalSection.PULSE) }
-    val ticks = remember { mutableStateMapOf<String, MarketTick>() }
-    val indexKeys = remember { mutableStateMapOf<String, String>() }
-    var streamStatus by remember { mutableStateOf("Not connected") }
 
-    if (restoringSession) {
+    if (state.restoringSession) {
         Box(Modifier.fillMaxSize().background(Ink), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = Mint)
         }
         return
     }
 
-    if (session == null) {
-        QuantLoginScreen(onLogin = { session = it })
-        return
-    }
-
-    val activeSession = session ?: return
-    val controller = remember(activeSession) {
-        MarketStreamController(
-            session = activeSession,
-            onStatus = { streamStatus = it },
-            onTick = { tick -> ticks[tick.instrumentKey] = tick }
+    val activeSession = state.session
+    if (activeSession == null) {
+        QuantLoginScreen(
+            savedConnection = state.savedConnection,
+            loading = state.loginLoading,
+            error = state.loginError,
+            onLogin = workspace::login
         )
-    }
-    DisposableEffect(controller) {
-        onDispose {
-            controller.stop()
-            ticks.clear()
-            indexKeys.clear()
-            streamStatus = "Not connected"
-        }
-    }
-    LaunchedEffect(activeSession) {
-        streamStatus = "Loading official NSE index master"
-        try {
-            val master = withContext(Dispatchers.IO) {
-                QuantApi.fetchIndexInstruments(activeSession)
-            }
-            val resolved = resolveDashboardIndices(master)
-            indexKeys.clear()
-            indexKeys.putAll(resolved)
-            if (resolved.isEmpty()) throw IllegalStateException("No dashboard indices matched the official master.")
-            controller.start(resolved.values.toList())
-            streamStatus = "Connecting · ${resolved.size} indices"
-        } catch (failure: Exception) {
-            indexKeys.clear()
-            indexKeys["NIFTY 50"] = "NSE_INDEX|Nifty 50"
-            indexKeys["NIFTY BANK"] = "NSE_INDEX|Nifty Bank"
-            streamStatus = "Instrument master unavailable · limited feed"
-            controller.start(listOf("NSE_INDEX|Nifty 50", "NSE_INDEX|Nifty Bank"))
-        }
+        return
     }
 
     Column(Modifier.fillMaxSize().background(Ink)) {
         Column(Modifier.padding(horizontal = 17.dp)) {
             TerminalHeader(
-                status = if (streamStatus.startsWith("Live")) "Live data" else "Backend",
-                onSignOut = {
-                    session = null
-                    QuantSessionStore.clearSession(context)
-                }
+                status = if (state.streamStatus.startsWith("Live")) "Live data" else "Backend",
+                onSignOut = workspace::signOut
             )
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             AnimatedContent(targetState = selected, label = "workspaceTransition") { destination ->
                 when (destination) {
-                    TerminalSection.PULSE -> MarketPulseScreen(ticks = ticks, indexKeys = indexKeys, streamStatus = streamStatus)
+                    TerminalSection.PULSE -> MarketPulseScreen(
+                        ticks = state.ticks,
+                        indexKeys = state.indexKeys,
+                        streamStatus = state.streamStatus
+                    )
                     TerminalSection.SCANNER -> StrategyScannerScreen()
                     TerminalSection.SIGNALS -> SignalsScreen()
-                    TerminalSection.LAB -> ResearchLabScreen(session = activeSession)
+                    TerminalSection.LAB -> ResearchLabScreen(
+                        session = activeSession,
+                        repository = workspace.repository
+                    )
                     TerminalSection.PORTFOLIO -> PortfolioScreen()
                 }
             }
