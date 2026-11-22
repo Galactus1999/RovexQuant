@@ -2,6 +2,10 @@ package com.rovexquant.app.data.repository
 
 import android.content.Context
 import com.rovexquant.app.data.local.QuantSessionStore
+import com.rovexquant.app.data.model.AiChatMessage
+import com.rovexquant.app.data.model.AiCompletion
+import com.rovexquant.app.data.model.AiProvider
+import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.MarketIndexInstrument
 import com.rovexquant.app.data.model.MarketTick
 import com.rovexquant.app.data.model.NseMcpCatalog
@@ -39,6 +43,35 @@ class QuantRepository(context: Context) : QuantDataRepository {
 
     override suspend fun fetchNseMcpTools(session: QuantSession, server: String): List<NseMcpCatalog> =
         withContext(Dispatchers.IO) { QuantApi.fetchNseMcpTools(session, server) }
+
+    override suspend fun fetchAiProviders(session: QuantSession): List<AiProvider> =
+        withContext(Dispatchers.IO) { QuantApi.fetchAiProviders(session) }
+
+    override suspend fun sendAiMessage(
+        session: QuantSession,
+        providerId: String,
+        model: String,
+        messages: List<AiChatMessage>,
+        credentialId: String?
+    ): AiCompletion = withContext(Dispatchers.IO) {
+        QuantApi.sendAiMessage(session, providerId, model, messages, credentialId)
+    }
+
+    override suspend fun requestAiStrategyBrief(
+        session: QuantSession,
+        providerId: String,
+        model: String,
+        symbol: String,
+        exchange: String,
+        fromDate: String,
+        toDate: String,
+        strategyContext: String,
+        credentialId: String?
+    ): AiStrategyBrief = withContext(Dispatchers.IO) {
+        QuantApi.requestAiStrategyBrief(
+            session, providerId, model, symbol, exchange, fromDate, toDate, strategyContext, credentialId
+        )
+    }
 
     override suspend fun callNseMcpTool(
         session: QuantSession,
