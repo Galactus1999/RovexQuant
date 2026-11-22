@@ -208,7 +208,7 @@ fun MarketPulseScreen(
                     Text(
                         "Persisted EOD data · $persistedDate · " +
                             "${marketIngestionStatus?.lastSuccessfulRows ?: 0} rows · " +
-                            "${marketIngestionStatus.lastSuccessfulProvider ?: "source unknown"}",
+                            "${marketIngestionStatus?.lastSuccessfulProvider ?: "source unknown"}",
                         color = Mint,
                         fontSize = 10.sp,
                         lineHeight = 15.sp
