@@ -54,7 +54,8 @@ data class AiStrategyBrief(
     val barCount: Int,
     val evidence: AiStrategyEvidence,
     val bars: List<AiDailyBar>,
-    val ai: AiCompletion,
+    val ai: AiCompletion?,
+    val aiError: String?,
     val dataRights: String,
     val limitations: List<String>
 )
