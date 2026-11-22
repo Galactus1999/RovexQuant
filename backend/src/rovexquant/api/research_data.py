@@ -91,6 +91,41 @@ async def app_research_eod_delivery(
         raise _tejhq_http_error(error) from error
 
 
+
+@router.get(
+    "/api/v1/app/market-data/eod/latest/{exchange}",
+    dependencies=[Depends(require_app_session)],
+)
+async def app_latest_eod_market_snapshot(
+    exchange: Literal["nse", "bse"],
+    max_lookback_days: int = Query(10, ge=1, le=14),
+    limit: int = Query(20, ge=1, le=50),
+):
+    """Return a compact latest-available EOD market pulse; no live-price claims."""
+    try:
+        provider_id, trading_date, rows = await tejhq_service.fetch_latest_snapshot(
+            exchange, max_lookback_days=max_lookback_days
+        )
+        summary = tejhq_service.summarize_snapshot_rows(
+            rows,
+            limit=limit,
+            allowed_series={"EQ"} if exchange == "nse" else None,
+        )
+        return {
+            "provider": provider_id,
+            "data_mode": "END_OF_DAY",
+            "exchange": exchange.upper(),
+            "market_scope": "NSE_EQ" if exchange == "nse" else "BSE_EQUITY",
+            "trading_date": trading_date,
+            "received_at": datetime.now(timezone.utc),
+            "timestamp_semantics": "Trading date only; not an intraday or live timestamp",
+            "summary": summary,
+            "retention": "Personal research use only; no redistribution",
+        }
+    except TejHqError as error:
+        raise _tejhq_http_error(error) from error
+
+
 @router.get(
     "/api/v1/app/research/market-data/snapshot/{exchange}",
     dependencies=[Depends(require_app_session)],
