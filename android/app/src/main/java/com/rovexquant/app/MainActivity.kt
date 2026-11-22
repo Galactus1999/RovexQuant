@@ -3,12 +3,14 @@ package com.rovexquant.app
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.lifecycle.ViewModelProvider
 import com.rovexquant.app.ui.QuantTerminal
 import com.rovexquant.app.ui.RovexTheme
 
-class MainActivity : ComponentActivity() {
+open class MainActivity : ComponentActivity() {
+    protected open fun createWorkspaceViewModelFactory(): ViewModelProvider.Factory? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { RovexTheme { QuantTerminal() } }
+        setContent { RovexTheme { QuantTerminal(createWorkspaceViewModelFactory()) } }
     }
 }
