@@ -228,6 +228,74 @@ def store_upstox_analytics_token(token: str) -> None:
         )
 
 
+
+def _ai_provider_storage_key(provider_id: str) -> str:
+    # Import lazily to keep the credential-storage module independent at import time.
+    from rovexquant.ai.providers import SUPPORTED
+
+    if provider_id not in SUPPORTED:
+        raise UpstoxCredentialError("Unsupported AI provider", 422)
+    return f"ai:{provider_id}"
+
+
+def store_ai_provider_api_key(provider_id: str, api_key: str) -> None:
+    """Encrypt one owner-managed AI provider key in the shared server-side vault."""
+    storage_key = _ai_provider_storage_key(provider_id)
+    if not isinstance(api_key, str) or len(api_key.strip()) < 20 or len(api_key) > 4096:
+        raise UpstoxCredentialError("Invalid AI provider API key", 422)
+    encrypted = _fernet().encrypt(api_key.strip().encode())
+    now = int(time.time())
+    placeholder = "%s" if _storage_mode() == "postgresql" else "?"
+    with _connect() as connection:
+        connection.execute(
+            "INSERT INTO provider_tokens(provider, encrypted_token, updated_at, expires_at) "
+            f"VALUES ({placeholder}, {placeholder}, {placeholder}, NULL) "
+            "ON CONFLICT(provider) DO UPDATE SET "
+            "encrypted_token=excluded.encrypted_token, updated_at=excluded.updated_at, "
+            "expires_at=NULL",
+            (storage_key, encrypted, now),
+        )
+
+
+def get_ai_provider_api_key(provider_id: str) -> str | None:
+    try:
+        storage_key = _ai_provider_storage_key(provider_id)
+        placeholder = "%s" if _storage_mode() == "postgresql" else "?"
+        with _connect() as connection:
+            row = connection.execute(
+                "SELECT encrypted_token FROM provider_tokens "
+                f"WHERE provider={placeholder}",
+                (storage_key,),
+            ).fetchone()
+        if not row:
+            return None
+        return _fernet().decrypt(bytes(row[0])).decode()
+    except (sqlite3.Error, psycopg.Error, InvalidToken, UnicodeDecodeError,
+            UpstoxCredentialError, ValueError):
+        return None
+
+
+def delete_ai_provider_api_key(provider_id: str) -> bool:
+    storage_key = _ai_provider_storage_key(provider_id)
+    placeholder = "%s" if _storage_mode() == "postgresql" else "?"
+    with _connect() as connection:
+        cursor = connection.execute(
+            f"DELETE FROM provider_tokens WHERE provider={placeholder}",
+            (storage_key,),
+        )
+    return bool(getattr(cursor, "rowcount", 0))
+
+
+def delete_upstox_analytics_token() -> bool:
+    placeholder = "%s" if _storage_mode() == "postgresql" else "?"
+    with _connect() as connection:
+        cursor = connection.execute(
+            f"DELETE FROM provider_tokens WHERE provider={placeholder}",
+            ("upstox",),
+        )
+    return bool(getattr(cursor, "rowcount", 0))
+
+
 def get_upstox_analytics_token() -> str | None:
     placeholder = "%s" if _database_url() else "?"
     try:
