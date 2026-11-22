@@ -11,12 +11,18 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field, model_validator
 
 from rovexquant.ai.gateway import GatewayError, authorize_gateway, complete_chat, configured_providers
+from rovexquant.ai.providers import SUPPORTED
 from rovexquant.market_data import tejhq_service
 from rovexquant.market_data.tejhq_service import TejHqError
 from rovexquant.research.contracts import IndicatorRequest
 from rovexquant.research.service import calculate_indicators
 from rovexquant.security.dependencies import require_app_session
-from rovexquant.security.request_controls import ai_request_rate_limit
+from rovexquant.security.request_controls import ai_request_rate_limit, provider_credential_rate_limit
+from rovexquant.market_data.upstox_credentials import (
+    UpstoxCredentialError,
+    delete_ai_provider_api_key,
+    store_ai_provider_api_key,
+)
 
 router = APIRouter()
 
@@ -34,6 +40,12 @@ class AIChatRequest(BaseModel):
     fallback_providers: list[str] = Field(default_factory=list, max_length=3)
     max_tokens: int = Field(default=1200, ge=1, le=4096)
     temperature: float = Field(default=0.2, ge=0, le=2)
+
+
+class AIProviderCredentialInput(BaseModel):
+    api_key: str = Field(min_length=20, max_length=4096)
+
+
 
 
 class AIStrategyBriefRequest(BaseModel):
@@ -191,6 +203,44 @@ def app_ai_providers():
             for item in configured_providers()
         ]
     }
+
+
+
+@router.put(
+    "/api/v1/app/ai/providers/{provider_id}/credential",
+    dependencies=[Depends(require_app_session), Depends(provider_credential_rate_limit)],
+)
+def save_app_ai_provider_credential(provider_id: str, request: AIProviderCredentialInput):
+    """Store an owner-managed provider key encrypted; never return or log the key."""
+    if provider_id not in SUPPORTED:
+        raise HTTPException(status_code=404, detail="Unsupported AI provider")
+    try:
+        store_ai_provider_api_key(provider_id, request.api_key)
+    except UpstoxCredentialError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+    return {
+        "provider_id": provider_id,
+        "configured": True,
+        "credential_id": "app",
+        "credential_storage": "encrypted_server_side",
+        "message": "Credential stored. Provider acceptance is verified on the first AI request.",
+    }
+
+
+@router.delete(
+    "/api/v1/app/ai/providers/{provider_id}/credential",
+    dependencies=[Depends(require_app_session), Depends(provider_credential_rate_limit)],
+)
+def delete_app_ai_provider_credential(provider_id: str):
+    """Remove the owner's encrypted provider key without exposing credential material."""
+    if provider_id not in SUPPORTED:
+        raise HTTPException(status_code=404, detail="Unsupported AI provider")
+    try:
+        deleted = delete_ai_provider_api_key(provider_id)
+    except UpstoxCredentialError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+    return {"provider_id": provider_id, "deleted": deleted}
+
 
 
 @router.post(
