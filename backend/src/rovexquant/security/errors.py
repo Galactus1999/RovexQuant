@@ -25,7 +25,7 @@ async def http_exception_handler(request: Request, error: StarletteHTTPException
 async def validation_exception_handler(request: Request, error: RequestValidationError) -> JSONResponse:
     # Pydantic raw errors can include rejected input values; never echo them.
     safe_errors = [{"loc": [str(part) for part in item.get("loc", ())], "msg": str(item.get("msg", "Invalid value"))[:240], "type": str(item.get("type", "value_error"))[:80]} for item in error.errors()]
-    return JSONResponse(status_code=422, content={"detail": safe_errors, "error": {"code": "validation_error", "message": "Request validation failed."}, "request_id": current_request_id()})
+    return JSONResponse(status_code=422, content={"detail": safe_errors, "error": {"code": "validation_error", "message": "Request validation failed."}, "request_id": _request_id(request)})
 
 
 async def unhandled_exception_handler(request: Request, _error: Exception) -> JSONResponse:
