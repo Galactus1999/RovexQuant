@@ -53,6 +53,25 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("portfolio.entry").assertIsDisplayed()
     }
 
+
+    @Test fun aiWorkspaceConnectsChatAndEodRecoveryActions() {
+        waitForDashboard()
+        composeRule.onNodeWithText("AI").performClick()
+        composeRule.onNodeWithText("Quant AI.").assertIsDisplayed()
+        composeRule.onNodeWithText("Groq").assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.model").performTextInput("test-model")
+        composeRule.onNodeWithTag("ai.chat.input").performTextInput("Explain the RSI indicator.")
+        composeRule.onNodeWithTag("ai.chat.send").performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("Deterministic AI fixture response.").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("ai.recovery.run").performScrollTo().performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("AI strategy review · groq / test-model").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("RELIANCE").assertIsDisplayed()
+    }
+
     @Test fun portfolioCalculatesRiskBasedShareQuantity() {
         waitForDashboard()
         composeRule.onNodeWithText("Portfolio").performClick()
