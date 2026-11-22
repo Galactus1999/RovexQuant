@@ -78,6 +78,16 @@ def create_app_session(request: AppLoginRequest):
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
 
+@app.get("/api/v1/app/auth/session")
+def validate_app_session(authorization: str | None = Header(default=None)):
+    """Validate a previously issued mobile session without exposing its bearer token."""
+    try:
+        claims = bearer_claims(authorization)
+        return {"authenticated": True, "expires_at": claims["exp"]}
+    except AppAuthError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
 @app.get("/api/v1/app/market/providers")
 def app_market_providers(authorization: str | None = Header(default=None)):
     try:

@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -30,8 +31,10 @@ import kotlinx.coroutines.withContext
 
 @Composable
 fun QuantLoginScreen(onLogin: (QuantSession) -> Unit) {
-    var baseUrl by remember { mutableStateOf("") }
-    var username by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    val savedConnection = remember { QuantSessionStore.loadConnection(context) }
+    var baseUrl by remember { mutableStateOf(savedConnection.baseUrl) }
+    var username by remember { mutableStateOf(savedConnection.username) }
     var password by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
@@ -45,7 +48,7 @@ fun QuantLoginScreen(onLogin: (QuantSession) -> Unit) {
         Spacer(Modifier.height(6.dp))
         Text("Secure market-data sign in", color = MaterialTheme.colorScheme.onBackground, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
-        Text("Connect to your private Quant backend. Your Upstox token stays on the server.", color = Muted, fontSize = 12.sp)
+        Text("Your backend and username are remembered on this device. Your password is never saved.", color = Muted, fontSize = 12.sp)
         Spacer(Modifier.height(22.dp))
         OutlinedTextField(baseUrl, { baseUrl = it }, Modifier.fillMaxWidth(), label = { Text("Backend HTTPS URL") }, singleLine = true)
         Spacer(Modifier.height(10.dp))
@@ -61,10 +64,11 @@ fun QuantLoginScreen(onLogin: (QuantSession) -> Unit) {
                 scope.launch {
                     try {
                         val result = withContext(Dispatchers.IO) { QuantApi.login(baseUrl, username, password) }
+                        withContext(Dispatchers.IO) { QuantSessionStore.save(context, result, username) }
                         password = ""
                         onLogin(result)
                     } catch (failure: Exception) {
-                        error = failure.message ?: "Unable to sign in."
+                        error = failure.message ?: "Unable to sign in securely."
                     } finally {
                         loading = false
                     }
@@ -77,6 +81,6 @@ fun QuantLoginScreen(onLogin: (QuantSession) -> Unit) {
             if (loading) CircularProgressIndicator() else Text("Connect securely")
         }
         Spacer(Modifier.height(14.dp))
-        Text("Use HTTPS only. The session is held in memory and expires automatically; sign in again after restarting Quant.", color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
+        Text("Your session is encrypted with Android Keystore and restored automatically until it expires. Use HTTPS only.", color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
     }
 }

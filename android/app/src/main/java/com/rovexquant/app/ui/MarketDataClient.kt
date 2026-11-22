@@ -65,6 +65,21 @@ object QuantApi {
         }
     }
 
+    fun validateSession(session: QuantSession): Boolean {
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/auth/session")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        http.newCall(request).execute().use { response ->
+            if (response.code == 401 || response.code == 403) return false
+            if (!response.isSuccessful) {
+                throw IllegalStateException("Session validation unavailable (HTTP ${response.code}).")
+            }
+            return JSONObject(response.body?.string().orEmpty()).optBoolean("authenticated", false)
+        }
+    }
+
     fun fetchNseMcpTools(session: QuantSession, server: String = "both"): List<NseMcpCatalog> {
         require(server in setOf("bhavcopy", "cmmkt", "both")) { "Invalid NSE MCP server." }
         val request = Request.Builder()

@@ -12,6 +12,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -70,11 +74,33 @@ private enum class TerminalSection(val label: String, val glyph: String) {
 
 @Composable
 fun RovexQuantApp() {
+    val context = LocalContext.current
     var session by remember { mutableStateOf<QuantSession?>(null) }
+    var restoringSession by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        val stored = withContext(Dispatchers.IO) { QuantSessionStore.load(context) }
+        if (stored != null) {
+            try {
+                val valid = withContext(Dispatchers.IO) { QuantApi.validateSession(stored) }
+                if (valid) session = stored else withContext(Dispatchers.IO) { QuantSessionStore.clearSession(context) }
+            } catch (_: Exception) {
+                // Preserve the encrypted token during temporary network/server failures.
+                // The user can retry login; the next launch will validate it again.
+            }
+        }
+        restoringSession = false
+    }
     var selected by remember { mutableStateOf(TerminalSection.PULSE) }
     val ticks = remember { mutableStateMapOf<String, MarketTick>() }
     val indexKeys = remember { mutableStateMapOf<String, String>() }
     var streamStatus by remember { mutableStateOf("Not connected") }
+
+    if (restoringSession) {
+        Box(Modifier.fillMaxSize().background(Ink), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = Mint)
+        }
+        return
+    }
 
     if (session == null) {
         QuantLoginScreen(onLogin = { session = it })
@@ -122,7 +148,10 @@ fun RovexQuantApp() {
         Column(Modifier.padding(horizontal = 17.dp)) {
             TerminalHeader(
                 status = if (streamStatus.startsWith("Live")) "Live data" else "Backend",
-                onSignOut = { session = null }
+                onSignOut = {
+                    session = null
+                    QuantSessionStore.clearSession(context)
+                }
             )
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {

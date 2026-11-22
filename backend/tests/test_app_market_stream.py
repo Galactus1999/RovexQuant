@@ -198,3 +198,44 @@ def test_stream_bridge_rejects_unapproved_instrument_keys_before_network(monkeyp
     monkeypatch.setattr(upstox_credentials, "get_upstox_analytics_token", lambda: "fake-analytics-token")
     with pytest.raises(StreamError, match="Only NSE index"):
         asyncio.run(stream_upstox_market_data(object(), ["BSE_INDEX|SENSEX"], "full"))
+
+
+
+def test_mobile_session_validation_endpoint(monkeypatch):
+    configure(monkeypatch)
+    client = TestClient(app)
+    assert client.get("/api/v1/app/auth/session").status_code == 401
+    token, _ = issue_app_session("quant-user", "long-test-password")
+    response = client.get("/api/v1/app/auth/session", headers={
+        "Authorization": f"Bearer {token}"
+    })
+    assert response.status_code == 200
+    assert response.json()["authenticated"] is True
+    assert isinstance(response.json()["expires_at"], int)
+    assert "access_token" not in response.text
+
+
+def test_mobile_session_validation_rejects_expired_token(monkeypatch):
+    configure(monkeypatch)
+    import base64
+    import hashlib
+    import hmac
+    import json
+
+    header = base64.urlsafe_b64encode(b'{"alg":"HS256","typ":"JWT"}').rstrip(b"=").decode()
+    payload_data = {
+        "iss": "quant-api", "aud": "quant-mobile", "sub": "quant-user",
+        "iat": int(time.time()) - 600, "exp": int(time.time()) - 1,
+    }
+    payload = base64.urlsafe_b64encode(
+        json.dumps(payload_data, separators=(",", ":"), sort_keys=True).encode()
+    ).rstrip(b"=").decode()
+    signing_input = f"{header}.{payload}".encode()
+    signature = base64.urlsafe_b64encode(
+        hmac.new(b"s" * 48, signing_input, hashlib.sha256).digest()
+    ).rstrip(b"=").decode()
+    response = TestClient(app).get(
+        "/api/v1/app/auth/session",
+        headers={"Authorization": f"Bearer {header}.{payload}.{signature}"},
+    )
+    assert response.status_code == 401
