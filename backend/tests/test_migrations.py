@@ -179,3 +179,18 @@ def test_postgres_vault_key_rotation_is_atomic_and_new_key_decrypts(migrated_pos
     assert Fernet(new_key).decrypt(bytes(encrypted)).decode() == token
     with pytest.raises(InvalidToken):
         Fernet(old_key).decrypt(bytes(encrypted))
+
+
+def test_postgres_vault_key_rotation_wrong_old_key_rolls_back(migrated_postgres, monkeypatch):
+    token = "postgres-rotation-rollback-token-123456"
+    wrong_old_key = Fernet.generate_key()
+    new_key = Fernet.generate_key()
+    monkeypatch.setenv("QUANT_TOKEN_ENCRYPTION_KEY", TEST_VAULT_KEY.decode())
+    vault.store_upstox_analytics_token(token)
+
+    with pytest.raises(vault.UpstoxCredentialError, match="verify the old key"):
+        vault.rotate_provider_token_encryption_key(
+            wrong_old_key.decode(), new_key.decode()
+        )
+
+    assert vault.get_upstox_analytics_token() == token
