@@ -1,3 +1,4 @@
+import pytest
 from datetime import datetime, timedelta, timezone
 from fastapi.testclient import TestClient
 from rovexquant.api.main import app
