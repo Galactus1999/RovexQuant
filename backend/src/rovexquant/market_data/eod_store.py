@@ -193,13 +193,16 @@ def latest_ingestion_status(exchange: str = "NSE") -> dict[str, Any]:
     market = exchange.strip().upper()
     if market not in _SERIES:
         raise EodStoreError("Exchange must be NSE or BSE")
-    with connect() as connection:
-        row = connection.execute("""
-            SELECT provider, trading_date, status, rows_received, rows_skipped, rows_upserted,
-                   started_at, completed_at, error_code, error_message
-            FROM market_ingestion_runs WHERE exchange=%s
-            ORDER BY started_at DESC LIMIT 1
-        """, (market,)).fetchone()
+    try:
+        with connect() as connection:
+            row = connection.execute("""
+                SELECT provider, trading_date, status, rows_received, rows_skipped, rows_upserted,
+                       started_at, completed_at, error_code, error_message
+                FROM market_ingestion_runs WHERE exchange=%s
+                ORDER BY started_at DESC LIMIT 1
+            """, (market,)).fetchone()
+    except psycopg.Error as error:
+        raise EodStoreError("Market ingestion schema is unavailable; apply database migrations") from error
     if row is None:
         return {"exchange": market, "status": "NOT_RUN", "trading_date": None}
     keys = ("provider", "trading_date", "status", "rows_received", "rows_skipped", "rows_upserted",
@@ -216,14 +219,17 @@ def symbol_history(exchange: str, symbol: str, *, from_date: date, to_date: date
         raise EodStoreError("Historical date range must be ordered and at most 17 years", 422)
     if not 1 <= limit <= 2000:
         raise EodStoreError("History limit must be between 1 and 2000", 422)
-    with connect() as connection:
-        rows = connection.execute("""
-            SELECT trading_date, open, high, low, close, previous_close, volume,
-                   turnover, provider, quality_status, source_retrieved_at, isin, trades
-            FROM market_eod_bars
-            WHERE exchange=%s AND symbol=%s AND trading_date BETWEEN %s AND %s
-            ORDER BY trading_date LIMIT %s
-        """, (market, ticker, from_date, to_date, limit)).fetchall()
+    try:
+        with connect() as connection:
+            rows = connection.execute("""
+                SELECT trading_date, open, high, low, close, previous_close, volume,
+                       turnover, provider, quality_status, source_retrieved_at, isin, trades
+                FROM market_eod_bars
+                WHERE exchange=%s AND symbol=%s AND trading_date BETWEEN %s AND %s
+                ORDER BY trading_date LIMIT %s
+            """, (market, ticker, from_date, to_date, limit)).fetchall()
+    except psycopg.Error as error:
+        raise EodStoreError("Market history schema is unavailable; apply database migrations") from error
     return [{
         "date": row[0].isoformat(), "open": float(row[1]), "high": float(row[2]),
         "low": float(row[3]), "close": float(row[4]),
