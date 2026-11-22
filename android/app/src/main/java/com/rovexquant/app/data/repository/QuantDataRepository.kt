@@ -25,6 +25,9 @@ interface QuantDataRepository {
     suspend fun fetchEquityInstruments(session: QuantSession): List<MarketEquityInstrument>
     suspend fun fetchNseMcpTools(session: QuantSession, server: String): List<NseMcpCatalog>
     suspend fun fetchAiProviders(session: QuantSession): List<AiProvider>
+    suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String)
+    suspend fun saveUpstoxAnalyticsToken(session: QuantSession, token: String)
+    suspend fun fetchUpstoxConfigured(session: QuantSession): Boolean
     suspend fun fetchIntelligenceEvents(session: QuantSession, query: String, timespan: String): IntelligenceFeed
     suspend fun sendAiMessage(
         session: QuantSession,
