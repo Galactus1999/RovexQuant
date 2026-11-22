@@ -58,6 +58,7 @@ def configured_providers() -> list[dict[str, Any]]:
             "provider_id": provider_id,
             "configured": bool(credentials),
             "credential_ids": [item.credential_id for item in credentials],
+            "default_model": os.getenv(f"{provider_id.upper()}_DEFAULT_MODEL", "").strip() or None,
             "api_base": config.base_url,
         })
     return result
