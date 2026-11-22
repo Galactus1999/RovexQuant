@@ -69,6 +69,8 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository) 
                 arguments = "{}"
                 if (selected == null) error = loaded.firstOrNull { it.server == selectedServer }?.failure
                     ?: "NSE did not publish any eligible read-only tools for this source."
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (failure: Exception) {
                 error = failure.message ?: "Could not discover NSE research tools."
             } finally {
