@@ -3,6 +3,12 @@ package com.rovexquant.app
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.rovexquant.app.data.local.QuantSessionStore
+import com.rovexquant.app.data.model.AiChatMessage
+import com.rovexquant.app.data.model.AiCompletion
+import com.rovexquant.app.data.model.AiDailyBar
+import com.rovexquant.app.data.model.AiProvider
+import com.rovexquant.app.data.model.AiStrategyBrief
+import com.rovexquant.app.data.model.AiStrategyEvidence
 import com.rovexquant.app.data.model.MarketIndexInstrument
 import com.rovexquant.app.data.model.MarketTick
 import com.rovexquant.app.data.model.NseMcpCatalog
@@ -74,6 +80,55 @@ class FakeQuantRepository(
             NseMcpCatalog(it, emptyList(), "No tools in deterministic UI test fixture.")
         }
     }
+
+    override suspend fun fetchAiProviders(session: QuantSession) =
+        listOf(AiProvider("groq", true, listOf("default")))
+
+    override suspend fun sendAiMessage(
+        session: QuantSession,
+        providerId: String,
+        model: String,
+        messages: List<AiChatMessage>,
+        credentialId: String?
+    ) = AiCompletion(providerId, credentialId, model, "Deterministic AI fixture response.", false)
+
+    override suspend fun requestAiStrategyBrief(
+        session: QuantSession,
+        providerId: String,
+        model: String,
+        symbol: String,
+        exchange: String,
+        fromDate: String,
+        toDate: String,
+        strategyContext: String,
+        credentialId: String?
+    ) = AiStrategyBrief(
+        provider = "tejhq_eod",
+        dataMode = "END_OF_DAY",
+        exchange = exchange,
+        symbol = symbol,
+        firstTradingDate = fromDate,
+        latestTradingDate = toDate,
+        receivedAt = "2026-11-22T10:00:00Z",
+        barCount = 60,
+        evidence = AiStrategyEvidence(
+            latestClose = 2500.0,
+            sma20 = 2450.0,
+            sma50 = 2400.0,
+            rsi14 = 58.0,
+            atr14 = 45.0,
+            adx14 = 22.0,
+            donchianState = "INSIDE_PRIOR_20_DAY_RANGE",
+            relativeVolume20 = 1.1,
+            return21 = 0.04,
+            return63 = 0.09,
+            trendContext = "CLOSE_ABOVE_SMA20_AND_SMA50"
+        ),
+        bars = listOf(AiDailyBar(toDate, 2480.0, 2520.0, 2470.0, 2500.0, 100000)),
+        ai = AiCompletion(providerId, credentialId, model, "Deterministic AI fixture response.", false),
+        dataRights = "Private personal research only.",
+        limitations = listOf("EOD daily bars only.")
+    )
 
     override suspend fun callNseMcpTool(
         session: QuantSession,
