@@ -528,13 +528,21 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
                     fallback_providers=route_fallbacks,
                     task_type="research",
                 )
-                verification = await verify_research_claims(
-                    draft=completion.get("content", ""),
-                    evidence_text=json.dumps(user_evidence, ensure_ascii=False, separators=(",", ":"), sort_keys=True),
-                    allowed_source_refs=["tejhq_eod_adjusted"],
-                    research_provider=completion.get("provider_id", route_provider),
-                    research_model=completion.get("model", route_model),
-                )
+                try:
+                    verification = await verify_research_claims(
+                        draft=completion.get("content", ""),
+                        evidence_text=json.dumps(user_evidence, ensure_ascii=False, separators=(",", ":"), sort_keys=True),
+                        allowed_source_refs=["tejhq_eod_adjusted"],
+                        research_provider=completion.get("provider_id", route_provider),
+                        research_model=completion.get("model", route_model),
+                    )
+                except Exception as verifier_error:
+                    verification = {
+                        "status": "VERIFICATION_FAILED",
+                        "method": "SECOND_MODEL_WITH_EXACT_QUOTE_VALIDATION",
+                        "summary": f"Verifier failed safely: {verifier_error}",
+                        "claims": [],
+                    }
                 completion["verification"] = verification
                 verification_status = verification.get("status", "VERIFICATION_PENDING")
                 terminal_status = (
