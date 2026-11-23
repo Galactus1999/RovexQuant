@@ -14,6 +14,15 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
+internal fun marketStreamStatusForQuotes(quotes: List<MarketTick>): String {
+    if (quotes.isEmpty()) return "Connected · waiting for verified quotes"
+    return if (quotes.any { it.quality == "VALID" }) {
+        "Live · Upstox V3"
+    } else {
+        "Connected · stale market snapshot"
+    }
+}
+
 class MarketStreamController(
     private val session: QuantSession,
     private val onStatus: (String) -> Unit,
@@ -113,7 +122,7 @@ class MarketStreamController(
                     emitTicks(parsedTicks)
                     if (json.optString("type") == "initial_feed" || json.optString("type") == "live_feed") {
                         attempts = 0
-                        emitStatus(if (parsedTicks.isNotEmpty()) "Live · Upstox V3" else "Connected · waiting for verified quotes")
+                        emitStatus(marketStreamStatusForQuotes(parsedTicks))
                     }
                 }.onFailure { emitStatus("Invalid market message") }
             }
