@@ -11,7 +11,7 @@ def test_workflow_templates_do_not_escape_github_or_shell_interpolation():
 
     escaped = []
     for workflow in workflow_files:
-        for line_number, line in enumerate(workflow.read_text(encoding="utf-8").splitlines(), start=1):
+        for line_number, line in enumerate(\n            workflow.read_text(encoding="utf-8").splitlines(),\n            start=1,\n        ):
             if r"\${{" in line or r"\${" in line:
                 escaped.append(f"{workflow.relative_to(REPOSITORY_ROOT)}:{line_number}: {line}")
 
