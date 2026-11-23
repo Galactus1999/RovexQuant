@@ -156,9 +156,9 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
     ) {
         item {
             SectionHeading(
-                "AI Studio · providers and research tools",
+                "AI Studio · providers, models and research tools",
                 "Quant Intelligence.",
-                "Connect supported model APIs, select failover providers and fetch real market, macro and event evidence into research requests. Model output remains subordinate to verified data."
+                "Connect supported model APIs, test credentials, configure failover and fetch approved market, macro and event evidence into research requests. Model output remains subordinate to verified data."
             )
         }
         item {
@@ -272,7 +272,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                     modifier = Modifier.fillMaxWidth().testTag("ai.model")
                 )
                 Text(
-                    "Keys are encrypted in the server-side vault and never stored in this APK or sent in prompts. Connection testing sends one short model request; provider usage/billing may apply.",
+                    "API keys are encrypted in the server-side vault, never stored in this APK or sent in prompts. Connection testing sends one short model request; provider usage/billing may apply.",
                     color = Muted, fontSize = 10.sp, lineHeight = 15.sp
                 )
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
