@@ -140,7 +140,8 @@ def calculate_event_window(
         "realized_daily_volatility": pstdev(daily_returns) * sqrt(252) if len(daily_returns) > 1 else None,
         "price_basis": asset_price_basis,
         "method": (
-            "CORPORATE_ACTION_ADJUSTED_MARKET_EVENT_WINDOW"
+            "MIXED_PRICE_BASIS_EVENT_WINDOW" if asset_price_basis == "MIXED_RAW_AND_ADJUSTED"
+            else "CORPORATE_ACTION_ADJUSTED_MARKET_EVENT_WINDOW"
             if asset_price_basis == "CORPORATE_ACTION_ADJUSTED" and benchmark_metrics["benchmark_observations_matched"]
             else "CORPORATE_ACTION_ADJUSTED_EVENT_WINDOW" if asset_price_basis == "CORPORATE_ACTION_ADJUSTED"
             else "MARKET_ADJUSTED_EVENT_WINDOW" if benchmark_metrics["benchmark_observations_matched"]

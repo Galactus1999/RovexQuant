@@ -111,4 +111,22 @@ def test_event_study_labels_mixed_adjustment_coverage():
     bars[0]["price_basis"] = "CORPORATE_ACTION_ADJUSTED"
     result = calculate_event_window(bars, event_date=date(2026, 1, 5), post_bars=2)
     assert result["price_basis"] == "MIXED_RAW_AND_ADJUSTED"
-    assert result["method"] == "UNADJUSTED_CLOSE_TO_CLOSE_EVENT_WINDOW"
+    assert result["method"] == "MIXED_PRICE_BASIS_EVENT_WINDOW"
+
+
+def test_event_study_price_basis_ignores_observations_outside_selected_window():
+    asset = _bars()
+    asset[-1]["price_basis"] = "CORPORATE_ACTION_ADJUSTED"
+    benchmark = [
+        {**bar, "close": bar["close"] * 2, "price_basis": "RAW_CLOSE"}
+        for bar in _bars()
+    ]
+    benchmark[-1]["price_basis"] = "CORPORATE_ACTION_ADJUSTED"
+    result = calculate_event_window(
+        asset, event_date=date(2026, 1, 5), pre_bars=1, post_bars=2,
+        benchmark_bars=benchmark, benchmark_symbol="NIFTYBEES",
+    )
+    assert result["price_basis"] == "RAW_CLOSE"
+    assert result["benchmark_price_basis"] == "RAW_CLOSE"
+    assert result["benchmark_observations_matched"] == 2
+    assert result["market_adjusted_cumulative_return"] is not None
