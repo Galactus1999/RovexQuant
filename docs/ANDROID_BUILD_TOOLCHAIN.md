@@ -16,10 +16,12 @@ compiler-daemon NoSuchMethodError. The verification metadata contained two
 kotlin-daemon-client versions (2.2.21 and 2.4.10); the latter is associated with
 the license-report plugin's newer Kotlin build dependency. The license plugin
 is now applied through an isolated buildscript classpath that excludes its
-compiler/daemon dependency, and CI asserts that critical compiler/daemon
-artifacts match the app's pinned Kotlin Gradle Plugin. Silent compiler fallback
-is disabled so a recurrence fails visibly instead of being reported as a
-successful compile.
+compiler/daemon dependency. The full bootstrap build must pass with Kotlin
+daemon fallback disabled before CI prunes the obsolete 2.4.10 daemon-client
+checksum left by Gradle's append-only verification metadata. CI then asserts
+that the active critical compiler/daemon records match the app's pinned Kotlin
+Gradle Plugin. Silent compiler fallback remains disabled so a recurrence fails
+visibly instead of being reported as a successful compile.
 
 Compatibility references:
 - Kotlin: https://kotlinlang.org/docs/gradle-configure-project.html
