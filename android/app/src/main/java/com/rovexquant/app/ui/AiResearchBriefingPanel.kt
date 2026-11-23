@@ -138,6 +138,16 @@ fun AiResearchBriefingPanel(
                 "Generate a separate evidence-led synthesis from the data you fetched above. Provider usage/billing may apply. Reference checks validate citations against the supplied bundle, not the truth of model interpretation.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, lineHeight = 15.sp
             )
+            Text(
+                if (automaticTaskRouting) {
+                    if (researchRouteConfigured) "Execution: backend-configured research specialist route and its approved fallbacks."
+                    else "Execution unavailable: configure the research task in QUANT_AI_TASK_ROUTES, or switch to manual provider selection."
+                } else {
+                    "Execution: manually selected provider/model and explicitly selected fallback providers."
+                },
+                color = if (automaticTaskRouting && !researchRouteConfigured) Gold else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 9.sp, lineHeight = 14.sp
+            )
             Button(
                 onClick = {
                     if (loading || !canGenerate || !hasEvidence) return@Button
