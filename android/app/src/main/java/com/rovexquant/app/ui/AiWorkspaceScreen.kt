@@ -48,6 +48,10 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
     var providerTestStatus by remember { mutableStateOf<String?>(null) }
     var selectedFallbacks by remember { mutableStateOf(emptySet<String>()) }
     var selectedProvider by rememberSaveable { mutableStateOf("") }
+    var selectedTaskType by rememberSaveable { mutableStateOf("research") }
+    var automaticTaskRouting by rememberSaveable { mutableStateOf(false) }
+    var configuredTaskRoutes by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var taskRoutesError by remember { mutableStateOf<String?>(null) }
     var model by rememberSaveable { mutableStateOf("") }
     var messages by remember { mutableStateOf(emptyList<AiChatMessage>()) }
     var chatInput by rememberSaveable { mutableStateOf("") }
@@ -74,6 +78,12 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
         providerError = null
         try {
             providers = repository.fetchAiProviders(session)
+            try {
+                configuredTaskRoutes = repository.fetchAiTaskRoutes(session)
+                taskRoutesError = null
+            } catch (failure: Exception) {
+                taskRoutesError = failure.message ?: "Task-route discovery failed."
+            }
             val configured = providers.filter { it.configured }
             if (selectedProvider.isBlank() && providers.isNotEmpty()) {
                 val firstProvider = configured.firstOrNull() ?: providers.first()
@@ -92,10 +102,11 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
     val configuredProviders = providers.filter { it.configured }
     val canUseAi = selectedProvider.isNotBlank() && model.isNotBlank() &&
         configuredProviders.any { it.providerId == selectedProvider }
+    val canSendChat = if (automaticTaskRouting) selectedTaskType in configuredTaskRoutes else canUseAi
 
     fun sendMessage() {
         val prompt = chatInput.trim()
-        if (prompt.isEmpty() || !canUseAi || chatLoading) return
+        if (prompt.isEmpty() || !canSendChat || chatLoading) return
         val updated = (messages + AiChatMessage("user", prompt)).takeLast(10)
         messages = updated
         chatInput = ""
@@ -105,10 +116,11 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
             try {
                 val response = repository.sendAiMessage(
                     session = session,
-                    providerId = selectedProvider,
-                    model = model.trim(),
+                    providerId = if (automaticTaskRouting) null else selectedProvider,
+                    model = if (automaticTaskRouting) null else model.trim(),
                     messages = updated,
-                    fallbackProviders = selectedFallbacks.toList()
+                    fallbackProviders = if (automaticTaskRouting) emptyList() else selectedFallbacks.toList(),
+                    taskType = selectedTaskType
                 )
                 messages = (updated + AiChatMessage("assistant", response.content)).takeLast(10)
             } catch (cancelled: CancellationException) {
@@ -163,7 +175,26 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
         }
         item {
             TerminalCard {
-                Eyebrow("AI provider")
+                Eyebrow("AI provider · task router")
+                Spacer(Modifier.height(7.dp))
+                Text("TASK-SPECIFIC ROUTING", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    listOf("chat", "research", "macro_analysis", "filing_extraction", "claim_verification", "summarization").forEach { task ->
+                        FilterChip(selected = selectedTaskType == task, onClick = { selectedTaskType = task }, enabled = !chatLoading,
+                            label = { Text(task.replace('_', ' ').replaceFirstChar { it.uppercase() }) })
+                    }
+                }
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Checkbox(checked = automaticTaskRouting, onCheckedChange = { automaticTaskRouting = it }, enabled = !chatLoading)
+                    Column(Modifier.weight(1f)) {
+                        Text("Use server task route", color = MaterialTheme.colorScheme.onBackground, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        Text(if (selectedTaskType in configuredTaskRoutes) "Configured route available for this task" else "No server route configured for this task", color = if (selectedTaskType in configuredTaskRoutes) Mint else Gold, fontSize = 9.sp)
+                    }
+                }
+                taskRoutesError?.let { Text("Task routes unavailable: $it", color = Gold, fontSize = 9.sp) }
+                if (automaticTaskRouting && selectedTaskType !in configuredTaskRoutes) {
+                    Text("Set QUANT_AI_TASK_ROUTES on the backend to enable this task. Manual provider selection remains available.", color = Gold, fontSize = 9.sp, lineHeight = 14.sp)
+                }
                 Spacer(Modifier.height(7.dp))
                 when {
                     providersLoading -> Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -416,7 +447,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                 Spacer(Modifier.height(8.dp))
                 Button(
                     onClick = ::sendMessage,
-                    enabled = canUseAi && chatInput.isNotBlank() && !chatLoading,
+                    enabled = canSendChat && chatInput.isNotBlank() && !chatLoading,
                     modifier = Modifier.fillMaxWidth().testTag("ai.chat.send")
                 ) {
                     Text(if (chatLoading) "Generating…" else "Send to Quant AI")

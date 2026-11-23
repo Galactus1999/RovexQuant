@@ -738,13 +738,28 @@ object QuantApi {
     }
 
 
+    fun fetchAiTaskRoutes(session: QuantSession): Set<String> {
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/ai/task-routes")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            val routes = JSONObject(text).optJSONObject("routes") ?: JSONObject()
+            return routes.keys().asSequence().toSet()
+        }
+    }
+
     fun sendAiMessage(
         session: QuantSession,
-        providerId: String,
-        model: String,
+        providerId: String?,
+        model: String?,
         messages: List<AiChatMessage>,
         credentialId: String?,
-        fallbackProviders: List<String>
+        fallbackProviders: List<String>,
+        taskType: String
     ): AiCompletion {
         require(messages.isNotEmpty() && messages.size <= 12) { "Keep AI conversations to the latest 12 messages." }
         val boundedMessages = mutableListOf<AiChatMessage>()
@@ -762,9 +777,10 @@ object QuantApi {
             }
         }
         val body = JSONObject()
-            .put("provider_id", providerId)
-            .put("model", model)
             .put("messages", messageArray)
+            .put("task_type", taskType)
+        if (!providerId.isNullOrBlank()) body.put("provider_id", providerId)
+        if (!model.isNullOrBlank()) body.put("model", model)
             .put("max_tokens", 1200)
             .put("temperature", 0.2)
         if (!credentialId.isNullOrBlank()) body.put("credential_id", credentialId)

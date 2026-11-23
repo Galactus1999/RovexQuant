@@ -31,6 +31,7 @@ interface QuantDataRepository {
     suspend fun fetchEquityInstruments(session: QuantSession): List<MarketEquityInstrument>
     suspend fun fetchNseMcpTools(session: QuantSession, server: String): List<NseMcpCatalog>
     suspend fun fetchAiProviders(session: QuantSession): List<AiProvider>
+    suspend fun fetchAiTaskRoutes(session: QuantSession): Set<String>
     suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String)
     suspend fun deleteAiProviderCredential(session: QuantSession, providerId: String)
     suspend fun saveDalalOsApiKey(session: QuantSession, apiKey: String)
@@ -54,7 +55,8 @@ interface QuantDataRepository {
         model: String,
         messages: List<AiChatMessage>,
         credentialId: String? = null,
-        fallbackProviders: List<String> = emptyList()
+        fallbackProviders: List<String> = emptyList(),
+        taskType: String = "chat"
     ): AiCompletion
     suspend fun requestAiStrategyBrief(
         session: QuantSession,
