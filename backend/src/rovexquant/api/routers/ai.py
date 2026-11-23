@@ -342,7 +342,7 @@ async def app_ai_chat(request: AIChatRequest):
             "max_tokens": request.max_tokens,
             "temperature": request.temperature,
         }
-        evidence_text = "\\n".join(
+        evidence_text = "\n".join(
             message["content"] for message in mobile_messages if message.get("role") == "user"
         )
         allowed_source_refs = extract_research_source_refs(evidence_text)
