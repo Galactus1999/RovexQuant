@@ -3,7 +3,8 @@ import org.gradle.api.artifacts.dsl.LockMode
 
 buildscript {
     repositories {
-        gradlePluginPortal()
+        // Resolve the pinned plugin from Maven Central, matching the committed
+        // Gradle verification metadata; do not fall back to Plugin Portal mirrors.
         mavenCentral()
     }
     dependencies {
