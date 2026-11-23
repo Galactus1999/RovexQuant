@@ -77,6 +77,58 @@ fun MacroEventResearchScreen(session: QuantSession, repository: QuantDataReposit
                 state.macro?.let { MacroSummaryContent(it) }
             }
         }
+
+        item {
+            TerminalCard {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Eyebrow("P3 · independent exchange verification")
+                    StatusPill(state.integrity?.status ?: "CHECKING", if (state.integrity?.status == "MATCHED") Mint else Gold)
+                }
+                Text("Market data integrity", color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Compares stored TejHQ EOD bars with official NSE/BSE bhavcopy. Matching rows are promoted to verified; discrepancies remain visible.",
+                    color = Muted, fontSize = 10.sp, lineHeight = 15.sp
+                )
+                Button(onClick = model::refreshIntegrity, enabled = !state.integrityLoading,
+                    modifier = Modifier.fillMaxWidth().testTag("integrity.refresh")) {
+                    Text(if (state.integrityLoading) "Checking source evidence…" else "Refresh integrity status")
+                }
+                state.integrityError?.let { EmptyPanel("Integrity status unavailable", it, Coral) }
+                state.integrity?.latestReport?.let { report ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("${report.tradingDate} · ${report.status}", color = Mint, fontSize = 10.sp)
+                        Text("${report.matchedRows}/${report.officialRows} matched", color = MaterialTheme.colorScheme.onBackground,
+                            fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Text(
+                        "Value mismatches ${report.mismatchRows} · missing stored ${report.missingReferenceRows} · extra stored ${report.missingOfficialRows}",
+                        color = if (report.status == "MATCHED") Mint else Gold, fontSize = 9.sp
+                    )
+                    report.differences.take(8).forEach { diff ->
+                        Text(
+                            "${diff.kind}: ${diff.symbol} ${diff.series} ${diff.field ?: ""} · official ${diff.officialValue ?: "—"} / stored ${diff.storedValue ?: "—"}",
+                            color = Gold, fontSize = 9.sp, lineHeight = 13.sp
+                        )
+                    }
+                    Text("Source: ${report.sourceUrl}", color = Muted, fontSize = 8.sp, lineHeight = 12.sp)
+                } ?: Text(
+                    if (state.integrityLoading) "No report loaded yet." else "No official reconciliation report is stored yet.",
+                    color = Muted, fontSize = 10.sp
+                )
+                if (state.integrity?.backfills?.isNotEmpty() == true) {
+                    Spacer(Modifier.height(8.dp))
+                    Eyebrow("Historical Parquet imports")
+                    state.integrity.backfills.forEach { backfill ->
+                        Text(
+                            "${backfill.year} · ${backfill.status} · ${backfill.rowsSeen} rows scanned · ${backfill.rowsUpserted} rows upserted",
+                            color = if (backfill.status == "SUCCEEDED") Mint else Gold, fontSize = 9.sp
+                        )
+                    }
+                }
+            }
+        }
+
         item {
             TerminalCard {
                 Eyebrow("United States · FRED")
