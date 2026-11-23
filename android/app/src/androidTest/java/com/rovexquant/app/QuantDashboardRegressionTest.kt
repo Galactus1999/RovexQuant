@@ -44,8 +44,8 @@ class QuantDashboardRegressionTest {
         }
         composeRule.onNodeWithTag("market.eod.snapshot").assertIsDisplayed()
         composeRule.onNodeWithText("END OF DAY").assertIsDisplayed()
-        composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("market.ingestion.status"))
-        composeRule.onNodeWithTag("market.ingestion.status").assertIsDisplayed()
+        composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasText("Database collection health"))
+        composeRule.onNodeWithText("Database collection health").assertIsDisplayed()
         composeRule.onNodeWithText("Persisted EOD data", substring = true).assertIsDisplayed()
         composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasText("FIXTURE"))
         composeRule.onNodeWithText("FIXTURE").assertIsDisplayed()
