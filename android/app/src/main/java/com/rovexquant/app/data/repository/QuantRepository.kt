@@ -59,6 +59,9 @@ class QuantRepository(context: Context) : QuantDataRepository {
     override suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) =
         withContext(Dispatchers.IO) { QuantApi.saveAiProviderCredential(session, providerId, apiKey) }
 
+    override suspend fun deleteAiProviderCredential(session: QuantSession, providerId: String) =
+        withContext(Dispatchers.IO) { QuantApi.deleteAiProviderCredential(session, providerId) }
+
     override suspend fun saveUpstoxAnalyticsToken(session: QuantSession, token: String) =
         withContext(Dispatchers.IO) { QuantApi.saveUpstoxAnalyticsToken(session, token) }
 
@@ -100,9 +103,10 @@ class QuantRepository(context: Context) : QuantDataRepository {
         providerId: String,
         model: String,
         messages: List<AiChatMessage>,
-        credentialId: String?
+        credentialId: String?,
+        fallbackProviders: List<String>
     ): AiCompletion = withContext(Dispatchers.IO) {
-        QuantApi.sendAiMessage(session, providerId, model, messages, credentialId)
+        QuantApi.sendAiMessage(session, providerId, model, messages, credentialId, fallbackProviders)
     }
 
     override suspend fun requestAiStrategyBrief(
@@ -114,10 +118,11 @@ class QuantRepository(context: Context) : QuantDataRepository {
         fromDate: String,
         toDate: String,
         strategyContext: String,
-        credentialId: String?
+        credentialId: String?,
+        fallbackProviders: List<String>
     ): AiStrategyBrief = withContext(Dispatchers.IO) {
         QuantApi.requestAiStrategyBrief(
-            session, providerId, model, symbol, exchange, fromDate, toDate, strategyContext, credentialId
+            session, providerId, model, symbol, exchange, fromDate, toDate, strategyContext, credentialId, fallbackProviders
         )
     }
 

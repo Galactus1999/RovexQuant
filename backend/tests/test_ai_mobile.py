@@ -39,6 +39,7 @@ def mobile_client(monkeypatch):
     monkeypatch.setenv("QUANT_APP_PASSWORD", "correct-password")
     monkeypatch.setenv("QUANT_APP_SESSION_SIGNING_KEY", "x" * 48)
     monkeypatch.setenv("GROQ_API_KEY", "groq-server-secret")
+    monkeypatch.setenv("GROQ_FALLBACK_MODEL", "groq-fallback-test-model")
     monkeypatch.setattr(gateway.httpx, "AsyncClient", FakeAsyncClient)
     FakeAsyncClient.requests = []
     token, _ = issue_app_session("quant-test", "correct-password")
@@ -50,7 +51,10 @@ def test_mobile_ai_provider_catalogue_requires_app_session(mobile_client):
     assert client.get("/api/v1/app/ai/providers").status_code == 401
     response = client.get("/api/v1/app/ai/providers", headers=headers)
     assert response.status_code == 200
-    assert any(item["provider_id"] == "groq" and item["configured"] for item in response.json()["providers"])
+    groq = next(item for item in response.json()["providers"] if item["provider_id"] == "groq")
+    assert groq["configured"] is True
+    assert groq["fallback_model_configured"] is True
+    assert "groq-fallback-test-model" not in response.text
     assert "groq-server-secret" not in response.text
     assert "QUANT_AI_GATEWAY_TOKEN" not in response.text
 

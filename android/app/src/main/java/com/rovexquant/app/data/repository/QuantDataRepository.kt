@@ -30,6 +30,7 @@ interface QuantDataRepository {
     suspend fun fetchNseMcpTools(session: QuantSession, server: String): List<NseMcpCatalog>
     suspend fun fetchAiProviders(session: QuantSession): List<AiProvider>
     suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String)
+    suspend fun deleteAiProviderCredential(session: QuantSession, providerId: String)
     suspend fun saveUpstoxAnalyticsToken(session: QuantSession, token: String)
     suspend fun fetchUpstoxConfigured(session: QuantSession): Boolean
     suspend fun fetchLatestEodMarketSnapshot(session: QuantSession, exchange: String = "nse"): EodMarketSnapshot
@@ -45,7 +46,8 @@ interface QuantDataRepository {
         providerId: String,
         model: String,
         messages: List<AiChatMessage>,
-        credentialId: String? = null
+        credentialId: String? = null,
+        fallbackProviders: List<String> = emptyList()
     ): AiCompletion
     suspend fun requestAiStrategyBrief(
         session: QuantSession,
@@ -56,7 +58,8 @@ interface QuantDataRepository {
         fromDate: String,
         toDate: String,
         strategyContext: String,
-        credentialId: String? = null
+        credentialId: String? = null,
+        fallbackProviders: List<String> = emptyList()
     ): AiStrategyBrief
     suspend fun callNseMcpTool(
         session: QuantSession,

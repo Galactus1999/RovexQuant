@@ -66,6 +66,7 @@ def configured_providers() -> list[dict[str, Any]]:
             "configured": bool(credentials),
             "credential_ids": [item.credential_id for item in credentials],
             "default_model": os.getenv(f"{provider_id.upper()}_DEFAULT_MODEL", "").strip() or None,
+            "fallback_model_configured": bool(os.getenv(f"{provider_id.upper()}_FALLBACK_MODEL", "").strip()),
             "api_base": config.base_url,
         })
     return result
