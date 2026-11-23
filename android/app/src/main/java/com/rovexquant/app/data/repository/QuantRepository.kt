@@ -126,7 +126,8 @@ class QuantRepository(context: Context) : QuantDataRepository {
         messages: List<AiChatMessage>,
         credentialId: String?,
         fallbackProviders: List<String>,
-        taskType: String
+        taskType: String,
+        maxTokens: Int
     ): AiCompletion = withContext(Dispatchers.IO) {
         QuantApi.sendAiMessage(session, providerId, model, messages, credentialId, fallbackProviders, taskType)
     }
@@ -142,10 +143,11 @@ class QuantRepository(context: Context) : QuantDataRepository {
         strategyContext: String,
         credentialId: String?,
         fallbackProviders: List<String>,
-        automaticTaskRouting: Boolean
+        automaticTaskRouting: Boolean,
+        maxTokens: Int
     ): AiStrategyBrief = withContext(Dispatchers.IO) {
         QuantApi.requestAiStrategyBrief(
-            session, providerId, model, symbol, exchange, fromDate, toDate, strategyContext, credentialId, fallbackProviders, automaticTaskRouting
+            session, providerId, model, symbol, exchange, fromDate, toDate, strategyContext, credentialId, fallbackProviders, automaticTaskRouting, maxTokens
         )
     }
 
