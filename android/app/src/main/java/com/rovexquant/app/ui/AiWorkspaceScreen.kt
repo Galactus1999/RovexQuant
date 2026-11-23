@@ -14,6 +14,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Slider
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
@@ -35,6 +36,7 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
+import kotlin.math.roundToInt
 
 @Composable
 fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
@@ -56,6 +58,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
     var configuredTaskRoutes by remember { mutableStateOf<Map<String, AiTaskRoute>>(emptyMap()) }
     var taskRoutesError by remember { mutableStateOf<String?>(null) }
     var model by rememberSaveable { mutableStateOf("") }
+    var maxTokens by rememberSaveable { mutableIntStateOf(1200) }
     var messages by remember { mutableStateOf(emptyList<AiChatMessage>()) }
     var lastChatCompletion by remember { mutableStateOf<AiCompletion?>(null) }
     var chatInput by rememberSaveable { mutableStateOf("") }
@@ -125,7 +128,8 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                     model = if (automaticTaskRouting) null else model.trim(),
                     messages = updated,
                     fallbackProviders = if (automaticTaskRouting) emptyList() else selectedFallbacks.toList(),
-                    taskType = selectedTaskType
+                    taskType = selectedTaskType,
+                    maxTokens = maxTokens
                 )
                 lastChatCompletion = response
                 messages = (updated + AiChatMessage("assistant", response.content)).takeLast(10)
@@ -156,7 +160,8 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                     toDate = toDate.trim(),
                     strategyContext = strategyContext.trim(),
                     fallbackProviders = if (automaticTaskRouting) emptyList() else selectedFallbacks.toList(),
-                    automaticTaskRouting = automaticTaskRouting
+                    automaticTaskRouting = automaticTaskRouting,
+                    maxTokens = maxTokens
                 )
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -206,6 +211,18 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                         color = Mint, fontSize = 9.sp, lineHeight = 14.sp
                     )
                 }
+                Spacer(Modifier.height(5.dp))
+                Text(
+                    "Maximum response tokens: $maxTokens · actual cost also depends on input size and selected model pricing.",
+                    color = Muted, fontSize = 9.sp, lineHeight = 14.sp
+                )
+                Slider(
+                    value = maxTokens.toFloat(),
+                    onValueChange = { maxTokens = (it / 256f).roundToInt().times(256).coerceIn(256, 4096) },
+                    valueRange = 256f..4096f,
+                    steps = 14,
+                    modifier = Modifier.fillMaxWidth().testTag("ai.max_tokens")
+                )
                 if (automaticTaskRouting && selectedTaskType !in configuredTaskRoutes) {
                     Text("Set QUANT_AI_TASK_ROUTES on the backend to enable this task. Manual provider selection remains available.", color = Gold, fontSize = 9.sp, lineHeight = 14.sp)
                 }
@@ -417,6 +434,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                 canUseAi = canUseAi,
                 automaticTaskRouting = automaticTaskRouting,
                 researchRouteConfigured = configuredTaskRoutes.containsKey("research"),
+                maxTokens = maxTokens,
                 evidenceDraft = chatInput
             )
         }
