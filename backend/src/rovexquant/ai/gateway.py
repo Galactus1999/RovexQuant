@@ -97,15 +97,22 @@ def _credentials_for(provider_id: str) -> list[Credential]:
     return result
 
 
+# Curated records copied from LiteLLM Core 1.110.2's model price map.
+# Unknown models remain unpriced; update this map only from a pinned upstream release.
+_LITELLM_CORE_1_110_2_PRICES = {
+    ("openai", "gpt-4o-mini"): {
+        "input_cost_per_token": 0.00000015,
+        "output_cost_per_token": 0.00000060,
+    },
+}
+
+
 def estimate_completion_cost_usd(
     provider_id: str,
     model: str,
     usage: dict[str, Any],
 ) -> tuple[float | None, str]:
-    """Price provider-reported token usage using the pinned LiteLLM Core model map.
-
-    Unknown model pricing or missing provider usage stays unknown; it is never reported as zero.
-    """
+    """Estimate USD using a pinned LiteLLM Core price record; unknown remains unknown."""
     prompt_tokens = usage.get("prompt_tokens")
     completion_tokens = usage.get("completion_tokens")
     if not isinstance(prompt_tokens, (int, float)) or not isinstance(completion_tokens, (int, float)):
@@ -116,28 +123,15 @@ def estimate_completion_cost_usd(
         or not math.isfinite(float(completion_tokens))
     ):
         return None, "INVALID_PROVIDER_USAGE"
-    try:
-        from litellm import completion_cost
-
-        response = {
-            "model": model,
-            "usage": {
-                "prompt_tokens": int(prompt_tokens),
-                "completion_tokens": int(completion_tokens),
-                "total_tokens": int(usage.get("total_tokens", prompt_tokens + completion_tokens)),
-            },
-        }
-        amount = completion_cost(
-            completion_response=response,
-            model=model,
-            custom_llm_provider=provider_id,
-        )
-        if not isinstance(amount, (int, float)) or not math.isfinite(float(amount)) or amount < 0:
-            return None, "UNKNOWN_MODEL_PRICING"
-        return round(float(amount), 8), "ESTIMATED_FROM_LITELLM_CORE_1_110_2"
-    except Exception:
+    normalized_model = model.removeprefix("openai/")
+    price = _LITELLM_CORE_1_110_2_PRICES.get((provider_id, normalized_model))
+    if price is None:
         return None, "UNKNOWN_MODEL_PRICING"
-
+    amount = (
+        float(prompt_tokens) * price["input_cost_per_token"]
+        + float(completion_tokens) * price["output_cost_per_token"]
+    )
+    return round(amount, 8), "ESTIMATED_FROM_LITELLM_CORE_1_110_2"
 
 def configured_providers() -> list[dict[str, Any]]:
     """Return safe provider metadata; credential values are never exposed."""
