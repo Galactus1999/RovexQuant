@@ -171,3 +171,133 @@ def test_latest_persisted_snapshot_reads_only_successful_postgres_batch(monkeypa
     assert snapshot["summary"]["declines"] == 1
     assert snapshot["summary"]["unchanged"] == 1
     assert snapshot["summary"]["top_gainers"][0]["symbol"] == "RELIANCE"
+
+
+class _IngestionResult:
+    def __init__(self, row=None):
+        self.row = row
+
+    def fetchone(self):
+        return self.row
+
+
+class _IngestionConnection:
+    def __init__(self, running=None, recent=None):
+        self.running = running
+        self.recent = recent
+        self.statements = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def execute(self, statement, params=None):
+        self.statements.append((statement, params))
+        if "status='RUNNING'" in statement:
+            return _IngestionResult(self.running)
+        if "status='SUCCEEDED'" in statement:
+            return _IngestionResult(self.recent)
+        return _IngestionResult()
+
+
+def test_claim_ingestion_run_creates_persistent_run_under_advisory_lock(monkeypatch):
+    from uuid import UUID
+    from rovexquant.market_data import eod_ingestion
+
+    connection = _IngestionConnection()
+    monkeypatch.setattr(eod_ingestion, "connect", lambda: connection)
+
+    run_id, started, status = eod_ingestion.claim_ingestion_run("nse")
+
+    assert started is True
+    assert status == "RUNNING"
+    UUID(run_id)
+    assert any("pg_advisory_xact_lock" in sql for sql, _ in connection.statements)
+    insert = next((sql, params) for sql, params in connection.statements if "INSERT INTO" in sql)
+    assert "market_ingestion_runs" in insert[0]
+    assert insert[1][1] == "NSE"
+
+
+def test_claim_ingestion_run_joins_active_collection(monkeypatch):
+    from rovexquant.market_data import eod_ingestion
+
+    connection = _IngestionConnection(running=("active-run",))
+    monkeypatch.setattr(eod_ingestion, "connect", lambda: connection)
+
+    result = eod_ingestion.claim_ingestion_run("NSE", force=True)
+
+    assert result == ("active-run", False, "RUNNING")
+    assert not any("INSERT INTO" in sql for sql, _ in connection.statements)
+
+
+def test_claim_ingestion_run_respects_recent_success_cooldown(monkeypatch):
+    from rovexquant.market_data import eod_ingestion
+
+    connection = _IngestionConnection(recent=("recent-success",))
+    monkeypatch.setattr(eod_ingestion, "connect", lambda: connection)
+
+    result = eod_ingestion.claim_ingestion_run("NSE")
+
+    assert result == ("recent-success", False, "SUCCEEDED")
+    assert not any("INSERT INTO" in sql for sql, _ in connection.statements)
+
+
+def test_collect_claimed_snapshot_persists_validated_source_batch(monkeypatch):
+    import asyncio
+    from datetime import date
+    from rovexquant.market_data import eod_ingestion
+
+    source_rows = [{"symbol": "RELIANCE", "close": 100.0}]
+    normalized_rows = [{"symbol": "RELIANCE", "close": 100.0}]
+    persisted = {}
+
+    async def fetch(exchange, max_lookback_days):
+        assert exchange == "nse"
+        assert max_lookback_days == 14
+        return "tejhq_eod", date(2026, 11, 20), source_rows
+
+    def normalize(rows, **kwargs):
+        assert rows is source_rows
+        assert kwargs["exchange"] == "NSE"
+        return normalized_rows
+
+    def persist(rows, **kwargs):
+        persisted["rows"] = rows
+        persisted.update(kwargs)
+        return 1
+
+    monkeypatch.setattr(eod_ingestion, "fetch_latest_snapshot", fetch)
+    monkeypatch.setattr(eod_ingestion, "normalize_snapshot_rows", normalize)
+    monkeypatch.setattr(eod_ingestion, "persist_snapshot", persist)
+
+    result = asyncio.run(eod_ingestion.collect_claimed_snapshot("nse", "run-1"))
+
+    assert result["status"] == "SUCCEEDED"
+    assert result["trading_date"] == "2026-11-20"
+    assert result["rows_upserted"] == 1
+    assert persisted["rows"] is normalized_rows
+    assert persisted["run_id"] == "run-1"
+
+
+def test_collect_claimed_snapshot_marks_failed_run(monkeypatch):
+    import asyncio
+    from rovexquant.market_data import eod_ingestion
+
+    failed = {}
+
+    async def fetch(exchange, max_lookback_days):
+        raise RuntimeError("provider unavailable")
+
+    def mark_failed(**kwargs):
+        failed.update(kwargs)
+
+    monkeypatch.setattr(eod_ingestion, "fetch_latest_snapshot", fetch)
+    monkeypatch.setattr(eod_ingestion, "fail_run", mark_failed)
+
+    with pytest.raises(RuntimeError, match="provider unavailable"):
+        asyncio.run(eod_ingestion.collect_claimed_snapshot("nse", "run-failed"))
+
+    assert failed["run_id"] == "run-failed"
+    assert failed["code"] == "RuntimeError"
