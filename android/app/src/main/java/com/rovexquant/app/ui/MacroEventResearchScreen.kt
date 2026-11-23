@@ -87,7 +87,7 @@ fun MacroEventResearchScreen(session: QuantSession, repository: QuantDataReposit
                 }
                 Text(
                     if (state.macro?.fredConfigured == true) {
-                        "${state.macro.fredSeriesCount} FRED series returned."
+                        "${state.macro?.fredSeriesCount ?: 0} FRED series returned."
                     } else {
                         "FRED_API_KEY is not configured. US yields, Fed funds, CPI and dollar series are intentionally unavailable until a key is supplied."
                     },
