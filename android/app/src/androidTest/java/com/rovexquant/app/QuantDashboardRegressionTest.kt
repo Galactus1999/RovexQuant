@@ -45,7 +45,7 @@ class QuantDashboardRegressionTest {
         // the asynchronous snapshot payload, then explicitly expand it before
         // asserting that the fixture symbol is rendered.
         composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithText("2450 priced symbols").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText("2450 priced symbols", substring = true).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithText("Show market movers").performClick()
         composeRule.waitUntil(10_000) {
