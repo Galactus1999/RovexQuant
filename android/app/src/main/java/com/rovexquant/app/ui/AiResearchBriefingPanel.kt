@@ -197,6 +197,13 @@ fun AiResearchBriefingPanel(
                     Text("Cross-provider fallback was used.", color = MaterialTheme.colorScheme.tertiary, fontSize = 9.sp)
                 }
                 Text(
+                    "Task ${result.taskType} · ${result.totalTokens} tokens · " +
+                        (result.costUsd?.let { "estimated USD ${"%.6f".format(java.util.Locale.US, it)}" }
+                            ?: "cost unknown (${result.costStatus})"),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 9.sp, lineHeight = 14.sp
+                )
+                Text(
                     result.content,
                     modifier = Modifier.testTag("ai.brief.output"),
                     color = MaterialTheme.colorScheme.onSurface, fontSize = 11.sp, lineHeight = 17.sp
