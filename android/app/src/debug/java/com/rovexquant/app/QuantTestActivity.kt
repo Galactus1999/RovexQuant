@@ -105,6 +105,9 @@ class FakeQuantRepository(
     override suspend fun fetchAiProviders(session: QuantSession) =
         listOf(AiProvider("groq", true, listOf("default")))
 
+    override suspend fun fetchAiTaskRoutes(session: QuantSession): Set<String> =
+        setOf("research", "macro_analysis", "claim_verification", "summarization")
+
     override suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) = Unit
     override suspend fun deleteAiProviderCredential(session: QuantSession, providerId: String) = Unit
     override suspend fun saveDalalOsApiKey(session: QuantSession, apiKey: String) = Unit
@@ -234,12 +237,13 @@ class FakeQuantRepository(
 
     override suspend fun sendAiMessage(
         session: QuantSession,
-        providerId: String,
-        model: String,
+        providerId: String?,
+        model: String?,
         messages: List<AiChatMessage>,
         credentialId: String?,
-        fallbackProviders: List<String>
-    ) = AiCompletion(providerId, credentialId, model, "Deterministic AI fixture response.", false)
+        fallbackProviders: List<String>,
+        taskType: String
+    ) = AiCompletion(providerId ?: "task-router", credentialId, model ?: taskType, "Deterministic AI fixture response.", false)
 
     override suspend fun requestAiStrategyBrief(
         session: QuantSession,
