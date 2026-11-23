@@ -66,9 +66,20 @@ def test_mobile_intelligence_endpoint_requires_app_session(monkeypatch):
         assert limit == 10
         return [_article("RBI rate cut announced", "publisher.example", "https://publisher.example/rbi")]
 
+    async def fake_official(*, query: str, limit: int):
+        return {
+            "articles": [],
+            "feed_status": [{"provider": "RBI", "status": "AVAILABLE", "articles": 0, "error": None}],
+            "cache_hit": True,
+        }
+
     monkeypatch.setattr(
         "rovexquant.api.routers.intelligence.gdelt_service.discover_articles",
         fake_discover,
+    )
+    monkeypatch.setattr(
+        "rovexquant.api.routers.intelligence.fetch_official_updates",
+        fake_official,
     )
     response = client.get(
         "/api/v1/app/intelligence/events?query=India&timespan=3d&limit=10",
@@ -76,7 +87,9 @@ def test_mobile_intelligence_endpoint_requires_app_session(monkeypatch):
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["source"] == "GDELT_DOC_API"
+    assert body["source"] == "GDELT_DOC_API_PLUS_OFFICIAL_RSS"
+    assert body["gdelt_article_count"] == 1
+    assert body["official_article_count"] == 0
     assert body["events"][0]["event_category"] == "MONETARY_POLICY"
     assert body["events"][0]["stock_mapping_status"] == "NOT_RESOLVED"
     assert "stock recommendation" in " ".join(body["limitations"])
@@ -92,9 +105,20 @@ def test_mobile_intelligence_endpoint_fails_safely_on_upstream_error(monkeypatch
         from rovexquant.market_data.gdelt import GdeltProviderError
         raise GdeltProviderError("Global news discovery is temporarily unavailable")
 
+    async def unavailable_official(*, query: str, limit: int):
+        return {
+            "articles": [],
+            "feed_status": [{"provider": "RBI", "status": "UNAVAILABLE", "articles": 0, "error": "Timeout"}],
+            "cache_hit": False,
+        }
+
     monkeypatch.setattr(
         "rovexquant.api.routers.intelligence.gdelt_service.discover_articles",
         fail_discover,
+    )
+    monkeypatch.setattr(
+        "rovexquant.api.routers.intelligence.fetch_official_updates",
+        unavailable_official,
     )
     response = TestClient(app).get(
         "/api/v1/app/intelligence/events",
