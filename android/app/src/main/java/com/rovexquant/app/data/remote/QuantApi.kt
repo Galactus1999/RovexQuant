@@ -963,6 +963,20 @@ object QuantApi {
 
     private fun parseAiCompletion(json: JSONObject): AiCompletion {
         val usage = json.optJSONObject("usage") ?: JSONObject()
+        val verification = json.optJSONObject("verification")
+        val claimRows = verification?.optJSONArray("claims") ?: JSONArray()
+        val verifiedClaims = buildList {
+            for (index in 0 until claimRows.length()) {
+                val item = claimRows.optJSONObject(index) ?: continue
+                add(AiVerifiedClaim(
+                    claim = item.optString("claim"),
+                    sourceRef = item.optString("source_ref"),
+                    evidenceQuote = item.optString("evidence_quote"),
+                    verdict = item.optString("verdict", "insufficient"),
+                    reason = item.optString("reason")
+                ))
+            }
+        }
         return AiCompletion(
             providerId = json.optString("provider_id"),
             credentialId = json.optString("credential_id").takeIf { it.isNotBlank() && it != "null" },
@@ -974,7 +988,10 @@ object QuantApi {
             completionTokens = usage.optInt("completion_tokens", 0),
             totalTokens = usage.optInt("total_tokens", 0),
             costUsd = json.optionalDouble("cost_usd"),
-            costStatus = json.optString("cost_status", "UNKNOWN_MODEL_PRICING")
+            costStatus = json.optString("cost_status", "UNKNOWN_MODEL_PRICING"),
+            verificationStatus = verification?.optString("status")?.takeIf { it.isNotBlank() },
+            verificationSummary = verification?.optString("summary")?.takeIf { it.isNotBlank() },
+            verifiedClaims = verifiedClaims
         )
     }
 
