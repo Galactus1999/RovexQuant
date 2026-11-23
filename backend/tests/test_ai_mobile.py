@@ -11,33 +11,26 @@ from rovexquant.auth import issue_app_session
 from rovexquant.market_data.tejhq import TejHqDailyBar
 
 
-class FakeMessage:
-    content = "The EOD evidence is mixed; validate with out-of-sample tests."
-
-
-class FakeChoice:
-    message = FakeMessage()
-
-
-class FakeUsage:
-    prompt_tokens = 50
-    completion_tokens = 20
-    total_tokens = 70
-
-
 class FakeResponse:
-    choices = [FakeChoice()]
-    usage = FakeUsage()
-    _hidden_params = {"response_cost": 0.0001}
+    status_code = 200
+    def json(self):
+        return {
+            "choices": [{"message": {"content": "The EOD evidence is mixed; validate with out-of-sample tests."}}],
+            "usage": {"prompt_tokens": 50, "completion_tokens": 20, "total_tokens": 70},
+        }
 
 
-class FakeLiteLLM:
-    calls = []
-
-    async def acompletion(self, **kwargs):
-        self.calls.append(kwargs)
+class FakeAsyncClient:
+    requests = []
+    def __init__(self, *args, **kwargs):
+        pass
+    async def __aenter__(self):
+        return self
+    async def __aexit__(self, *args):
+        return False
+    async def post(self, url, headers, json):
+        self.requests.append({"url": url, "headers": headers, "json": json})
         return FakeResponse()
-
 
 
 @pytest.fixture
@@ -47,9 +40,8 @@ def mobile_client(monkeypatch):
     monkeypatch.setenv("QUANT_APP_SESSION_SIGNING_KEY", "x" * 48)
     monkeypatch.setenv("GROQ_API_KEY", "groq-server-secret")
     monkeypatch.setenv("GROQ_FALLBACK_MODEL", "groq-fallback-test-model")
-    fake_litellm = FakeLiteLLM()
-    monkeypatch.setattr(gateway.litellm, "acompletion", fake_litellm.acompletion)
-    FakeLiteLLM.calls = []
+    monkeypatch.setattr(gateway.httpx, "AsyncClient", FakeAsyncClient)
+    FakeAsyncClient.requests = []
     token, _ = issue_app_session("quant-test", "correct-password")
     return TestClient(app), {"Authorization": f"Bearer {token}"}
 
@@ -76,11 +68,8 @@ def test_mobile_chat_uses_app_session_and_server_provider_secret(mobile_client):
     })
     assert response.status_code == 200
     assert response.json()["content"].startswith("The EOD evidence")
-    assert FakeLiteLLM.calls[0]["api_key"] == "groq-server-secret"
-    assert FakeLiteLLM.calls[0]["model"] == "groq/test-model"
-    assert FakeLiteLLM.calls[0]["messages"][0]["role"] == "system"
-    assert response.json()["cost_status"] == "LITELLM_PRICED"
-    assert response.json()["cost_usd"] == 0.0001
+    assert FakeAsyncClient.requests[0]["headers"]["Authorization"] == "Bearer groq-server-secret"
+    assert FakeAsyncClient.requests[0]["json"]["messages"][0]["role"] == "system"
     assert "groq-server-secret" not in response.text
 
 

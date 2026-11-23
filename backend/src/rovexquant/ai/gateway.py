@@ -12,19 +12,15 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-import litellm
+import httpx
 
 from rovexquant.ai.providers import SUPPORTED
-
-# Use the imported LiteLLM provider adapter without enabling prompt logging.
-litellm.suppress_debug_info = True
-litellm.turn_off_message_logging = True
 
 TASK_TYPES = frozenset({"chat", "research", "macro_analysis", "filing_extraction", "claim_verification", "summarization"})
 
 
 def configured_task_routes() -> dict[str, dict[str, Any]]:
-    """Load server-owned task routes; never expose API credentials."""
+    """Load validated, server-owned task routes; no credentials are returned."""
     raw = os.getenv("QUANT_AI_TASK_ROUTES", "").strip()
     if not raw:
         return {}
@@ -147,11 +143,21 @@ def _provider_headers(provider_id: str, api_key: str) -> dict[str, str]:
 
 
 async def complete_chat(
-    *, provider_id: str | None, model: str | None, messages: list[dict[str, str]],
-    max_tokens: int = 1200, temperature: float = 0.2, credential_id: str | None = None,
-    fallback_providers: list[str] | None = None, task_type: str = "chat",
+    *,
+    provider_id: str | None,
+    model: str | None,
+    messages: list[dict[str, str]],
+    max_tokens: int = 1200,
+    temperature: float = 0.2,
+    credential_id: str | None = None,
+    fallback_providers: list[str] | None = None,
+    task_type: str = "chat",
 ) -> dict[str, Any]:
     provider_id, model, fallback_providers = resolve_task_route(task_type, provider_id, model, fallback_providers)
+    if provider_id not in SUPPORTED:
+        raise GatewayError("Unsupported AI provider", 400)
+    if not model.strip() or len(model) > 160:
+        raise GatewayError("A valid provider model ID is required", 422)
     if not messages or len(messages) > 32:
         raise GatewayError("Provide between 1 and 32 chat messages", 422)
     allowed_roles = {"system", "user", "assistant"}
@@ -159,8 +165,11 @@ async def complete_chat(
         raise GatewayError("Messages must contain supported roles and text content", 422)
     if sum(len(item["content"]) for item in messages) > 24000:
         raise GatewayError("Combined message content exceeds the 24,000 character limit", 413)
-    if max_tokens < 1 or max_tokens > 4096 or temperature < 0 or temperature > 2:
-        raise GatewayError("Invalid generation limits", 422)
+    if max_tokens < 1 or max_tokens > 4096:
+        raise GatewayError("max_tokens must be between 1 and 4096", 422)
+    if temperature < 0 or temperature > 2:
+        raise GatewayError("temperature must be between 0 and 2", 422)
+
     candidates = [provider_id]
     for candidate in fallback_providers or []:
         if candidate not in SUPPORTED:
@@ -169,54 +178,62 @@ async def complete_chat(
             candidates.append(candidate)
     if len(candidates) > 4:
         raise GatewayError("At most three fallback providers are allowed", 422)
+
     last_error: GatewayError | None = None
     for index, candidate in enumerate(candidates):
         try:
-            credential = _select_credential(candidate, credential_id if index == 0 else None)
+            selected_id = credential_id if index == 0 else None
+            credential = _select_credential(candidate, selected_id)
             config = SUPPORTED[candidate]
-            selected_model = model if index == 0 else os.getenv(f"{candidate.upper()}_FALLBACK_MODEL", "").strip()
+            fallback_model = os.getenv(f"{candidate.upper()}_FALLBACK_MODEL", "").strip()
+            selected_model = model if index == 0 else fallback_model
             if not selected_model:
                 last_error = GatewayError(f"No fallback model configured for {candidate}", 503)
                 continue
-            extra_headers = None
-            if candidate == "openrouter":
-                extra_headers = {}
-                if os.getenv("OPENROUTER_HTTP_REFERER", "").strip():
-                    extra_headers["HTTP-Referer"] = os.getenv("OPENROUTER_HTTP_REFERER", "").strip()
-                extra_headers["X-Title"] = os.getenv("OPENROUTER_APP_TITLE", "Quant").strip()
-            litellm_model = f"{candidate}/{selected_model}"
-            response = await litellm.acompletion(
-                model=litellm_model, api_base=config.base_url, api_key=credential.api_key,
-                messages=messages, max_tokens=max_tokens, temperature=temperature,
-                timeout=25, extra_headers=extra_headers,
-            )
-            choices = getattr(response, "choices", None)
-            message = getattr(choices[0], "message", None) if choices else None
-            content = getattr(message, "content", None)
+            payload = {
+                "model": selected_model,
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+            }
+            async with httpx.AsyncClient(timeout=httpx.Timeout(25.0, connect=8.0)) as client:
+                response = await client.post(
+                    f"{config.base_url}/chat/completions",
+                    headers=_provider_headers(candidate, credential.api_key),
+                    json=payload,
+                )
+            if response.status_code == 429 or response.status_code >= 500:
+                last_error = GatewayError(
+                    f"{candidate} temporarily unavailable (HTTP {response.status_code})", 503
+                )
+                continue
+            if response.status_code in (401, 403):
+                raise GatewayError(f"{candidate} rejected its configured credential", 502)
+            if response.status_code >= 400:
+                raise GatewayError(f"{candidate} rejected the request (HTTP {response.status_code})", 502)
+            data = response.json()
+            choices = data.get("choices") if isinstance(data, dict) else None
+            if not isinstance(choices, list) or not choices:
+                raise GatewayError(f"{candidate} returned an invalid completion response", 502)
+            message = choices[0].get("message", {})
+            content = message.get("content") if isinstance(message, dict) else None
             if not isinstance(content, str):
                 raise GatewayError(f"{candidate} returned no text completion", 502)
-            usage = getattr(response, "usage", None)
-            safe_usage = {}
-            for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
-                value = getattr(usage, key, None) if usage is not None else None
-                if isinstance(value, (int, float)) and not isinstance(value, bool):
-                    safe_usage[key] = value
-            cost_usd, cost_status = None, "UNPRICED_MODEL"
-            try:
-                hidden = getattr(response, "_hidden_params", {}) or {}
-                reported = hidden.get("response_cost") if isinstance(hidden, dict) else None
-                if isinstance(reported, (int, float)) and reported >= 0:
-                    cost_usd, cost_status = float(reported), "LITELLM_PRICED"
-                else:
-                    calculated = litellm.completion_cost(completion_response=response, model=litellm_model)
-                    if isinstance(calculated, (int, float)) and calculated > 0:
-                        cost_usd, cost_status = float(calculated), "LITELLM_PRICED"
-            except Exception:
-                pass  # Unknown pricing is never represented as free.
+            usage = data.get("usage", {})
+            safe_usage = {
+                key: usage[key]
+                for key in ("prompt_tokens", "completion_tokens", "total_tokens")
+                if isinstance(usage, dict) and isinstance(usage.get(key), (int, float))
+            }
             return {
-                "provider_id": candidate, "credential_id": credential.credential_id,
-                "model": selected_model, "task_type": task_type, "content": content,
-                "usage": safe_usage, "cost_usd": cost_usd, "cost_status": cost_status,
+                "provider_id": candidate,
+                "credential_id": credential.credential_id,
+                "model": selected_model,
+                "content": content,
+                "usage": safe_usage,
+                "task_type": task_type,
+                "cost_usd": None,
+                "cost_status": "UNAVAILABLE_PENDING_LITELLM_INTEGRATION",
                 "fallback_used": index > 0,
             }
         except GatewayError as error:
@@ -224,13 +241,10 @@ async def complete_chat(
                 last_error = error
                 continue
             raise
-        except Exception as error:
-            error_name = type(error).__name__
-            if error_name in {"AuthenticationError", "PermissionDeniedError"}:
-                raise GatewayError(f"{candidate} rejected its configured credential", 502) from error
-            if error_name in {"BadRequestError", "UnprocessableEntityError"}:
-                raise GatewayError(f"{candidate} rejected the model request", 502) from error
-            last_error = GatewayError(f"{candidate} temporarily unavailable ({error_name})", 503)
+        except httpx.TimeoutException:
+            last_error = GatewayError(f"{candidate} request timed out", 503)
+        except httpx.RequestError:
+            last_error = GatewayError(f"{candidate} could not be reached", 503)
     raise last_error or GatewayError("No configured AI provider was available", 503)
 
 
