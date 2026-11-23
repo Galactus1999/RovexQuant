@@ -946,7 +946,7 @@ object QuantApi {
         require(exchange in setOf("nse", "bse")) { "Unsupported exchange." }
         require(limit in 1..50) { "Snapshot limit must be between 1 and 50." }
         val request = Request.Builder()
-            .url("${session.baseUrl}/api/v1/app/market-data/eod/latest/\$exchange?max_lookback_days=14&limit=\$limit")
+            .url("${session.baseUrl}/api/v1/app/market-data/eod/latest/$exchange?max_lookback_days=14&limit=$limit")
             .header("Authorization", "Bearer ${session.accessToken}")
             .get()
             .build()
