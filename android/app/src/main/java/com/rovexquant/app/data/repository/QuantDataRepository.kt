@@ -4,6 +4,9 @@ import com.rovexquant.app.data.local.QuantSessionStore
 import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiProvider
+import com.rovexquant.app.data.model.AiResearchRun
+import com.rovexquant.app.data.model.AiBudgetStatus
+import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.EodMarketSnapshot
 import com.rovexquant.app.data.model.IntelligenceFeed
@@ -31,8 +34,14 @@ interface QuantDataRepository {
     suspend fun fetchEquityInstruments(session: QuantSession): List<MarketEquityInstrument>
     suspend fun fetchNseMcpTools(session: QuantSession, server: String): List<NseMcpCatalog>
     suspend fun fetchAiProviders(session: QuantSession): List<AiProvider>
+    suspend fun fetchAiTaskRoutes(session: QuantSession): Map<String, AiTaskRoute>
+    suspend fun fetchAiResearchRuns(session: QuantSession, limit: Int = 20): List<AiResearchRun>
+    suspend fun fetchAiBudgetStatus(session: QuantSession): AiBudgetStatus
     suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String)
     suspend fun deleteAiProviderCredential(session: QuantSession, providerId: String)
+    suspend fun saveDalalOsApiKey(session: QuantSession, apiKey: String)
+    suspend fun deleteDalalOsApiKey(session: QuantSession)
+    suspend fun fetchDalalOsConfigured(session: QuantSession): Boolean
     suspend fun saveUpstoxAnalyticsToken(session: QuantSession, token: String)
     suspend fun fetchUpstoxConfigured(session: QuantSession): Boolean
     suspend fun fetchLatestEodMarketSnapshot(session: QuantSession, exchange: String = "nse"): EodMarketSnapshot
@@ -47,29 +56,34 @@ interface QuantDataRepository {
     suspend fun fetchEventStudy(session: QuantSession, symbol: String, eventDate: String, benchmarkSymbol: String?): EventStudyResult
     suspend fun sendAiMessage(
         session: QuantSession,
-        providerId: String,
-        model: String,
+        providerId: String?,
+        model: String?,
         messages: List<AiChatMessage>,
         credentialId: String? = null,
-        fallbackProviders: List<String> = emptyList()
+        fallbackProviders: List<String> = emptyList(),
+        taskType: String = "chat",
+        maxTokens: Int = 1200
     ): AiCompletion
     suspend fun requestAiStrategyBrief(
         session: QuantSession,
-        providerId: String,
-        model: String,
+        providerId: String?,
+        model: String?,
         symbol: String,
         exchange: String,
         fromDate: String,
         toDate: String,
         strategyContext: String,
         credentialId: String? = null,
-        fallbackProviders: List<String> = emptyList()
+        fallbackProviders: List<String> = emptyList(),
+        automaticTaskRouting: Boolean = false,
+        maxTokens: Int = 1400
     ): AiStrategyBrief
     suspend fun callNseMcpTool(
         session: QuantSession,
         server: String,
         tool: String,
-        argumentsJson: String
+        argumentsJson: String,
+        confirmNonReadOnly: Boolean = false
     ): NseMcpResult
     fun createMarketStream(
         session: QuantSession,

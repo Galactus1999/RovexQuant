@@ -4,6 +4,10 @@ import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiDailyBar
 import com.rovexquant.app.data.model.AiProvider
+import com.rovexquant.app.data.model.AiResearchRun
+import com.rovexquant.app.data.model.AiBudgetStatus
+import com.rovexquant.app.data.model.AiVerifiedClaim
+import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.AiStrategyEvidence
 import com.rovexquant.app.data.model.EodMarketSnapshot
@@ -92,7 +96,7 @@ object QuantApi {
     }
 
     fun fetchNseMcpTools(session: QuantSession, server: String = "both"): List<NseMcpCatalog> {
-        require(server in setOf("bhavcopy", "cmmkt", "both")) { "Invalid NSE MCP server." }
+        require(server in setOf("bhavcopy", "cmmkt", "dalalos", "both")) { "Invalid research MCP server." }
         val request = Request.Builder()
             .url("${session.baseUrl}/api/v1/app/research/nse-mcp/tools?server=$server")
             .header("Authorization", "Bearer ${session.accessToken}")
@@ -108,7 +112,7 @@ object QuantApi {
             val catalog = responseJson.optJSONObject("catalog")
                 ?: throw IllegalStateException("NSE MCP returned no tool catalogue.")
             val failures = responseJson.optJSONObject("failures")
-            val requestedServers = if (server == "both") listOf("bhavcopy", "cmmkt") else listOf(server)
+            val requestedServers = if (server == "both") listOf("bhavcopy", "cmmkt", "dalalos") else listOf(server)
             val discovered = buildList {
                 for (serverName in requestedServers) {
                     val records = catalog.optJSONArray(serverName)
@@ -121,7 +125,9 @@ object QuantApi {
                                 name = name,
                                 description = item.optString("description"),
                                 inputSchema = schema,
-                                readOnly = item.optBoolean("read_only", false)
+                                readOnly = item.optBoolean("read_only", false),
+                                requiresConfirmation = item.optBoolean("requires_confirmation", false),
+                                destructive = item.optBoolean("destructive", false)
                             ))
                         }
                     }
@@ -137,9 +143,10 @@ object QuantApi {
         session: QuantSession,
         server: String,
         tool: String,
-        argumentsJson: String
+        argumentsJson: String,
+        confirmNonReadOnly: Boolean = false
     ): NseMcpResult {
-        require(server in setOf("bhavcopy", "cmmkt")) { "Invalid NSE MCP server." }
+        require(server in setOf("bhavcopy", "cmmkt", "dalalos")) { "Invalid research MCP server." }
         require(argumentsJson.toByteArray(Charsets.UTF_8).size <= 32 * 1024) { "Arguments exceed 32 KB." }
         val arguments = try { JSONObject(argumentsJson) } catch (_: Exception) {
             throw IllegalArgumentException("Arguments must be a valid JSON object.")
@@ -148,6 +155,7 @@ object QuantApi {
             .put("server", server)
             .put("tool", tool)
             .put("arguments", arguments)
+            .put("confirm_non_read_only", confirmNonReadOnly)
         val request = Request.Builder()
             .url("${session.baseUrl}/api/v1/app/research/nse-mcp/call")
             .header("Authorization", "Bearer ${session.accessToken}")
@@ -667,6 +675,45 @@ object QuantApi {
         }
     }
 
+    fun saveDalalOsApiKey(session: QuantSession, apiKey: String) {
+        require(apiKey.length in 20..4096) { "DalalOS API key length is invalid." }
+        val body = JSONObject().put("api_key", apiKey)
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/integrations/research/dalalos/api-key")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .put(body.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+        }
+    }
+
+    fun deleteDalalOsApiKey(session: QuantSession) {
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/integrations/research/dalalos/api-key")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .delete()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+        }
+    }
+
+    fun fetchDalalOsConfigured(session: QuantSession): Boolean {
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/integrations/research/dalalos/status")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            return JSONObject(text).optBoolean("configured", false)
+        }
+    }
+
     fun saveUpstoxAnalyticsToken(session: QuantSession, token: String) {
         require(token.length in 20..4096) { "Upstox Analytics Token length is invalid." }
         val body = JSONObject().put("token", token)
@@ -695,13 +742,100 @@ object QuantApi {
     }
 
 
+    fun fetchAiTaskRoutes(session: QuantSession): Map<String, AiTaskRoute> {
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/ai/task-routes")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            val routes = JSONObject(text).optJSONObject("routes") ?: JSONObject()
+            return buildMap {
+                val keys = routes.keys()
+                while (keys.hasNext()) {
+                    val task = keys.next()
+                    val route = routes.optJSONObject(task) ?: continue
+                    val provider = route.optString("provider_id")
+                    val model = route.optString("model")
+                    if (provider.isBlank() || model.isBlank()) continue
+                    val fallbackJson = route.optJSONArray("fallback_providers") ?: JSONArray()
+                    val fallbacks = buildList {
+                        for (index in 0 until fallbackJson.length()) {
+                            val item = fallbackJson.optString(index)
+                            if (item.isNotBlank()) add(item)
+                        }
+                    }
+                    put(task, AiTaskRoute(provider, model, fallbacks))
+                }
+            }
+        }
+    }
+
+    fun fetchAiResearchRuns(session: QuantSession, limit: Int = 20): List<AiResearchRun> {
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/ai/research/runs?limit=${limit.coerceIn(1, 100)}")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            val rows = JSONObject(text).optJSONArray("runs") ?: JSONArray()
+            return buildList {
+                for (index in 0 until rows.length()) {
+                    val item = rows.optJSONObject(index) ?: continue
+                    val usage = item.optJSONObject("token_usage") ?: JSONObject()
+                    val cost = if (item.isNull("cost_usd")) null else item.optDouble("cost_usd")
+                    add(AiResearchRun(
+                        runId = item.optString("run_id"), taskType = item.optString("task_type"),
+                        providerId = item.optString("provider_id"), model = item.optString("model"),
+                        status = item.optString("status"), promptTokens = usage.optLong("prompt_tokens"),
+                        completionTokens = usage.optLong("completion_tokens"),
+                        totalTokens = usage.optLong("total_tokens", usage.optLong("reserved_tokens")),
+                        costUsd = cost, costStatus = item.optString("cost_status", "NOT_TRACKED"),
+                        fallbackUsed = item.optBoolean("fallback_used"), createdAt = item.optString("created_at")
+                    ))
+                }
+            }
+        }
+    }
+
+    fun fetchAiBudgetStatus(session: QuantSession): AiBudgetStatus {
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/ai/budget")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            val json = JSONObject(text)
+            val daily = json.optJSONObject("daily") ?: JSONObject()
+            val monthly = json.optJSONObject("monthly") ?: JSONObject()
+            fun nullableLong(source: JSONObject, key: String): Long? = if (source.isNull(key)) null else source.optLong(key)
+            return AiBudgetStatus(
+                enabled = json.optBoolean("enabled"),
+                dailyUsedTokens = daily.optLong("used_tokens"),
+                dailyLimitTokens = nullableLong(daily, "limit_tokens"),
+                dailyRemainingTokens = nullableLong(daily, "remaining_tokens"),
+                monthlyUsedTokens = monthly.optLong("used_tokens"),
+                monthlyLimitTokens = nullableLong(monthly, "limit_tokens"),
+                monthlyRemainingTokens = nullableLong(monthly, "remaining_tokens")
+            )
+        }
+    }
+
     fun sendAiMessage(
         session: QuantSession,
-        providerId: String,
-        model: String,
+        providerId: String?,
+        model: String?,
         messages: List<AiChatMessage>,
         credentialId: String?,
-        fallbackProviders: List<String>
+        fallbackProviders: List<String>,
+        taskType: String,
+        maxTokens: Int
     ): AiCompletion {
         require(messages.isNotEmpty() && messages.size <= 12) { "Keep AI conversations to the latest 12 messages." }
         val boundedMessages = mutableListOf<AiChatMessage>()
@@ -719,11 +853,12 @@ object QuantApi {
             }
         }
         val body = JSONObject()
-            .put("provider_id", providerId)
-            .put("model", model)
             .put("messages", messageArray)
-            .put("max_tokens", 1200)
+            .put("task_type", taskType)
+            .put("max_tokens", maxTokens)
             .put("temperature", 0.2)
+        if (!providerId.isNullOrBlank()) body.put("provider_id", providerId)
+        if (!model.isNullOrBlank()) body.put("model", model)
         if (!credentialId.isNullOrBlank()) body.put("credential_id", credentialId)
         body.put("fallback_providers", JSONArray().apply { fallbackProviders.distinct().take(3).forEach { put(it) } })
         val request = Request.Builder()
@@ -740,24 +875,28 @@ object QuantApi {
 
     fun requestAiStrategyBrief(
         session: QuantSession,
-        providerId: String,
-        model: String,
+        providerId: String?,
+        model: String?,
         symbol: String,
         exchange: String,
         fromDate: String,
         toDate: String,
         strategyContext: String,
         credentialId: String?,
-        fallbackProviders: List<String>
+        fallbackProviders: List<String>,
+        automaticTaskRouting: Boolean = false,
+        maxTokens: Int = 1400
     ): AiStrategyBrief {
         val body = JSONObject()
-            .put("provider_id", providerId)
-            .put("model", model)
             .put("symbol", symbol.trim().uppercase())
             .put("exchange", exchange.uppercase())
             .put("from_date", fromDate)
             .put("to_date", toDate)
             .put("strategy_context", strategyContext)
+            .put("automatic_task_routing", automaticTaskRouting)
+            .put("max_tokens", maxTokens)
+        if (!providerId.isNullOrBlank()) body.put("provider_id", providerId)
+        if (!model.isNullOrBlank()) body.put("model", model)
         if (!credentialId.isNullOrBlank()) body.put("credential_id", credentialId)
         body.put("fallback_providers", JSONArray().apply { fallbackProviders.distinct().take(3).forEach { put(it) } })
         val request = Request.Builder()
@@ -823,13 +962,39 @@ object QuantApi {
         }
     }
 
-    private fun parseAiCompletion(json: JSONObject) = AiCompletion(
-        providerId = json.optString("provider_id"),
-        credentialId = json.optString("credential_id").takeIf { it.isNotBlank() && it != "null" },
-        model = json.optString("model"),
-        content = json.optString("content"),
-        fallbackUsed = json.optBoolean("fallback_used", false)
-    )
+    private fun parseAiCompletion(json: JSONObject): AiCompletion {
+        val usage = json.optJSONObject("usage") ?: JSONObject()
+        val verification = json.optJSONObject("verification")
+        val claimRows = verification?.optJSONArray("claims") ?: JSONArray()
+        val verifiedClaims = buildList {
+            for (index in 0 until claimRows.length()) {
+                val item = claimRows.optJSONObject(index) ?: continue
+                add(AiVerifiedClaim(
+                    claim = item.optString("claim"),
+                    sourceRef = item.optString("source_ref"),
+                    evidenceQuote = item.optString("evidence_quote"),
+                    verdict = item.optString("verdict", "insufficient"),
+                    reason = item.optString("reason")
+                ))
+            }
+        }
+        return AiCompletion(
+            providerId = json.optString("provider_id"),
+            credentialId = json.optString("credential_id").takeIf { it.isNotBlank() && it != "null" },
+            model = json.optString("model"),
+            content = json.optString("content"),
+            fallbackUsed = json.optBoolean("fallback_used", false),
+            taskType = json.optString("task_type", "chat"),
+            promptTokens = usage.optInt("prompt_tokens", 0),
+            completionTokens = usage.optInt("completion_tokens", 0),
+            totalTokens = usage.optInt("total_tokens", 0),
+            costUsd = json.optionalDouble("cost_usd"),
+            costStatus = json.optString("cost_status", "UNKNOWN_MODEL_PRICING"),
+            verificationStatus = verification?.optString("status")?.takeIf { it.isNotBlank() && it != "null" },
+            verificationSummary = verification?.optString("summary")?.takeIf { it.isNotBlank() && it != "null" },
+            verifiedClaims = verifiedClaims
+        )
+    }
 
     private fun JSONObject.optionalDouble(key: String): Double? {
         if (!has(key) || isNull(key)) return null

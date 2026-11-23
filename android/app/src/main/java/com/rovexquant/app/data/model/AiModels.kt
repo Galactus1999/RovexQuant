@@ -13,12 +13,29 @@ data class AiChatMessage(
     val content: String
 )
 
+data class AiVerifiedClaim(
+    val claim: String,
+    val sourceRef: String,
+    val evidenceQuote: String,
+    val verdict: String,
+    val reason: String
+)
+
 data class AiCompletion(
     val providerId: String,
     val credentialId: String?,
     val model: String,
     val content: String,
-    val fallbackUsed: Boolean
+    val fallbackUsed: Boolean,
+    val taskType: String = "chat",
+    val promptTokens: Int = 0,
+    val completionTokens: Int = 0,
+    val totalTokens: Int = 0,
+    val costUsd: Double? = null,
+    val costStatus: String = "UNKNOWN_MODEL_PRICING",
+    val verificationStatus: String? = null,
+    val verificationSummary: String? = null,
+    val verifiedClaims: List<AiVerifiedClaim> = emptyList()
 )
 
 data class AiDailyBar(
@@ -59,4 +76,23 @@ data class AiStrategyBrief(
     val aiError: String? = null,
     val dataRights: String,
     val limitations: List<String>
+)
+
+data class AiTaskRoute(
+    val providerId: String,
+    val model: String,
+    val fallbackProviders: List<String>
+)
+
+
+data class AiResearchRun(
+    val runId: String, val taskType: String, val providerId: String, val model: String,
+    val status: String, val promptTokens: Long, val completionTokens: Long, val totalTokens: Long,
+    val costUsd: Double?, val costStatus: String, val fallbackUsed: Boolean, val createdAt: String
+)
+
+data class AiBudgetStatus(
+    val enabled: Boolean, val dailyUsedTokens: Long, val dailyLimitTokens: Long?,
+    val dailyRemainingTokens: Long?, val monthlyUsedTokens: Long, val monthlyLimitTokens: Long?,
+    val monthlyRemainingTokens: Long?
 )

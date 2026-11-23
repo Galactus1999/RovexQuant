@@ -202,7 +202,7 @@ fun MacroEventResearchScreen(session: QuantSession, repository: QuantDataReposit
 }
 
 @Composable
-private fun MacroSummaryContent(summary: MacroResearchSummary) {
+fun MacroSummaryContent(summary: MacroResearchSummary) {
     Text("Retrieved ${summary.retrievedAt}", color = Muted, fontSize = 9.sp)
     if (summary.persistedObservationCount > 0) {
         Spacer(Modifier.height(6.dp))
@@ -248,7 +248,7 @@ private fun MacroSummaryContent(summary: MacroResearchSummary) {
 }
 
 @Composable
-private fun EventStudyContent(result: EventStudyResult) {
+fun EventStudyContent(result: EventStudyResult) {
     Spacer(Modifier.height(10.dp))
     Eyebrow("${result.exchange} · ${result.symbol} · ${result.eventDate}")
     Text("${result.anchorDate} → ${result.lastPostEventDate} · ${result.postBarsUsed} post-event bars",
@@ -291,7 +291,7 @@ private fun EventStudyContent(result: EventStudyResult) {
 }
 
 @Composable
-private fun EventMetric(label: String, value: Double?, modifier: Modifier = Modifier) {
+fun EventMetric(label: String, value: Double?, modifier: Modifier = Modifier) {
     Column(modifier.padding(top = 8.dp)) {
         Text(label, color = Muted, fontSize = 9.sp)
         Text(

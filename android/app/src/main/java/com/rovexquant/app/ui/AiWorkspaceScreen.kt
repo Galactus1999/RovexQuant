@@ -8,22 +8,27 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Slider
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rovexquant.app.data.model.AiChatMessage
+import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiStrategyBrief
+import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.data.repository.QuantDataRepository
 import kotlinx.coroutines.CancellationException
@@ -31,10 +36,12 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
+import kotlin.math.roundToInt
 
 @Composable
 fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
     val scope = rememberCoroutineScope()
+    val uriHandler = LocalUriHandler.current
     var providersLoading by remember { mutableStateOf(true) }
     var providers by remember { mutableStateOf(emptyList<com.rovexquant.app.data.model.AiProvider>()) }
     var providerError by remember { mutableStateOf<String?>(null) }
@@ -46,8 +53,18 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
     var providerTestStatus by remember { mutableStateOf<String?>(null) }
     var selectedFallbacks by remember { mutableStateOf(emptySet<String>()) }
     var selectedProvider by rememberSaveable { mutableStateOf("") }
+    var selectedTaskType by rememberSaveable { mutableStateOf("research") }
+    var automaticTaskRouting by rememberSaveable { mutableStateOf(false) }
+    var configuredTaskRoutes by remember { mutableStateOf<Map<String, AiTaskRoute>>(emptyMap()) }
+    var taskRoutesError by remember { mutableStateOf<String?>(null) }
+    var researchRuns by remember { mutableStateOf(emptyList<com.rovexquant.app.data.model.AiResearchRun>()) }
+    var historyLoading by remember { mutableStateOf(false) }
+    var historyError by remember { mutableStateOf<String?>(null) }
+    var aiBudgetStatus by remember { mutableStateOf<com.rovexquant.app.data.model.AiBudgetStatus?>(null) }
     var model by rememberSaveable { mutableStateOf("") }
+    var maxTokens by rememberSaveable { mutableIntStateOf(1200) }
     var messages by remember { mutableStateOf(emptyList<AiChatMessage>()) }
+    var lastChatCompletion by remember { mutableStateOf<AiCompletion?>(null) }
     var chatInput by rememberSaveable { mutableStateOf("") }
     var chatLoading by remember { mutableStateOf(false) }
     var chatError by remember { mutableStateOf<String?>(null) }
@@ -72,6 +89,19 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
         providerError = null
         try {
             providers = repository.fetchAiProviders(session)
+            try {
+                configuredTaskRoutes = repository.fetchAiTaskRoutes(session)
+                taskRoutesError = null
+                try {
+                    researchRuns = repository.fetchAiResearchRuns(session)
+                    aiBudgetStatus = repository.fetchAiBudgetStatus(session)
+                    historyError = null
+                } catch (historyFailure: Exception) {
+                    historyError = historyFailure.message ?: "Research history is unavailable."
+                }
+            } catch (failure: Exception) {
+                taskRoutesError = failure.message ?: "Task-route discovery failed."
+            }
             val configured = providers.filter { it.configured }
             if (selectedProvider.isBlank() && providers.isNotEmpty()) {
                 val firstProvider = configured.firstOrNull() ?: providers.first()
@@ -90,24 +120,29 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
     val configuredProviders = providers.filter { it.configured }
     val canUseAi = selectedProvider.isNotBlank() && model.isNotBlank() &&
         configuredProviders.any { it.providerId == selectedProvider }
+    val canSendChat = if (automaticTaskRouting) selectedTaskType in configuredTaskRoutes else canUseAi
 
     fun sendMessage() {
         val prompt = chatInput.trim()
-        if (prompt.isEmpty() || !canUseAi || chatLoading) return
+        if (prompt.isEmpty() || !canSendChat || chatLoading) return
         val updated = (messages + AiChatMessage("user", prompt)).takeLast(10)
         messages = updated
         chatInput = ""
         chatError = null
+        lastChatCompletion = null
         chatLoading = true
         scope.launch {
             try {
                 val response = repository.sendAiMessage(
                     session = session,
-                    providerId = selectedProvider,
-                    model = model.trim(),
+                    providerId = if (automaticTaskRouting) null else selectedProvider,
+                    model = if (automaticTaskRouting) null else model.trim(),
                     messages = updated,
-                    fallbackProviders = selectedFallbacks.toList()
+                    fallbackProviders = if (automaticTaskRouting) emptyList() else selectedFallbacks.toList(),
+                    taskType = selectedTaskType,
+                    maxTokens = maxTokens
                 )
+                lastChatCompletion = response
                 messages = (updated + AiChatMessage("assistant", response.content)).takeLast(10)
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -128,14 +163,16 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
             try {
                 brief = repository.requestAiStrategyBrief(
                     session = session,
-                    providerId = selectedProvider,
-                    model = model.trim(),
+                    providerId = if (automaticTaskRouting) null else selectedProvider,
+                    model = if (automaticTaskRouting) null else model.trim(),
                     symbol = symbol.trim(),
                     exchange = exchange,
                     fromDate = fromDate.trim(),
                     toDate = toDate.trim(),
                     strategyContext = strategyContext.trim(),
-                    fallbackProviders = selectedFallbacks.toList()
+                    fallbackProviders = if (automaticTaskRouting) emptyList() else selectedFallbacks.toList(),
+                    automaticTaskRouting = automaticTaskRouting,
+                    maxTokens = maxTokens
                 )
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -154,14 +191,52 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
     ) {
         item {
             SectionHeading(
-                "AI Studio · model and tool integrations",
+                "AI Studio · providers, models and research tools",
                 "Quant Intelligence.",
-                "Connect model providers, test credentials, configure failover and run approved research tools. Verified market evidence remains authoritative."
+                "Connect supported model APIs, test credentials, configure failover and fetch approved market, macro and event evidence into research requests. Model output remains subordinate to verified data."
             )
         }
         item {
             TerminalCard {
-                Eyebrow("AI provider")
+                Eyebrow("AI provider · task router")
+                Spacer(Modifier.height(7.dp))
+                Text("TASK-SPECIFIC ROUTING", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    listOf("chat", "research", "macro_analysis", "filing_extraction", "claim_verification", "summarization").forEach { task ->
+                        FilterChip(selected = selectedTaskType == task, onClick = { selectedTaskType = task }, enabled = !chatLoading,
+                            label = { Text(task.replace('_', ' ').replaceFirstChar { it.uppercase() }) })
+                    }
+                }
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Checkbox(checked = automaticTaskRouting, onCheckedChange = { automaticTaskRouting = it }, enabled = !chatLoading)
+                    Column(Modifier.weight(1f)) {
+                        Text("Use server task route", color = MaterialTheme.colorScheme.onBackground, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        Text(if (selectedTaskType in configuredTaskRoutes) "Configured route available for this task" else "No server route configured for this task", color = if (selectedTaskType in configuredTaskRoutes) Mint else Gold, fontSize = 9.sp)
+                    }
+                }
+                taskRoutesError?.let { Text("Task routes unavailable: $it", color = Gold, fontSize = 9.sp) }
+                configuredTaskRoutes[selectedTaskType]?.let { route ->
+                    Text(
+                        "Configured route: ${route.providerId} / ${route.model}" +
+                            if (route.fallbackProviders.isEmpty()) " · no fallback" else " · fallback: ${route.fallbackProviders.joinToString()}",
+                        color = Mint, fontSize = 9.sp, lineHeight = 14.sp
+                    )
+                }
+                Spacer(Modifier.height(5.dp))
+                Text(
+                    "Maximum response tokens: $maxTokens · actual cost also depends on input size and selected model pricing.",
+                    color = Muted, fontSize = 9.sp, lineHeight = 14.sp
+                )
+                Slider(
+                    value = maxTokens.toFloat(),
+                    onValueChange = { maxTokens = (it / 256f).roundToInt().times(256).coerceIn(256, 4096) },
+                    valueRange = 256f..4096f,
+                    steps = 14,
+                    modifier = Modifier.fillMaxWidth().testTag("ai.max_tokens")
+                )
+                if (automaticTaskRouting && selectedTaskType !in configuredTaskRoutes) {
+                    Text("Set QUANT_AI_TASK_ROUTES on the backend to enable this task. Manual provider selection remains available.", color = Gold, fontSize = 9.sp, lineHeight = 14.sp)
+                }
                 Spacer(Modifier.height(7.dp))
                 when {
                     providersLoading -> Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -189,6 +264,8 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                                         model = provider.defaultModel.orEmpty()
                                         credentialInput = ""
                                         credentialError = null
+                                        providerTestStatus = null
+                                        selectedFallbacks = selectedFallbacks - provider.providerId
                                     },
                                     label = {
                                         Text(
@@ -200,6 +277,19 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                             }
                         }
                         val selected = providers.firstOrNull { it.providerId == selectedProvider }
+                        val providerConsoleUrl = when (selectedProvider) {
+                            "openai" -> "https://platform.openai.com/api-keys"
+                            "gemini" -> "https://aistudio.google.com/app/apikey"
+                            "groq" -> "https://console.groq.com/keys"
+                            "deepseek" -> "https://platform.deepseek.com/api_keys"
+                            "openrouter" -> "https://openrouter.ai/settings/keys"
+                            else -> null
+                        }
+                        TextButton(
+                            onClick = { providerConsoleUrl?.let(uriHandler::openUri) },
+                            enabled = providerConsoleUrl != null,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Open ${selectedProvider.replaceFirstChar { it.uppercase() }} API console / manage key") }
                         Spacer(Modifier.height(9.dp))
                         StatusPill(
                             if (selected?.configured == true) "Provider configured" else "Credential required",
@@ -243,9 +333,6 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                         ) {
                             Text(if (credentialSaving) "Encrypting on backend…" else "Save encrypted provider key")
                         }
-                        credentialError?.let {
-                            Text(it, color = Coral, fontSize = 10.sp, lineHeight = 15.sp)
-                        }
                     }
                 }
                 Spacer(Modifier.height(8.dp))
@@ -258,7 +345,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                     modifier = Modifier.fillMaxWidth().testTag("ai.model")
                 )
                 Text(
-                    "API keys are encrypted in the server-side vault. They are not stored in this APK or sent in prompts. Provider connectivity is verified only by the explicit test below.",
+                    "API keys are encrypted in the server-side vault, never stored in this APK or sent in prompts. Connection testing sends one short model request; provider usage/billing may apply.",
                     color = Muted, fontSize = 10.sp, lineHeight = 15.sp
                 )
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -334,11 +421,76 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
             }
         }
         item {
+            AiResearchToolsPanel(session, repository) { context ->
+                chatInput = (context + "\n\n" + chatInput).take(10000)
+                chatError = null
+            }
+        }
+        item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionHeading("Connected research tools", "NSE MCP.", "Discover permitted read-only exchange research tools and explicitly attach a selected result to an AI request.")
+                SectionHeading("Connected research tools", "Research MCP.", "Discover, enable and run permitted NSE and DalalOS research tools. Quota-consuming actions require explicit confirmation; attach selected results to AI only when you choose.")
                 NseMcpResearchPanel(session, repository) { context ->
                     chatInput = (context + "\n\n" + chatInput).take(10000)
                     chatError = null
+                }
+            }
+        }
+        item {
+            AiResearchBriefingPanel(
+                session = session,
+                repository = repository,
+                providerId = selectedProvider,
+                model = model,
+                fallbackProviders = selectedFallbacks.toList(),
+                canUseAi = canUseAi,
+                automaticTaskRouting = automaticTaskRouting,
+                researchRouteConfigured = configuredTaskRoutes.containsKey("research"),
+                maxTokens = maxTokens,
+                evidenceDraft = chatInput
+            )
+        }
+        item {
+            TerminalCard {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Eyebrow("Persistent research history")
+                    TextButton(
+                        onClick = {
+                            if (!historyLoading) {
+                                historyLoading = true
+                                historyError = null
+                                scope.launch {
+                                    try {
+                                        researchRuns = repository.fetchAiResearchRuns(session)
+                                        aiBudgetStatus = repository.fetchAiBudgetStatus(session)
+                                    } catch (cancelled: CancellationException) {
+                                        throw cancelled
+                                    } catch (failure: Exception) {
+                                        historyError = failure.message ?: "Research history refresh failed."
+                                    } finally { historyLoading = false }
+                                }
+                            }
+                        },
+                        enabled = !historyLoading
+                    ) { Text(if (historyLoading) "Loading…" else "Refresh") }
+                }
+                Text("Completed AI runs are saved with task, model, source references and token counts. Prompt and response content is retained for reproducibility when the backend database is available.", color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
+                historyError?.let { Text("History unavailable: " + it, color = Gold, fontSize = 9.sp, lineHeight = 14.sp) }
+                aiBudgetStatus?.let { budget ->
+                    val daily = if (budget.dailyLimitTokens != null) budget.dailyUsedTokens.toString() + " / " + budget.dailyLimitTokens + " tokens" else budget.dailyUsedTokens.toString() + " tokens · no daily cap"
+                    val monthly = if (budget.monthlyLimitTokens != null) budget.monthlyUsedTokens.toString() + " / " + budget.monthlyLimitTokens + " tokens" else budget.monthlyUsedTokens.toString() + " tokens · no monthly cap"
+                    Text("HARD TOKEN BUDGETS · " + (if (budget.enabled) "ENABLED" else "DISABLED"), color = if (budget.enabled) Mint else Gold, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Text("Daily: " + daily + "    Monthly: " + monthly, color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
+                }
+                if (historyLoading && researchRuns.isEmpty()) CircularProgressIndicator()
+                if (researchRuns.isEmpty() && historyError == null && !historyLoading) Text("No archived research runs yet.", color = Muted, fontSize = 10.sp)
+                researchRuns.take(12).forEach { run ->
+                    Spacer(Modifier.height(7.dp))
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(PanelRaised).padding(10.dp)) {
+                        Text(run.taskType.replace('_', ' ').uppercase() + " · " + run.providerId + "/" + run.model, color = MaterialTheme.colorScheme.onBackground, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                        Text(run.createdAt.take(19).replace('T', ' ') + " · " + run.status + " · " + run.totalTokens + " tokens", color = Muted, fontSize = 9.sp)
+                        val runCost = if (run.costUsd == null) "cost unknown (" + run.costStatus + ")" else "USD " + String.format(Locale.US, "%.6f", run.costUsd) + " (" + run.costStatus + ")"
+                        Text(runCost, color = Gold, fontSize = 9.sp)
+                    }
                 }
             }
         }
@@ -373,6 +525,14 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                         Spacer(Modifier.height(7.dp))
                     }
                 }
+                lastChatCompletion?.let { usage ->
+                    Text(
+                        "Last call · ${usage.taskType} · ${usage.providerId}/${usage.model} · ${usage.totalTokens} tokens · " +
+                            (usage.costUsd?.let { "USD ${"%.6f".format(java.util.Locale.US, it)} (${usage.costStatus})" }
+                                ?: "cost unknown (${usage.costStatus})"),
+                        color = Muted, fontSize = 9.sp, lineHeight = 14.sp
+                    )
+                }
                 OutlinedTextField(
                     value = chatInput,
                     onValueChange = { chatInput = it.take(6000) },
@@ -385,7 +545,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                 Spacer(Modifier.height(8.dp))
                 Button(
                     onClick = ::sendMessage,
-                    enabled = canUseAi && chatInput.isNotBlank() && !chatLoading,
+                    enabled = canSendChat && chatInput.isNotBlank() && !chatLoading,
                     modifier = Modifier.fillMaxWidth().testTag("ai.chat.send")
                 ) {
                     Text(if (chatLoading) "Generating…" else "Send to Quant AI")
@@ -482,6 +642,13 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                     val aiResult = report.ai
                     if (aiResult != null) {
                         Eyebrow("AI strategy review · ${aiResult.providerId} / ${aiResult.model}")
+                        Spacer(Modifier.height(7.dp))
+                        Text(
+                            "Task ${aiResult.taskType} · ${aiResult.totalTokens} tokens · " +
+                                (aiResult.costUsd?.let { "estimated USD ${"%.6f".format(Locale.US, it)}" }
+                                    ?: "cost unknown (${aiResult.costStatus})"),
+                            color = Muted, fontSize = 9.sp, lineHeight = 14.sp
+                        )
                         Spacer(Modifier.height(7.dp))
                         Text(aiResult.content, color = MaterialTheme.colorScheme.onBackground, fontSize = 12.sp, lineHeight = 19.sp)
                         if (aiResult.fallbackUsed) {

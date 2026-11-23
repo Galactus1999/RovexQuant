@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import io
+import os
 import zipfile
 from datetime import date, datetime, timezone
 from typing import Any
@@ -121,6 +122,16 @@ def parse_udiff_csv(payload: bytes, *, exchange: str, trading_date: date) -> lis
 
 async def download_official_bhavcopy(exchange: str, trading_date: date) -> tuple[str, bytes]:
     market = exchange.strip().upper()
+    if market not in {"NSE", "BSE"}:
+        raise ValueError("Exchange must be NSE or BSE")
+    permission = os.getenv(f"{market}_OFFICIAL_AUTOMATED_DATA_PERMISSION", "").strip().lower()
+    permission_reference = os.getenv(f"{market}_OFFICIAL_PERMISSION_REFERENCE", "").strip()
+    if permission not in {"1", "true", "yes"} or not permission_reference:
+        raise OfficialBhavcopyError(
+            f"Automated {market} bhavcopy retrieval is disabled unless express written permission "
+            f"has been obtained and recorded. Use an authorised provider or an operator-supplied "
+            f"official file instead; do not automate exchange website downloads without permission."
+        )
     url = official_bhavcopy_url(market, trading_date)
     headers = {
         "User-Agent": "Mozilla/5.0 (compatible; RovexQuant-Research/1.0)",

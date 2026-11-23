@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import re
 from typing import Any, Literal
+from pathlib import Path
 
 import httpx
 from jsonschema.exceptions import SchemaError
@@ -17,7 +18,10 @@ from jsonschema.validators import validator_for
 NSE_MCP_ENDPOINTS = {
     "bhavcopy": "https://mcp.nseindia.in/bhavcopy/cm/mcp",
     "cmmkt": "https://mcp.nseindia.in/cmmkt/mcp",
+    "dalalos": "https://mcp.dalalos.in/mcp",
 }
+_DALALOS_CAPABILITIES_PATH = Path(__file__).with_name("data") / "dalalos_capabilities.json"
+_DALALOS_DISABLED_TOOLS = {"add_to_watchlist", "remove_from_watchlist"}
 _PROTOCOL_VERSION = "2025-03-26"
 _TOOL_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
 _BLOCKED_TOOL_PARTS = ("trade", "order", "execute", "cancel", "modify", "place", "submit", "write", "delete")
@@ -93,15 +97,19 @@ class NseMcpClient:
 
     def __init__(
         self,
-        server: Literal["bhavcopy", "cmmkt"],
+        server: Literal["bhavcopy", "cmmkt", "dalalos"],
         *,
         transport: httpx.AsyncBaseTransport | None = None,
         timeout: float = 20.0,
+        api_key: str | None = None,
     ):
         if server not in NSE_MCP_ENDPOINTS:
             raise NseMcpError("Unknown NSE MCP server", 422)
         self.server = server
         self.endpoint = NSE_MCP_ENDPOINTS[server]
+        self._api_key = api_key.strip() if isinstance(api_key, str) else None
+        if server == "dalalos" and not self._api_key:
+            raise NseMcpError("DalalOS API key is not configured", 409)
         self._transport = transport
         self._timeout = timeout
         self._session_id: str | None = None
@@ -138,6 +146,8 @@ class NseMcpClient:
         if self._client is None:
             raise NseMcpError("NSE MCP client is not initialized", 500)
         headers: dict[str, str] = {}
+        if self.server == "dalalos" and self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
         if message.get("method") != "initialize":
             headers["MCP-Protocol-Version"] = self._protocol_version
         if self._session_id:
@@ -173,6 +183,8 @@ class NseMcpClient:
         if response.status_code == 429 or response.status_code >= 500:
             raise NseMcpError(f"NSE MCP temporarily unavailable (HTTP {response.status_code})", 503, retryable=True)
         if response.status_code in (401, 403):
+            if self.server == "dalalos":
+                raise NseMcpError("DalalOS authentication failed; check the API key and plan quota", 401)
             raise NseMcpError("NSE MCP refused the connection", 502)
         if response.status_code >= 400:
             raise NseMcpError(f"NSE MCP rejected the request (HTTP {response.status_code})", 502)
@@ -241,23 +253,47 @@ class NseMcpClient:
             raise NseMcpError("NSE MCP tool catalogue exceeded pagination safety limit", 502)
         return tools
 
-    async def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    async def call_tool(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        *,
+        confirm_non_read_only: bool = False,
+    ) -> dict[str, Any]:
         if not _TOOL_NAME.fullmatch(name):
-            raise NseMcpError("Invalid NSE MCP tool name", 422)
-        if any(part in name.lower() for part in _BLOCKED_TOOL_PARTS):
+            raise NseMcpError("Invalid MCP tool name", 422)
+        if self.server != "dalalos" and any(part in name.lower() for part in _BLOCKED_TOOL_PARTS):
             raise NseMcpError("Quant permits read-only NSE research tools only", 403)
         tools = await self.list_tools()
         tool = next((item for item in tools if item["name"] == name), None)
         if tool is None:
-            raise NseMcpError("Tool is not published by this NSE MCP server", 404)
-        reviewed = {
-            item["name"]: item["read_only"]
-            for item in safe_tool_catalog(tools)
-        }
-        if not reviewed.get(name, False):
-            raise NseMcpError(
-                "NSE MCP tool is not marked read-only or otherwise positively identified", 403
-            )
+            raise NseMcpError("Tool is not published by this MCP server", 404)
+        if self.server == "dalalos":
+            capability = _dalalos_capability(name)
+            if capability is None or capability.get("deprecated") is True:
+                raise NseMcpError("DalalOS tool is not in the imported, current capability allowlist", 403)
+            if name in _DALALOS_DISABLED_TOOLS:
+                raise NseMcpError("DalalOS watchlist write tools are disabled", 403)
+            if capability.get("destructive") is True:
+                raise NseMcpError("Destructive DalalOS tools are disabled", 403)
+            read_only = capability.get("read_only") is True
+            annotations = tool.get("annotations")
+            if isinstance(annotations, dict) and annotations.get("readOnlyHint") is False:
+                raise NseMcpError("DalalOS tool metadata contradicts its read-only capability", 403)
+            if not read_only and not confirm_non_read_only:
+                raise NseMcpError(
+                    "This DalalOS tool may trigger processing or consume plan credits; explicit confirmation is required",
+                    403,
+                )
+        else:
+            reviewed = {
+                item["name"]: item["read_only"]
+                for item in safe_tool_catalog(tools)
+            }
+            if not reviewed.get(name, False):
+                raise NseMcpError(
+                    "NSE MCP tool is not marked read-only or otherwise positively identified", 403
+                )
         schema = tool.get("inputSchema")
         if not isinstance(schema, dict) or schema.get("type") != "object":
             raise NseMcpError("NSE MCP tool has an unsupported input schema", 502)
@@ -304,15 +340,55 @@ class NseMcpClient:
         }
 
 
-def safe_tool_catalog(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return tool descriptions and schemas without leaking server metadata."""
+def _dalalos_capabilities() -> dict[str, dict[str, Any]]:
+    try:
+        payload = json.loads(_DALALOS_CAPABILITIES_PATH.read_text(encoding="utf-8"))
+        records = payload.get("tools", [])
+        if not isinstance(records, list):
+            return {}
+        return {
+            item["name"]: item for item in records
+            if isinstance(item, dict) and isinstance(item.get("name"), str)
+        }
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
+def _dalalos_capability(name: str) -> dict[str, Any] | None:
+    return _dalalos_capabilities().get(name)
+
+
+def safe_tool_catalog(
+    tools: list[dict[str, Any]],
+    server: Literal["bhavcopy", "cmmkt", "dalalos"] = "bhavcopy",
+) -> list[dict[str, Any]]:
+    """Use the imported DalalOS allowlist or the existing strict NSE allowlist."""
     safe: list[dict[str, Any]] = []
+    capabilities = _dalalos_capabilities() if server == "dalalos" else {}
     for tool in tools:
         name = tool.get("name")
         if not isinstance(name, str):
             continue
         description = str(tool.get("description", ""))[:2000]
         annotations = tool.get("annotations")
+        if server == "dalalos":
+            capability = capabilities.get(name)
+            if capability is None or capability.get("deprecated") is True or name in _DALALOS_DISABLED_TOOLS:
+                continue
+            destructive = capability.get("destructive") is True
+            read_only = capability.get("read_only") is True
+            if destructive or (isinstance(annotations, dict) and annotations.get("readOnlyHint") is False):
+                read_only = False
+            safe.append({
+                "name": name,
+                "description": description,
+                "input_schema": tool.get("inputSchema") if isinstance(tool.get("inputSchema"), dict) else {},
+                "read_only": read_only,
+                "requires_confirmation": not read_only and not destructive,
+                "destructive": destructive,
+            })
+            continue
+
         read_only_hint = annotations.get("readOnlyHint") if isinstance(annotations, dict) else None
         name_is_safe = not any(part in name.lower() for part in _BLOCKED_TOOL_PARTS)
         if read_only_hint is False:
@@ -320,9 +396,6 @@ def safe_tool_catalog(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
         elif read_only_hint is True:
             read_only = name_is_safe
         else:
-            # Some official NSE deployments omit MCP annotations entirely.
-            # Fall back only for exact locally reviewed names with a data-query
-            # description. This is not a general "get_*" allow rule.
             description_words = description.strip().lower().split()
             first_verb = description_words[0] if description_words else ""
             description_is_safe = (
@@ -339,9 +412,10 @@ def safe_tool_catalog(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "description": description,
             "input_schema": tool.get("inputSchema") if isinstance(tool.get("inputSchema"), dict) else {},
             "read_only": read_only,
+            "requires_confirmation": False,
+            "destructive": False,
         })
     return safe
-
 
 def provider_status() -> list[dict[str, Any]]:
     return [
@@ -357,6 +431,7 @@ def provider_status() -> list[dict[str, Any]]:
             "usage": "Authenticated owner's private educational research only",
         }
         for server, endpoint in NSE_MCP_ENDPOINTS.items()
+        if server != "dalalos"
     ]
 
 

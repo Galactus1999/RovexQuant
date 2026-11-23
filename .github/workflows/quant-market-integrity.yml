@@ -1,10 +1,8 @@
 name: Quant Historical Backfill & Exchange Reconciliation
 
 on:
-  schedule:
-    # 19:30 IST and a 21:30 IST retry; repeated reports are content-hash idempotent.
-    - cron: "0 14 * * 1-5"
-    - cron: "0 16 * * 1-5"
+  # Historical backfills and any permitted official-file reconciliation are operator initiated.
+  # Daily EOD collection is handled separately by the TejHQ ingestion workflow.
   workflow_dispatch:
     inputs:
       operation:
@@ -47,6 +45,10 @@ jobs:
       QUANT_TOKEN_DATABASE_URL: ${{ secrets.QUANT_TOKEN_DATABASE_URL }}
       QUANT_MARKET_DATABASE_URL: ${{ secrets.QUANT_MARKET_DATABASE_URL }}
       QUANT_TOKEN_MIGRATION_DATABASE_URL: ${{ secrets.QUANT_TOKEN_MIGRATION_DATABASE_URL }}
+      NSE_OFFICIAL_AUTOMATED_DATA_PERMISSION: ${{ vars.NSE_OFFICIAL_AUTOMATED_DATA_PERMISSION }}
+      NSE_OFFICIAL_PERMISSION_REFERENCE: ${{ vars.NSE_OFFICIAL_PERMISSION_REFERENCE }}
+      BSE_OFFICIAL_AUTOMATED_DATA_PERMISSION: ${{ vars.BSE_OFFICIAL_AUTOMATED_DATA_PERMISSION }}
+      BSE_OFFICIAL_PERMISSION_REFERENCE: ${{ vars.BSE_OFFICIAL_PERMISSION_REFERENCE }}
       QUANT_MARKET_MIGRATION_DATABASE_URL: ${{ secrets.QUANT_MARKET_MIGRATION_DATABASE_URL }}
     steps:
       - name: Checkout Quant
@@ -90,20 +92,23 @@ jobs:
         run: |
           python scripts/backfill_derived_parquet.py --exchange "${{ inputs.exchange }}" --year "${{ inputs.year }}"
       - name: Reconcile official NSE and BSE reports
-        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.operation == 'reconcile')
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'reconcile' }}
         working-directory: backend
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${{ github.event_name }}" == "schedule" ]]; then
-            TRADING_DATE="$(TZ=Asia/Kolkata date +%F)"
-            EXCHANGES=(nse bse)
-          else
-            TRADING_DATE="${{ inputs.trading_date }}"
-            if [[ -z "$TRADING_DATE" ]]; then TRADING_DATE="$(TZ=Asia/Kolkata date +%F)"; fi
-            EXCHANGES=("${{ inputs.exchange }}")
-          fi
+          TRADING_DATE="${{ inputs.trading_date }}"
+          if [[ -z "$TRADING_DATE" ]]; then TRADING_DATE="$(TZ=Asia/Kolkata date +%F)"; fi
+          EXCHANGES=("${{ inputs.exchange }}")
           python -c 'from datetime import date; import sys; date.fromisoformat(sys.argv[1])' "$TRADING_DATE"
           for EXCHANGE in "${EXCHANGES[@]}"; do
+            if [[ "$EXCHANGE" == "nse" && ( "${NSE_OFFICIAL_AUTOMATED_DATA_PERMISSION:-}" != "true" || -z "${NSE_OFFICIAL_PERMISSION_REFERENCE:-}" ) ]]; then
+              echo "::notice::Skipping NSE reconciliation: express written permission is not configured."
+              continue
+            fi
+            if [[ "$EXCHANGE" == "bse" && ( "${BSE_OFFICIAL_AUTOMATED_DATA_PERMISSION:-}" != "true" || -z "${BSE_OFFICIAL_PERMISSION_REFERENCE:-}" ) ]]; then
+              echo "::notice::Skipping BSE reconciliation: express written permission is not configured."
+              continue
+            fi
             python scripts/reconcile_official_bhavcopy.py --exchange "$EXCHANGE" --date "$TRADING_DATE"
           done

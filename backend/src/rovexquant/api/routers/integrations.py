@@ -10,6 +10,9 @@ from rovexquant.market_data.upstox_credentials import (
     store_upstox_analytics_token,
     delete_upstox_analytics_token,
     upstox_analytics_status,
+    store_research_connector_api_key,
+    get_research_connector_api_key,
+    delete_research_connector_api_key,
 )
 
 router = APIRouter()
@@ -94,5 +97,60 @@ def save_upstox_analytics_token(request: UpstoxAnalyticsTokenInput):
 def upstox_status():
     try:
         return upstox_analytics_status()
+    except UpstoxCredentialError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+
+class ResearchConnectorKeyInput(BaseModel):
+    api_key: SecretStr
+
+
+@router.put(
+    "/api/v1/app/integrations/research/dalalos/api-key",
+    dependencies=[Depends(require_app_session), Depends(provider_credential_rate_limit)],
+)
+def save_dalalos_api_key(request: ResearchConnectorKeyInput):
+    """Store the optional DalalOS research key using the existing encrypted token vault."""
+    try:
+        store_research_connector_api_key("dalalos", request.api_key.get_secret_value())
+        return {
+            "provider": "dalalos",
+            "configured": True,
+            "credential_storage": "encrypted_server_side",
+            "message": "DalalOS key stored. Connection and quota are verified on tool discovery.",
+        }
+    except UpstoxCredentialError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+@router.get(
+    "/api/v1/app/integrations/research/dalalos/status",
+    dependencies=[Depends(require_app_session)],
+)
+def dalalos_connector_status():
+    try:
+        configured = get_research_connector_api_key("dalalos") is not None
+        return {
+            "provider": "dalalos",
+            "configured": configured,
+            "credential_storage": "encrypted_server_side" if configured else "not_configured",
+            "connection_verified": False,
+            "note": "Credential storage only; live MCP authentication and plan quota are verified during discovery.",
+        }
+    except UpstoxCredentialError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+@router.delete(
+    "/api/v1/app/integrations/research/dalalos/api-key",
+    dependencies=[Depends(require_app_session), Depends(provider_credential_rate_limit)],
+)
+def delete_dalalos_api_key():
+    try:
+        return {
+            "provider": "dalalos",
+            "deleted": delete_research_connector_api_key("dalalos"),
+        }
     except UpstoxCredentialError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error

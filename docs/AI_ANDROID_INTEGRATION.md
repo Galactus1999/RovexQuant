@@ -18,6 +18,21 @@ Provider API keys remain server-side. Configure one or more supported provider s
 - `GEMINI_API_KEY` / `GEMINI_API_KEYS_JSON`
 - `OPENAI_API_KEY` / `OPENAI_API_KEYS_JSON`
 
+### Automatic task routing and budget configuration
+
+Automatic routing is server-owned and is disabled when `QUANT_AI_TASK_ROUTES` is empty. Configure it as a JSON object in the backend environment. The only accepted task keys are `chat`, `research`, `macro_analysis`, `filing_extraction`, `claim_verification` and `summarization`; each value must contain `provider_id` and an exact `model`, with optional `fallback_providers` (maximum three). Example:
+
+```json
+{
+  "research": {"provider_id": "openrouter", "model": "<exact-provider-model-id>", "fallback_providers": ["groq"]},
+  "claim_verification": {"provider_id": "openai", "model": "<independent-verifier-model-id>"}
+}
+```
+
+Replace the placeholders with model IDs accepted by the provider. The gateway does not scrape or guess model catalogues. `<PROVIDER>_DEFAULT_MODEL` only prefills the manual model field; it does not prove the model exists. If the UI says no server route is configured, automatic routing is not enabled for that task. Manual provider/model selection remains available.
+
+`QUANT_AI_DAILY_TOKEN_BUDGET` and `QUANT_AI_MONTHLY_TOKEN_BUDGET` are hard token ceilings. Set a positive integer to enforce a limit; `0` disables that ceiling. The backend reserves tokens before execution and persists provider-reported usage when available. Unknown model pricing remains explicitly unpriced rather than estimated from a similar model.
+
 The Android AI Studio asks for the provider's model ID because model catalogues change. It exposes an explicit connection test, removal of owner-stored app credentials, and selectable cross-provider fallback. A fallback is offered only when that provider has both a configured credential and a server-side `<PROVIDER>_FALLBACK_MODEL`; only classified transient failures trigger fallback. Authentication, entitlement and invalid-request errors do not silently switch providers. Same-provider key rotation is not used to evade rate limits.
 
 Do not put provider keys or `QUANT_AI_GATEWAY_TOKEN` in Android resources, BuildConfig, assets, local preferences, or APKs. Do not send secrets in chat. The AI workspace also embeds the existing read-only NSE MCP research panel; attaching a result to a model request is an explicit user action and sends that selected response to the configured AI provider for inference. Review the exchange/provider data-use terms before doing so.
@@ -98,3 +113,24 @@ transmission explanations and opening original publisher URLs. It renders the
 source's seen timestamp and explicitly labels the rule-match score as a heuristic,
 not a probability. The screen does not fabricate sample live events; the debug
 instrumentation host supplies a deterministic fixture only for UI regression.
+
+
+## AI Studio provider and research-tool controls
+
+The Android AI Studio exposes provider setup for DeepSeek, Groq, OpenRouter, Gemini and OpenAI-compatible chat completions. The selected provider has a direct link to its official API-key console. App-owned credentials are stored and removed through the authenticated backend vault; environment-managed provider credentials are not deleted by the app-key removal action.
+
+The explicit **Test connection** control sends a minimal completion request. Provider usage or billing may apply. The UI reports the provider/model returned by the backend; a saved key alone is not treated as proof of connectivity.
+
+Cross-provider fallback is opt-in and limited to three selected providers. A fallback appears only when the backend reports both a configured credential and a server-side `<PROVIDER>_FALLBACK_MODEL`. The gateway's transient-error classification is authoritative. Authentication, entitlement, invalid-request and policy errors do not trigger silent provider switching.
+
+The research-tool panel can fetch:
+- The latest persisted NSE EOD snapshot, with trading date and breadth/mover fields. It is never labelled as a live quote.
+- The persisted macro research summary, preserving series key, observation period, frequency, unit and provider status.
+- The durable intelligence archive, preserving event IDs, source domains/URLs, timestamps, independent-source counts, mapping status and limitations.
+- Read-only NSE MCP tool results, only after the user selects and executes a permitted tool.
+
+Each tool result is inserted into the draft as bounded context. It is not sent to an external model until the user explicitly sends a message or generates a research briefing. Provider usage/billing may apply to model requests.
+
+The separate **AI research briefing** action synthesizes the evidence already attached to the draft. Its system prompt requires market/macro/event source references, distinguishes facts from hypotheses, preserves EOD/delayed/live modes, and prohibits fabricated prices, sources, causal claims and trade instructions. A client-side reference audit checks returned event IDs, macro series/period markers, EOD trading-date markers and URLs against the supplied evidence bundle. Missing or unknown references produce a visible warning. This audit validates reference membership only; it does not prove that a model's interpretation is correct or independently verify the source's truth.
+
+The evidence package is a research aid, not an autonomous trading signal. The user must inspect original filings and source material before relying on any company or sector hypothesis. The CI suite uses deterministic fakes and does not prove live provider credentials, deployed database connectivity or production data freshness.

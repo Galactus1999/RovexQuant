@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import math
 import os
 from dataclasses import dataclass
 from typing import Any
@@ -15,6 +16,46 @@ from typing import Any
 import httpx
 
 from rovexquant.ai.providers import SUPPORTED
+
+TASK_TYPES = frozenset({"chat", "research", "macro_analysis", "filing_extraction", "claim_verification", "summarization"})
+
+
+def configured_task_routes() -> dict[str, dict[str, Any]]:
+    """Load validated, server-owned task routes; no credentials are returned."""
+    raw = os.getenv("QUANT_AI_TASK_ROUTES", "").strip()
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise GatewayError("Invalid QUANT_AI_TASK_ROUTES configuration", 503) from error
+    if not isinstance(parsed, dict):
+        raise GatewayError("QUANT_AI_TASK_ROUTES must be a JSON object", 503)
+    routes: dict[str, dict[str, Any]] = {}
+    for task, route in parsed.items():
+        if task not in TASK_TYPES or not isinstance(route, dict):
+            raise GatewayError("AI task routing contains an unsupported task or route", 503)
+        provider, model = route.get("provider_id"), route.get("model")
+        fallbacks = route.get("fallback_providers", [])
+        if not isinstance(provider, str) or provider not in SUPPORTED or not isinstance(model, str) or not model.strip() or len(model) > 160:
+            raise GatewayError(f"Invalid provider/model in AI task route: {task}", 503)
+        if not isinstance(fallbacks, list) or len(fallbacks) > 3 or any(not isinstance(item, str) or item not in SUPPORTED for item in fallbacks):
+            raise GatewayError(f"Invalid fallback providers in AI task route: {task}", 503)
+        routes[task] = {"provider_id": provider, "model": model.strip(), "fallback_providers": list(dict.fromkeys(fallbacks))}
+    return routes
+
+
+def resolve_task_route(task_type: str, provider_id: str | None, model: str | None, fallback_providers: list[str] | None):
+    if task_type not in TASK_TYPES:
+        raise GatewayError("Unsupported AI task type", 422)
+    if provider_id is not None or model is not None:
+        if not isinstance(provider_id, str) or provider_id not in SUPPORTED or not isinstance(model, str) or not model.strip():
+            raise GatewayError("A supported provider and model must be selected together", 422)
+        return provider_id, model.strip(), fallback_providers
+    route = configured_task_routes().get(task_type)
+    if route is None:
+        raise GatewayError(f"No model route is configured for task: {task_type}", 503)
+    return route["provider_id"], route["model"], route["fallback_providers"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +96,61 @@ def _credentials_for(provider_id: str) -> list[Credential]:
         result.insert(0, Credential(provider_id, "default", primary))
     return result
 
+
+# Curated pricing data copied from LiteLLM Core 1.110.2 model_prices_and_context_window.json.
+# Source: https://github.com/BerriAI/litellm/blob/v1.110.2/model_prices_and_context_window.json
+# LiteLLM is MIT-licensed; this is a pinned data record, not a runtime dependency.
+# Unknown models remain unpriced; update this map only from a pinned upstream release.
+_LITELLM_CORE_1_110_2_PRICES = {
+    ("openai", "gpt-4o-mini"): {
+        "input_cost_per_token": 0.00000015,
+        "output_cost_per_token": 0.00000060,
+    },
+}
+
+
+def estimate_completion_cost_usd(
+    provider_id: str,
+    model: str,
+    usage: dict[str, Any],
+) -> tuple[float | None, str]:
+    """Estimate USD using a pinned LiteLLM Core price record; unknown remains unknown."""
+    prompt_tokens = usage.get("prompt_tokens")
+    completion_tokens = usage.get("completion_tokens")
+    if not isinstance(prompt_tokens, (int, float)) or not isinstance(completion_tokens, (int, float)):
+        return None, "PROVIDER_USAGE_NOT_REPORTED"
+    if (
+        prompt_tokens < 0 or completion_tokens < 0
+        or not math.isfinite(float(prompt_tokens))
+        or not math.isfinite(float(completion_tokens))
+    ):
+        return None, "INVALID_PROVIDER_USAGE"
+    try:
+        # Vendored, version-pinned excerpt from LiteLLM Core's model price map.
+        # Keep unknown models unpriced; never infer a rate from a similar model.
+        from importlib.resources import files
+
+        pricing_path = files("rovexquant.ai").joinpath("data/litellm_model_pricing_v1_110_2.json")
+        pricing_map = json.loads(pricing_path.read_text(encoding="utf-8"))
+        model_key = model.removeprefix(f"{provider_id}/").strip()
+        model_pricing = pricing_map.get("models", {}).get(model_key)
+        if not isinstance(model_pricing, dict) or model_pricing.get("litellm_provider") != provider_id:
+            return None, "UNKNOWN_MODEL_PRICING"
+        input_rate = model_pricing.get("input_cost_per_token")
+        output_rate = model_pricing.get("output_cost_per_token")
+        if (
+            not isinstance(input_rate, (int, float))
+            or not isinstance(output_rate, (int, float))
+            or not math.isfinite(float(input_rate))
+            or not math.isfinite(float(output_rate))
+            or input_rate < 0
+            or output_rate < 0
+        ):
+            return None, "UNKNOWN_MODEL_PRICING"
+        amount = int(prompt_tokens) * float(input_rate) + int(completion_tokens) * float(output_rate)
+        return round(amount, 8), "ESTIMATED_FROM_LITELLM_CORE_1_110_2"
+    except (OSError, ValueError, TypeError):
+        return None, "UNKNOWN_MODEL_PRICING"
 
 def configured_providers() -> list[dict[str, Any]]:
     """Return safe provider metadata; credential values are never exposed."""
@@ -104,14 +200,16 @@ def _provider_headers(provider_id: str, api_key: str) -> dict[str, str]:
 
 async def complete_chat(
     *,
-    provider_id: str,
-    model: str,
+    provider_id: str | None,
+    model: str | None,
     messages: list[dict[str, str]],
     max_tokens: int = 1200,
     temperature: float = 0.2,
     credential_id: str | None = None,
     fallback_providers: list[str] | None = None,
+    task_type: str = "chat",
 ) -> dict[str, Any]:
+    provider_id, model, fallback_providers = resolve_task_route(task_type, provider_id, model, fallback_providers)
     if provider_id not in SUPPORTED:
         raise GatewayError("Unsupported AI provider", 400)
     if not model.strip() or len(model) > 160:
@@ -183,12 +281,20 @@ async def complete_chat(
                 for key in ("prompt_tokens", "completion_tokens", "total_tokens")
                 if isinstance(usage, dict) and isinstance(usage.get(key), (int, float))
             }
+            reported_cost = usage.get("cost") if isinstance(usage, dict) else None
+            if isinstance(reported_cost, (int, float)) and not isinstance(reported_cost, bool) and math.isfinite(float(reported_cost)) and reported_cost >= 0:
+                cost_usd, cost_status = float(reported_cost), "PROVIDER_REPORTED"
+            else:
+                cost_usd, cost_status = estimate_completion_cost_usd(candidate, selected_model, safe_usage)
             return {
                 "provider_id": candidate,
                 "credential_id": credential.credential_id,
                 "model": selected_model,
                 "content": content,
                 "usage": safe_usage,
+                "task_type": task_type,
+                "cost_usd": cost_usd,
+                "cost_status": cost_status,
                 "fallback_used": index > 0,
             }
         except GatewayError as error:
