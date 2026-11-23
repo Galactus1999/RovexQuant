@@ -31,6 +31,9 @@ interface QuantDataRepository {
     suspend fun fetchAiProviders(session: QuantSession): List<AiProvider>
     suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String)
     suspend fun deleteAiProviderCredential(session: QuantSession, providerId: String)
+    suspend fun saveDalalOsApiKey(session: QuantSession, apiKey: String)
+    suspend fun deleteDalalOsApiKey(session: QuantSession)
+    suspend fun fetchDalalOsConfigured(session: QuantSession): Boolean
     suspend fun saveUpstoxAnalyticsToken(session: QuantSession, token: String)
     suspend fun fetchUpstoxConfigured(session: QuantSession): Boolean
     suspend fun fetchLatestEodMarketSnapshot(session: QuantSession, exchange: String = "nse"): EodMarketSnapshot
@@ -65,7 +68,8 @@ interface QuantDataRepository {
         session: QuantSession,
         server: String,
         tool: String,
-        argumentsJson: String
+        argumentsJson: String,
+        confirmNonReadOnly: Boolean = false
     ): NseMcpResult
     fun createMarketStream(
         session: QuantSession,
