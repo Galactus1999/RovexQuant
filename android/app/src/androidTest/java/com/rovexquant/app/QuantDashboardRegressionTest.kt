@@ -82,7 +82,9 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("scanner.list").performScrollToNode(hasText("Open AI data recovery"))
         composeRule.onNodeWithText("Open AI data recovery").performClick()
         composeRule.onNodeWithText("Quant Intelligence.").assertIsDisplayed()
-        composeRule.onNodeWithText("Groq", substring = true).assertIsDisplayed()
+        // The configured provider chip is the exact "Groq ✓" label. A substring
+        // search for "Groq" also matches the separate API-console action.
+        composeRule.onNodeWithText("Groq ✓").assertIsDisplayed()
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.model"))
         composeRule.onNodeWithTag("ai.model").performTextInput("test-model")
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.chat.input"))
@@ -130,7 +132,10 @@ class QuantDashboardRegressionTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.chat.input"))
-        composeRule.onNodeWithTag("ai.chat.input").assertTextContains("NSE EOD SNAPSHOT")
+        // assertTextContains defaults to exact-item matching; the draft contains a
+        // complete evidence block, so explicitly request substring matching.
+        composeRule.onNodeWithTag("ai.chat.input")
+            .assertTextContains("NSE EOD SNAPSHOT", substring = true)
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.brief.generate"))
         composeRule.onNodeWithTag("ai.brief.generate").assertIsDisplayed()
         composeRule.onNodeWithTag("ai.brief.generate").performClick()
