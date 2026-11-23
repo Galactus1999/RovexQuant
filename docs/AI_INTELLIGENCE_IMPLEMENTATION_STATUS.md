@@ -54,7 +54,7 @@ A successful source commit or an individual passing job is not a green release. 
 3. Complete immutable run provenance: prompt/template version, tool names/versions, source URLs/IDs, source timestamps, data cut-off and output hash; add replay with safe input snapshots.
 4. Add a pinned, imported model-pricing source and USD spend aggregation. Unknown pricing must remain unknown; do not fabricate zero cost.
 5. Extend the current daily/monthly token admission limits to per-task/per-provider and USD budgets; keep reservations transactional and fail closed.
-6. Add claim-level verification for entity identity, period alignment, numeric consistency, source support, contradictory evidence and stale data. The verifier must use a separately configured specialist route and retain its evidence/reasons.
+6. Expand the current claim verifier with deterministic entity identity, period alignment, numeric consistency, contradictory-source and stale-data checks. Keep its separately configured specialist route and retain evidence/reasons.
 7. Connect event → macro → sector → company → instrument analysis only when each edge has explicit evidence, effective dates and uncertainty. Do not infer stock recommendations from ticker-name or sector-label similarity.
 
 No phase is complete merely because its UI exists; each gate needs tests and actual runtime evidence.
