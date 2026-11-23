@@ -5,6 +5,7 @@ import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiDailyBar
 import com.rovexquant.app.data.model.AiProvider
 import com.rovexquant.app.data.model.AiResearchRun
+import com.rovexquant.app.data.model.AiBudgetStatus
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.AiStrategyEvidence
 import com.rovexquant.app.data.model.EodMarketSnapshot
@@ -778,6 +779,32 @@ object QuantApi {
                     ))
                 }
             }
+        }
+    }
+
+    fun fetchAiBudgetStatus(session: QuantSession): AiBudgetStatus {
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/ai/budget")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            val json = JSONObject(text)
+            val daily = json.optJSONObject("daily") ?: JSONObject()
+            val monthly = json.optJSONObject("monthly") ?: JSONObject()
+            fun nullableLong(source: JSONObject, key: String): Long? =
+                if (source.isNull(key)) null else source.optLong(key)
+            return AiBudgetStatus(
+                enabled = json.optBoolean("enabled"),
+                dailyUsedTokens = daily.optLong("used_tokens"),
+                dailyLimitTokens = nullableLong(daily, "limit_tokens"),
+                dailyRemainingTokens = nullableLong(daily, "remaining_tokens"),
+                monthlyUsedTokens = monthly.optLong("used_tokens"),
+                monthlyLimitTokens = nullableLong(monthly, "limit_tokens"),
+                monthlyRemainingTokens = nullableLong(monthly, "remaining_tokens")
+            )
         }
     }
 
