@@ -477,6 +477,24 @@ object QuantApi {
     }
 
 
+    fun requestMarketIngestion(
+        session: QuantSession,
+        exchange: String = "nse",
+        force: Boolean = false
+    ): String {
+        require(exchange in setOf("nse", "bse")) { "Unsupported exchange." }
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/market-data/ingestion/collect/$exchange?force=$force")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .post("{}".toRequestBody("application/json".toMediaType()))
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            return JSONObject(text).optString("status", "UNKNOWN")
+        }
+    }
+
     fun fetchMarketIngestionStatus(
         session: QuantSession,
         exchange: String = "nse"
