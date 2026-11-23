@@ -17,7 +17,7 @@ from rovexquant.market_data.tejhq_service import TejHqError
 from rovexquant.market_data.eod_store import EodStoreError
 from rovexquant.ai.research_archive import (
     ai_token_budgets_enabled, estimate_reserved_tokens, reserve_ai_research_run,
-    finish_ai_research_run, fail_ai_research_run, persist_ai_research_run,
+    finish_ai_research_run, fail_ai_research_run,
     list_ai_research_runs, get_ai_research_run,
 )
 from rovexquant.research.contracts import IndicatorRequest
