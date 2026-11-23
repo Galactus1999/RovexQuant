@@ -41,11 +41,13 @@ private fun auditResearchCitations(output: String, evidence: String): CitationAu
     Regex("""macroKey=([^;\s]+);[^\n]*?period=([^;\s]+)""").findAll(evidence).forEach {
         allowedRefs += "macro:${it.groupValues[1]}:${it.groupValues[2]}"
     }
-    Regex("""news_id=([^;\s]+)""").findAll(evidence).forEach { match ->
-        val newsId = match.groupValues[1]
-        allowedRefs += "filing:$newsId"
-        val page = Regex("""source_page=(\d+)""").find(evidence.substring(match.range.last + 1))
-        if (page != null) allowedRefs += "filing:$newsId:page:${page.groupValues[1]}"
+    evidence.lineSequence().forEach { line ->
+        val newsId = Regex("""news_id=([^;\s]+)""").find(line)?.groupValues?.get(1)
+        if (newsId != null) {
+            allowedRefs += "filing:$newsId"
+            val page = Regex("""source_page=(\d+)""").find(line)?.groupValues?.get(1)
+            if (page != null) allowedRefs += "filing:$newsId:page:$page"
+        }
     }
 
     val sourceUrls = Regex("""https?://[^\s)\]]+""").findAll(evidence)
