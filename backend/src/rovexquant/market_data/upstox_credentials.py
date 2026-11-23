@@ -286,6 +286,58 @@ def delete_ai_provider_api_key(provider_id: str) -> bool:
     return bool(getattr(cursor, "rowcount", 0))
 
 
+def delete_upstox_analytics_token() -> bool:
+    placeholder = "%s" if _storage_mode() == "postgresql" else "?"
+    with _connect() as connection:
+        cursor = connection.execute(
+            f"DELETE FROM provider_tokens WHERE provider={placeholder}",
+            ("upstox",),
+        )
+    return bool(getattr(cursor, "rowcount", 0))
+
+
+def get_upstox_analytics_token() -> str | None:
+    placeholder = "%s" if _database_url() else "?"
+    try:
+        with _connect() as connection:
+            row = connection.execute(
+                "SELECT encrypted_token, expires_at FROM provider_tokens "
+                f"WHERE provider={placeholder}",
+                ("upstox",),
+            ).fetchone()
+        if not row or row[1] is None or int(row[1]) <= int(time.time()):
+            return None
+        return _fernet().decrypt(bytes(row[0])).decode()
+    except (sqlite3.Error, psycopg.Error, InvalidToken, UnicodeDecodeError,
+            UpstoxCredentialError, ValueError):
+        return None
+
+
+def upstox_analytics_status() -> dict[str, object]:
+    placeholder = "%s" if _database_url() else "?"
+    try:
+        with _connect() as connection:
+            row = connection.execute(
+                "SELECT updated_at, expires_at FROM provider_tokens "
+                f"WHERE provider={placeholder}",
+                ("upstox",),
+            ).fetchone()
+        now = int(time.time())
+        connected = bool(row and row[1] is not None and int(row[1]) > now
+                         and get_upstox_analytics_token())
+        return {
+            "provider_id": "upstox",
+            "connected": connected,
+            "credential_type": "analytics_read_only",
+            "updated_at": row[0] if row else None,
+            "expires_at": row[1] if row else None,
+            "credential_storage": "encrypted_server_side" if connected else "not_connected",
+        }
+    except (sqlite3.Error, psycopg.Error, ValueError, UpstoxCredentialError):
+        return {"provider_id": "upstox", "connected": False,
+                "credential_type": "analytics_read_only", "credential_storage": "unavailable"}
+
+
 _RESEARCH_CONNECTOR_IDS = {"dalalos"}
 
 
@@ -341,55 +393,3 @@ def delete_research_connector_api_key(connector_id: str) -> bool:
             (storage_key,),
         )
     return bool(getattr(cursor, "rowcount", 0))
-
-
-def delete_upstox_analytics_token() -> bool:
-    placeholder = "%s" if _storage_mode() == "postgresql" else "?"
-    with _connect() as connection:
-        cursor = connection.execute(
-            f"DELETE FROM provider_tokens WHERE provider={placeholder}",
-            ("upstox",),
-        )
-    return bool(getattr(cursor, "rowcount", 0))
-
-
-def get_upstox_analytics_token() -> str | None:
-    placeholder = "%s" if _database_url() else "?"
-    try:
-        with _connect() as connection:
-            row = connection.execute(
-                "SELECT encrypted_token, expires_at FROM provider_tokens "
-                f"WHERE provider={placeholder}",
-                ("upstox",),
-            ).fetchone()
-        if not row or row[1] is None or int(row[1]) <= int(time.time()):
-            return None
-        return _fernet().decrypt(bytes(row[0])).decode()
-    except (sqlite3.Error, psycopg.Error, InvalidToken, UnicodeDecodeError,
-            UpstoxCredentialError, ValueError):
-        return None
-
-
-def upstox_analytics_status() -> dict[str, object]:
-    placeholder = "%s" if _database_url() else "?"
-    try:
-        with _connect() as connection:
-            row = connection.execute(
-                "SELECT updated_at, expires_at FROM provider_tokens "
-                f"WHERE provider={placeholder}",
-                ("upstox",),
-            ).fetchone()
-        now = int(time.time())
-        connected = bool(row and row[1] is not None and int(row[1]) > now
-                         and get_upstox_analytics_token())
-        return {
-            "provider_id": "upstox",
-            "connected": connected,
-            "credential_type": "analytics_read_only",
-            "updated_at": row[0] if row else None,
-            "expires_at": row[1] if row else None,
-            "credential_storage": "encrypted_server_side" if connected else "not_connected",
-        }
-    except (sqlite3.Error, psycopg.Error, ValueError, UpstoxCredentialError):
-        return {"provider_id": "upstox", "connected": False,
-                "credential_type": "analytics_read_only", "credential_storage": "unavailable"}
