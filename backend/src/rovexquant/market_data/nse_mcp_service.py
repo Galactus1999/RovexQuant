@@ -33,8 +33,13 @@ async def discover_tools(
 
     async def discover(server_name: str):
         try:
-            api_key = get_research_connector_api_key("dalalos") if server_name == "dalalos" else None
-            async with NseMcpClient(server_name, api_key=api_key) as client:
+            if server_name == "dalalos":
+                client_context = NseMcpClient(
+                    server_name, api_key=get_research_connector_api_key("dalalos")
+                )
+            else:
+                client_context = NseMcpClient(server_name)
+            async with client_context as client:
                 return server_name, safe_tool_catalog(await client.list_tools(), server_name), None
         except NseMcpError as error:
             return server_name, None, str(error)
@@ -57,8 +62,13 @@ async def invoke_tool(
     *,
     confirm_non_read_only: bool = False,
 ) -> dict[str, Any]:
-    api_key = get_research_connector_api_key("dalalos") if server == "dalalos" else None
-    async with NseMcpClient(server, api_key=api_key) as client:
+    if server == "dalalos":
+        client_context = NseMcpClient(
+            server, api_key=get_research_connector_api_key("dalalos")
+        )
+    else:
+        client_context = NseMcpClient(server)
+    async with client_context as client:
         return await client.call_tool(
             tool, arguments, confirm_non_read_only=confirm_non_read_only
         )
