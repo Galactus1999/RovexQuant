@@ -41,9 +41,9 @@ def enqueue_ingestion_run(exchange: str, *, force: bool = False) -> tuple[str, b
             """, (market,))
             active = connection.execute("""
                 SELECT r.run_id FROM market_ingestion_runs r
-                JOIN market_ingestion_jobs j ON j.run_id=r.run_id
+                LEFT JOIN market_ingestion_jobs j ON j.run_id=r.run_id
                 WHERE r.exchange=%s AND r.status='RUNNING'
-                  AND j.status IN ('QUEUED','RUNNING')
+                  AND (j.run_id IS NULL OR j.status IN ('QUEUED','RUNNING'))
                 ORDER BY r.started_at DESC LIMIT 1
             """, (market,)).fetchone()
             if active:
