@@ -541,7 +541,7 @@ jobs:
           REGRESSION_TESTS: ${{ needs.quant-regression.result }}
           NSE_MCP_LIVE: ${{ needs.quant-nse-mcp-live-smoke.result }}
           REGRESSION_REQUESTED: ${{ github.event_name == 'workflow_dispatch' && inputs.run_regression == true }}
-          NSE_SMOKE_REQUESTED: ${{ github.event_name == 'workflow_dispatch' && inputs.run_nse_live_smoke == true }}
+          NSE_SMOKE_REQUESTED: ${{ inputs.run_nse_live_smoke }}
           EVENT_NAME: ${{ github.event_name }}
           REF_FULL: ${{ github.ref }}
         run: |
@@ -559,8 +559,8 @@ jobs:
             [[ "$REGRESSION_TESTS" == "success" || "$REGRESSION_TESTS" == "skipped" ]] || { echo "Unexpected optional regression result: $REGRESSION_TESTS"; exit 1; }
             [[ "$ANDROID_EMULATOR" == "success" || "$ANDROID_EMULATOR" == "skipped" ]] || { echo "Unexpected optional emulator result: $ANDROID_EMULATOR"; exit 1; }
           fi
-          if [[ "$NSE_SMOKE_REQUESTED" == "true" ]]; then
-            test "$NSE_MCP_LIVE" = "success" || { echo "Requested official NSE MCP live smoke did not pass: $NSE_MCP_LIVE"; exit 1; }
+          if [[ "$EVENT_NAME" != "workflow_dispatch" || "$NSE_SMOKE_REQUESTED" == "true" ]]; then
+            test "$NSE_MCP_LIVE" = "success" || { echo "Phase 1 acceptance requires a successful live NSE MCP schema/tool smoke: $NSE_MCP_LIVE"; exit 1; }
           else
             [[ "$NSE_MCP_LIVE" == "success" || "$NSE_MCP_LIVE" == "skipped" ]] || { echo "Unexpected optional NSE MCP result: $NSE_MCP_LIVE"; exit 1; }
           fi
@@ -677,7 +677,7 @@ jobs:
 
   quant-nse-mcp-live-smoke:
     name: Quant Official NSE MCP Live Connectivity
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_nse_live_smoke == true }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_nse_live_smoke == true) }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
