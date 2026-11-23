@@ -198,9 +198,10 @@ def compare_official_rows(official: list[dict[str, Any]], reference: list[dict[s
         diffs.append({"kind": "MISSING_OFFICIAL", "symbol": symbol, "series": series,
                       "field": None, "official_value": "missing", "stored_value": "present",
                       "absolute_difference": None})
+    mismatch_keys = {(d["symbol"], d["series"]) for d in diffs if d["kind"] in {"VALUE_MISMATCH", "IDENTIFIER_MISMATCH"}}
     return {
         "official_rows": len(official_by_key), "reference_rows": len(reference_by_key),
-        "matched_rows": matched, "mismatch_rows": sum(d["kind"] == "VALUE_MISMATCH" for d in diffs),
+        "matched_rows": matched, "mismatch_rows": len(mismatch_keys),
         "missing_reference_rows": len(missing_reference), "missing_official_rows": len(missing_official),
         "diffs": diffs,
     }
@@ -232,24 +233,36 @@ async def reconcile_exchange_date(exchange: str, trading_date: date) -> dict[str
             "isin": row[9], "provider": row[10],
         } for row in rows]
         summary = compare_official_rows(official, reference)
-        report_id = uuid4()
         status = "NO_REFERENCE_DATA" if not reference else (
             "MATCHED" if not summary["diffs"] else "MISMATCHED"
         )
         with connection.transaction():
-            connection.execute(
+            saved = connection.execute(
                 """
                 INSERT INTO market_reconciliation_reports
                     (report_id, exchange, trading_date, provider, source_url, source_sha256,
                      status, official_rows, reference_rows, matched_rows, mismatch_rows,
                      missing_reference_rows, missing_official_rows, created_at)
                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (exchange, trading_date, source_sha256) DO UPDATE SET
+                    provider=EXCLUDED.provider, source_url=EXCLUDED.source_url,
+                    status=EXCLUDED.status, official_rows=EXCLUDED.official_rows,
+                    reference_rows=EXCLUDED.reference_rows, matched_rows=EXCLUDED.matched_rows,
+                    mismatch_rows=EXCLUDED.mismatch_rows,
+                    missing_reference_rows=EXCLUDED.missing_reference_rows,
+                    missing_official_rows=EXCLUDED.missing_official_rows,
+                    created_at=EXCLUDED.created_at
+                RETURNING report_id
                 """,
-                (report_id, market, trading_date, f"official_{market.lower()}_bhavcopy",
+                (uuid4(), market, trading_date, f"official_{market.lower()}_bhavcopy",
                  source_url, source_sha256, status, summary["official_rows"],
                  summary["reference_rows"], summary["matched_rows"], summary["mismatch_rows"],
                  summary["missing_reference_rows"], summary["missing_official_rows"],
                  datetime.now(timezone.utc)),
+            ).fetchone()
+            report_id = saved[0]
+            connection.execute(
+                "DELETE FROM market_reconciliation_diffs WHERE report_id=%s", (report_id,)
             )
             if summary["diffs"]:
                 connection.cursor().executemany(
@@ -262,14 +275,20 @@ async def reconcile_exchange_date(exchange: str, trading_date: date) -> dict[str
                       diff["official_value"], diff["stored_value"], diff["absolute_difference"])
                      for diff in summary["diffs"]],
                 )
-            if status == "MATCHED":
-                connection.execute(
+            diff_keys = {(item["symbol"], item["series"]) for item in summary["diffs"]}
+            verified = [
+                (market, trading_date, key[0], key[1], reference_by_key[key]["provider"])
+                for key in official_by_key.keys() & reference_by_key.keys()
+                if key not in diff_keys
+            ]
+            if verified:
+                connection.cursor().executemany(
                     """
                     UPDATE market_eod_bars
                     SET quality_status='VERIFIED_SOURCE'
-                    WHERE exchange=%s AND trading_date=%s AND provider=ANY(%s)
+                    WHERE exchange=%s AND trading_date=%s AND symbol=%s AND series=%s AND provider=%s
                     """,
-                    (market, trading_date, list(PROVIDERS)),
+                    verified,
                 )
     return {
         "report_id": str(report_id), "exchange": market, "trading_date": trading_date.isoformat(),
