@@ -36,7 +36,6 @@ def enqueue_ingestion_run(exchange: str, *, force: bool = False) -> tuple[str, b
                   AND NOT EXISTS (
                     SELECT 1 FROM market_ingestion_jobs j
                     WHERE j.run_id=r.run_id AND j.status IN ('QUEUED','RUNNING')
-                      AND (j.status='QUEUED' OR j.lease_expires_at > NOW())
                   )
             """, (market,))
             active = connection.execute("""
@@ -78,6 +77,32 @@ def enqueue_ingestion_run(exchange: str, *, force: bool = False) -> tuple[str, b
 def claim_next_ingestion_job(worker_id: str) -> dict[str, str] | None:
     """Claim one queued or expired leased job without blocking other workers."""
     with connect() as connection:
+        # Reconcile the crash window where bar persistence committed but the
+        # worker died before acknowledging the queue item.
+        connection.execute("""
+            UPDATE market_ingestion_jobs j
+            SET status='SUCCEEDED', lease_owner=NULL, lease_expires_at=NULL,
+                updated_at=NOW()
+            FROM market_ingestion_runs r
+            WHERE r.run_id=j.run_id AND r.status='SUCCEEDED'
+              AND j.status IN ('QUEUED','RUNNING')
+        """)
+        # Exhausted leases are terminal; do not leave RUNNING rows forever.
+        exhausted = connection.execute("""
+            UPDATE market_ingestion_jobs
+            SET status='FAILED', lease_owner=NULL, lease_expires_at=NULL,
+                last_error='Worker lease expired after maximum attempts', updated_at=NOW()
+            WHERE status='RUNNING' AND lease_expires_at <= NOW()
+              AND attempt_count >= %s
+            RETURNING run_id
+        """, (MAX_ATTEMPTS,)).fetchall()
+        for item in exhausted:
+            connection.execute("""
+                UPDATE market_ingestion_runs
+                SET status='FAILED', completed_at=NOW(), error_code='WORKER_LEASE_EXHAUSTED',
+                    error_message='Worker lease expired after maximum attempts'
+                WHERE run_id=%s AND status='RUNNING'
+            """, (item[0],))
         row = connection.execute("""
             SELECT run_id, exchange
             FROM market_ingestion_jobs
