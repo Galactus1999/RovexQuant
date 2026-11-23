@@ -12,6 +12,7 @@ from rovexquant.api.dependencies import require_market_gateway
 from rovexquant.auth import AppAuthError, bearer_claims
 from rovexquant.market_data.eod_store import EodStoreError
 from rovexquant.market_data.integrity_service import latest_data_integrity
+from rovexquant.market_data.data_health import get_market_data_health
 from rovexquant.market_data.instruments import (
     InstrumentMasterError,
     get_nse_equity_instruments,
@@ -200,9 +201,6 @@ def app_market_data_integrity(exchange: str = Query(default="NSE", pattern="^(NS
         from fastapi import HTTPException
 
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
-
-
-from rovexquant.market_data.data_health import get_market_data_health
 
 
 @router.get(

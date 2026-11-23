@@ -66,9 +66,14 @@ def compose_market_data_health(
     elif (eod_item["records"] and intelligence_item["status"] == "SUCCEEDED"
           and reconciliation_item["status"] == "MATCHED"):
         required_macro = {item["name"]: item["status"] for item in macro_items}
+        required_derived = {item["name"]: item["status"] for item in derived_items}
+        required_history = all(
+            required_derived.get(kind) == "SUCCEEDED"
+            for kind in ("ADJUSTED_PRICES", "CORPORATE_ACTIONS", "SYMBOL_HISTORY")
+        )
         overall = (
             "HEALTHY" if required_macro.get("WORLD_BANK") == "SUCCEEDED"
-            and required_macro.get("AMFI") == "SUCCEEDED" else "PARTIAL"
+            and required_macro.get("AMFI") == "SUCCEEDED" and required_history else "PARTIAL"
         )
     else:
         overall = "PARTIAL" if eod_item["records"] else "NO_DATA"

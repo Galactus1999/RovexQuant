@@ -63,7 +63,8 @@ fun IntelligenceCentreScreen(session: QuantSession, repository: QuantDataReposit
             )
         }
         item {
-            TerminalCard(Modifier.testTag("market.data-health")) {
+            Column(Modifier.testTag("market.data-health")) {
+                TerminalCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Eyebrow("Market data pipeline")
                     StatusPill(
@@ -119,6 +120,7 @@ fun IntelligenceCentreScreen(session: QuantSession, repository: QuantDataReposit
                     "EOD and delayed research data only. A successful fetch is not the same as official-source reconciliation.",
                     color = Muted, fontSize = 9.sp, lineHeight = 14.sp
                 )
+                }
             }
         }
 

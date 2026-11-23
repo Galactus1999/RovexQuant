@@ -13,7 +13,11 @@ def test_data_health_is_healthy_only_when_eod_intelligence_and_reconciliation_pa
             {"provider": "AMFI", "status": "SUCCEEDED", "updated_at": now, "rows": 100},
         ],
         intelligence={"status": "SUCCEEDED", "updated_at": now, "events": 10},
-        derived=[],
+        derived=[
+            {"kind": "ADJUSTED_PRICES", "status": "SUCCEEDED", "updated_at": now, "rows": 5000},
+            {"kind": "CORPORATE_ACTIONS", "status": "SUCCEEDED", "updated_at": now, "rows": 100},
+            {"kind": "SYMBOL_HISTORY", "status": "SUCCEEDED", "updated_at": now, "rows": 6000},
+        ],
         historical={"status": "SUCCEEDED", "updated_at": now, "rows": 5000},
         reconciliation={"status": "MATCHED", "updated_at": now, "matched_rows": 1000},
         now=now,
