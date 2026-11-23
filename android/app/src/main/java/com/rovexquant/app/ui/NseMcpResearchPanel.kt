@@ -73,7 +73,7 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
     var showToolRegistry by remember { mutableStateOf(false) }
 
     val currentCatalog = catalogs.firstOrNull { it.server == server }
-    val discoveredTools = currentCatalog?.tools?.filter { !it.destructive }.orEmpty()
+    val discoveredTools = currentCatalog?.tools?.filter { !it.destructive && (it.readOnly || it.requiresConfirmation) }.orEmpty()
     val readOnlyTools = discoveredTools.filter { it.readOnly && "$server:${it.name}" in enabledTools }
     val manualTools = discoveredTools.filter { it.requiresConfirmation && "$server:${it.name}" in enabledTools }
 
