@@ -208,8 +208,8 @@ class QuantWorkspaceViewModel(
                 val requestStatus = repository.requestMarketIngestion(session, "nse", force)
                 _uiState.update {
                     it.copy(
-                        eodSnapshotStatus = if (requestStatus == "RUNNING") {
-                            "Collecting latest available NSE EOD data…"
+                        eodSnapshotStatus = if (requestStatus == "QUEUED" || requestStatus == "RUNNING") {
+                            "NSE EOD collection queued · waiting for persisted data…"
                         } else {
                             "Checking the latest persisted NSE snapshot…"
                         }
@@ -233,11 +233,16 @@ class QuantWorkspaceViewModel(
                 publishStatus(ingestion)
 
                 if (ingestion.status == "RUNNING") {
-                    for (attempt in 0 until 15) {
-                        delay(2_000)
+                    for (attempt in 0 until 48) {
+                        delay(5_000)
                         ingestion = repository.fetchMarketIngestionStatus(session, "nse")
                         publishStatus(ingestion)
                         if (ingestion.status != "RUNNING") break
+                    }
+                    if (ingestion.status == "RUNNING") {
+                        _uiState.update {
+                            it.copy(eodSnapshotStatus = "Collection is still running · retaining the last successful snapshot")
+                        }
                     }
                 }
             } catch (cancelled: CancellationException) {

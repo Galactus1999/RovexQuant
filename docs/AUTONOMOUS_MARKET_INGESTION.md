@@ -8,7 +8,11 @@ workflow completes against the live TejHQ service.
 
 - Provider adapters fetch data; they do not own persistence or analytics.
 - eod_store.py validates, normalizes and persists source-labelled records.
-- collect_eod_snapshot.py is a one-shot restart-safe EOD batch worker.
+- collect_eod_snapshot.py is a one-shot scheduled/manual EOD collector.
+- Authenticated app requests atomically create a run plus a PostgreSQL queue row.
+- eod_worker.py claims jobs with FOR UPDATE SKIP LOCKED, renewable leases,
+  bounded retry/backoff, and recovery after process restarts. Multiple API instances
+  may run workers safely against the same queue.
 - Alembic owns schema changes; the worker never performs DDL.
 - PostgreSQL is the durable operational store. GitHub runner disk/cache/artifacts
   are not market-history storage.
@@ -46,7 +50,8 @@ Recheck current Yahoo terms before broader use.
 Worker environment:
 - QUANT_TOKEN_DATABASE_URL or QUANT_MARKET_DATABASE_URL: private PostgreSQL URL
   with TLS enabled (sslmode=require or stronger).
-- QUANT_TOKEN_MIGRATION_DATABASE_URL: direct, non-pooler URL for Alembic only.
+- QUANT_TOKEN_MIGRATION_DATABASE_URL: direct, non-pooler URL for the token/runtime database.
+- QUANT_MARKET_MIGRATION_DATABASE_URL: optional direct URL when QUANT_MARKET_DATABASE_URL points to a separate PostgreSQL database. The API fails startup if a distinct market database is not at the expected Alembic revision.
 
 Apply the schema from backend/:
 
@@ -84,7 +89,8 @@ collection; it does not fabricate data or fall back to runner storage.
 
 ## Production deployment and schema ordering
 
-The API validates the exact Alembic schema head at startup. Therefore the new
+The API validates the exact Alembic schema head at startup, including the
+leased ingestion queue migration (0003_market_ingestion_queue). Therefore the new
 database migration must complete before a new backend image receives traffic.
 Do not rely on the scheduled EOD collector to perform the first migration.
 
@@ -112,13 +118,14 @@ References:
 
 1. Apply migration to the configured PostgreSQL database.
 2. Run the workflow manually and verify NSE/BSE source dates and row counts.
-3. Connect Android source-health UI to the authenticated status/history routes.
-4. Add bounded historical Parquet backfill after verifying dataset schema and
+3. Verify the leased worker with process-kill/restart and multi-worker contention tests.
+4. Connect Android source-health UI to the authenticated status/history routes.
+5. Add bounded historical Parquet backfill after verifying dataset schema and
    terms; do not use Git history as the archive.
-5. Add point-in-time sector-index history before calculating sector rotation.
-6. Add independent reconciliation and mark records verified only after actual
+6. Add point-in-time sector-index history before calculating sector rotation.
+7. Add independent reconciliation and mark records verified only after actual
    cross-source agreement.
-7. Add company/event evidence ingestion as a separate provenance-aware pipeline.
+8. Add company/event evidence ingestion as a separate provenance-aware pipeline.
 
 ## References
 

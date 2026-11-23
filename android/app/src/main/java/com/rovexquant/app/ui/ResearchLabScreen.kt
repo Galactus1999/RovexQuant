@@ -1,6 +1,8 @@
 package com.rovexquant.app.ui
 
 import com.rovexquant.app.data.model.QuantSession
+import com.rovexquant.app.data.model.MacroResearchSummary
+import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.repository.QuantDataRepository
 
 import android.content.Context
@@ -11,9 +13,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -44,6 +48,56 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
     var datasetName by remember { mutableStateOf("No dataset loaded") }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var macroSummary by remember { mutableStateOf<MacroResearchSummary?>(null) }
+    var macroLoading by remember { mutableStateOf(false) }
+    var macroError by remember { mutableStateOf<String?>(null) }
+    var eventSymbol by rememberSaveable { mutableStateOf("RELIANCE") }
+    var eventDate by rememberSaveable { mutableStateOf("") }
+    var benchmarkSymbol by rememberSaveable { mutableStateOf("") }
+    var eventResult by remember { mutableStateOf<EventStudyResult?>(null) }
+    var eventLoading by remember { mutableStateOf(false) }
+    var eventError by remember { mutableStateOf<String?>(null) }
+
+    fun runEventStudy() {
+        if (session == null || repository == null || eventLoading) return
+        eventLoading = true
+        eventError = null
+        scope.launch {
+            try {
+                eventResult = repository.fetchEventStudy(
+                    session, eventSymbol.trim(), eventDate.trim(),
+                    benchmarkSymbol.trim().takeIf { it.isNotEmpty() }
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                eventError = failure.message ?: "Event study could not be calculated."
+            } finally {
+                eventLoading = false
+            }
+        }
+    }
+
+    fun refreshMacroResearch() {
+        if (session == null || repository == null || macroLoading) return
+        macroLoading = true
+        macroError = null
+        scope.launch {
+            try {
+                macroSummary = repository.fetchMacroResearch(session)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                macroError = failure.message ?: "Macro research providers are unavailable."
+            } finally {
+                macroLoading = false
+            }
+        }
+    }
+
+    LaunchedEffect(session, repository) {
+        refreshMacroResearch()
+    }
 
     fun loadSelectedFile(uri: Uri) {
         loading = true
@@ -101,7 +155,83 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
 
     LazyColumn(modifier = Modifier.fillMaxSize().testTag("research.lab.list"), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { SectionHeading("Test the idea before risking capital", "Research lab.", "Use official NSE research tools on demand or import permitted historical OHLCV data for transparent local analysis.") }
-        if (session != null && repository != null) item { NseMcpResearchPanel(session, repository) }
+        if (session != null && repository != null) {
+            item { NseMcpResearchPanel(session, repository) }
+            item {
+                TerminalCard {
+                    Eyebrow("EOD event study · historical only")
+                    OutlinedTextField(
+                        value = eventSymbol,
+                        onValueChange = { eventSymbol = it.take(40).uppercase() },
+                        label = { Text("NSE symbol") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = eventDate,
+                        onValueChange = { eventDate = it.take(10) },
+                        label = { Text("Event date · YYYY-MM-DD") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = benchmarkSymbol,
+                        onValueChange = { benchmarkSymbol = it.take(40).uppercase() },
+                        label = { Text("Optional benchmark symbol in EOD database") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Button(
+                        onClick = { runEventStudy() },
+                        enabled = !eventLoading && eventDate.matches(Regex("\\d{4}-\\d{2}-\\d{2}")) && eventSymbol.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(if (eventLoading) "Calculating…" else "Calculate event window") }
+                    eventError?.let { Text(it, color = Coral, fontSize = 10.sp) }
+                    eventResult?.let { result ->
+                        IndicatorLine("Pre-event return", result.preEventReturn?.let { String.format(Locale.US, "%.2f%%", it * 100) } ?: "Unavailable")
+                        IndicatorLine("Post-event return", result.cumulativeReturn?.let { String.format(Locale.US, "%.2f%%", it * 100) } ?: "Unavailable")
+                        IndicatorLine("Market-adjusted", result.marketAdjustedReturn?.let { String.format(Locale.US, "%.2f%%", it * 100) } ?: "No benchmark match")
+                        Text("${result.symbol} · ${result.anchorDate} → ${result.lastPostEventDate} · ${result.postBarsUsed} bars", color = Muted, fontSize = 9.sp)
+                        result.limitations.forEach { Text("• $it", color = Muted, fontSize = 9.sp) }
+                    }
+                }
+            }
+            item {
+                TerminalCard {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Eyebrow("Macro & fund research · delayed official data")
+                        TextButton(onClick = { refreshMacroResearch() }, enabled = !macroLoading) {
+                            Text(if (macroLoading) "Loading…" else "Refresh")
+                        }
+                    }
+                    if (macroLoading && macroSummary == null) {
+                        Text("Retrieving World Bank, AMFI and FRED status…", color = Muted, fontSize = 11.sp)
+                    }
+                    macroError?.let { Text(it, color = Coral, fontSize = 11.sp) }
+                    macroSummary?.let { report ->
+                        Text("World Bank · India", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        report.worldBankSeries.forEach { series ->
+                            val value = series.latestValue?.let { String.format(Locale.US, "%.2f", it) } ?: "Unavailable"
+                            IndicatorLine(series.label, "$value ${series.unit} · ${series.latestPeriod ?: "period n/a"}")
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Text("AMFI mutual-fund NAV · ${report.amfiNavCount} matches", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                        report.amfiExamples.take(3).forEach { nav ->
+                            IndicatorLine(nav.schemeName, String.format(Locale.US, "%.4f · %s", nav.nav, nav.navDate))
+                        }
+                        Text(
+                            if (report.fredConfigured) "FRED configured · ${report.fredSeriesCount} series returned"
+                            else "FRED not configured · add FRED_API_KEY as a backend secret",
+                            color = if (report.fredConfigured) Mint else Gold, fontSize = 10.sp
+                        )
+                        if (report.providerErrors.isNotEmpty()) {
+                            report.providerErrors.forEach { Text(it, color = Gold, fontSize = 9.sp) }
+                        }
+                        Text("Retrieved ${report.retrievedAt}. Annual macro observations and daily fund NAVs are not equity quotes or intraday signals.", color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
+                    }
+                }
+            }
+        }
         item {
             TerminalCard {
                 Eyebrow("Offline dataset")

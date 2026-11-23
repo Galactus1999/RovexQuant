@@ -213,7 +213,7 @@ def test_postgres_market_eod_migration_creates_provenance_tables(migrated_postgr
                 """
                 SELECT table_name FROM information_schema.tables
                 WHERE table_schema = current_schema()
-                  AND table_name IN ('market_eod_bars', 'market_ingestion_runs')
+                  AND table_name IN ('market_eod_bars', 'market_ingestion_runs', 'market_ingestion_jobs')
                 """
             ).fetchall()
         }
@@ -225,9 +225,88 @@ def test_postgres_market_eod_migration_creates_provenance_tables(migrated_postgr
                 """
             ).fetchall()
         }
-    assert tables == {"market_eod_bars", "market_ingestion_runs"}
+    assert tables == {"market_eod_bars", "market_ingestion_runs", "market_ingestion_jobs"}
     assert {
         "exchange", "trading_date", "symbol", "series", "open", "high",
         "low", "close", "volume", "isin", "trades", "provider", "data_mode",
         "quality_status", "source_retrieved_at",
     }.issubset(bar_columns)
+
+
+def test_postgres_market_ingestion_queue_has_lease_and_retry_contract(migrated_postgres):
+    with psycopg.connect(migrated_postgres, sslmode="disable") as connection:
+        columns = {
+            row[0] for row in connection.execute(
+                """
+                SELECT column_name FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                  AND table_name = 'market_ingestion_jobs'
+                """
+            ).fetchall()
+        }
+        indexes = {
+            row[0] for row in connection.execute(
+                """
+                SELECT indexname FROM pg_indexes
+                WHERE schemaname = current_schema()
+                  AND tablename = 'market_ingestion_jobs'
+                """
+            ).fetchall()
+        }
+    assert {"run_id", "status", "attempt_count", "available_at", "lease_owner",
+            "lease_expires_at", "heartbeat_at", "last_error"}.issubset(columns)
+    assert {"ix_market_ingestion_jobs_claim", "ix_market_ingestion_jobs_lease"}.issubset(indexes)
+
+
+def test_postgres_ingestion_worker_recovers_expired_lease_and_reconciles_commit(migrated_postgres):
+    from uuid import uuid4
+    from rovexquant.market_data.eod_ingestion import claim_next_ingestion_job
+
+    run_id = uuid4()
+    with psycopg.connect(migrated_postgres, sslmode="disable") as connection:
+        connection.execute(
+            """
+            INSERT INTO market_ingestion_runs
+                (run_id, provider, exchange, status, started_at)
+            VALUES (%s, 'tejhq_eod_test', 'NSE', 'RUNNING', NOW())
+            """,
+            (run_id,),
+        )
+        connection.execute(
+            """
+            INSERT INTO market_ingestion_jobs (run_id, exchange, status)
+            VALUES (%s, 'NSE', 'QUEUED')
+            """,
+            (run_id,),
+        )
+
+    first = claim_next_ingestion_job("worker-a")
+    assert first == {"run_id": str(run_id), "exchange": "NSE"}
+    assert claim_next_ingestion_job("worker-b") is None
+
+    with psycopg.connect(migrated_postgres, sslmode="disable") as connection:
+        connection.execute(
+            "UPDATE market_ingestion_jobs SET lease_expires_at=NOW() - INTERVAL '1 second' WHERE run_id=%s",
+            (run_id,),
+        )
+
+    recovered = claim_next_ingestion_job("worker-b")
+    assert recovered == first
+
+    # Simulate the worker dying after the EOD transaction commits but before
+    # its queue acknowledgement; the next poll must reconcile, not re-run.
+    with psycopg.connect(migrated_postgres, sslmode="disable") as connection:
+        connection.execute(
+            "UPDATE market_ingestion_runs SET status='SUCCEEDED', completed_at=NOW() WHERE run_id=%s",
+            (run_id,),
+        )
+
+    assert claim_next_ingestion_job("worker-c") is None
+    with psycopg.connect(migrated_postgres, sslmode="disable") as connection:
+        job = connection.execute(
+            "SELECT status, attempt_count, lease_owner FROM market_ingestion_jobs WHERE run_id=%s",
+            (run_id,),
+        ).fetchone()
+        connection.execute("DELETE FROM market_ingestion_runs WHERE run_id=%s", (run_id,))
+
+    assert job == ("SUCCEEDED", 2, None)

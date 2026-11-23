@@ -15,6 +15,10 @@ import com.rovexquant.app.data.model.SectorImpact
 import com.rovexquant.app.data.model.MarketIndexInstrument
 import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.MarketIngestionStatus
+import com.rovexquant.app.data.model.MacroResearchSummary
+import com.rovexquant.app.data.model.MacroSeriesObservation
+import com.rovexquant.app.data.model.AmfiNavObservation
+import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.NseMcpTool
@@ -250,6 +254,134 @@ object QuantApi {
                 limitations = limitations
             )
         }
+    }
+
+    fun fetchEventStudy(
+        session: QuantSession,
+        symbol: String,
+        eventDate: String,
+        benchmarkSymbol: String?
+    ): EventStudyResult {
+        require(symbol.matches(Regex("[A-Za-z0-9&._-]{1,40}"))) { "Enter a valid NSE symbol." }
+        require(eventDate.matches(Regex("\\d{4}-\\d{2}-\\d{2}"))) { "Event date must use YYYY-MM-DD." }
+        require(benchmarkSymbol == null || benchmarkSymbol.isBlank() ||
+            benchmarkSymbol.matches(Regex("[A-Za-z0-9&._-]{1,40}"))) { "Enter a valid benchmark symbol." }
+        val benchmarkQuery = benchmarkSymbol?.takeIf { it.isNotBlank() }?.let {
+            "&benchmark_symbol=${java.net.URLEncoder.encode(it.trim(), Charsets.UTF_8.name())}"
+        }.orEmpty()
+        val encodedSymbol = java.net.URLEncoder.encode(symbol.trim().uppercase(), Charsets.UTF_8.name())
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/research/event-study/nse/$encodedSymbol?event_date=$eventDate$benchmarkQuery")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(body, response.code))
+            require(body.toByteArray(Charsets.UTF_8).size <= 512 * 1024) {
+                "Event-study response exceeds the 512 KB safety limit."
+            }
+            val json = JSONObject(body)
+            val limitationsJson = json.optJSONArray("limitations") ?: JSONArray()
+            val limitations = buildList {
+                for (index in 0 until limitationsJson.length()) {
+                    limitationsJson.optString(index).takeIf { it.isNotBlank() }?.let(::add)
+                }
+            }
+            fun optionalDouble(key: String): Double? =
+                json.optDouble(key, Double.NaN).takeIf { it.isFinite() }
+            return EventStudyResult(
+                exchange = json.optString("exchange"),
+                symbol = json.optString("symbol"),
+                eventDate = json.optString("event_date"),
+                anchorDate = json.optString("anchor_date"),
+                firstPostEventDate = json.optString("first_post_event_date"),
+                lastPostEventDate = json.optString("last_post_event_date"),
+                preEventReturn = optionalDouble("pre_event_period_return"),
+                cumulativeReturn = optionalDouble("cumulative_return"),
+                marketAdjustedReturn = optionalDouble("market_adjusted_cumulative_return"),
+                cumulativeAbnormalReturn = optionalDouble("cumulative_abnormal_return"),
+                benchmarkSymbol = json.optString("benchmark_symbol").takeIf { it.isNotBlank() && it != "null" },
+                benchmarkMatches = json.optInt("benchmark_observations_matched"),
+                postBarsUsed = json.optInt("post_event_bars_used"),
+                method = json.optString("method"),
+                limitations = limitations
+            )
+        }
+    }
+
+    fun fetchMacroResearch(session: QuantSession): MacroResearchSummary {
+        val errors = mutableListOf<String>()
+        fun getJson(path: String): JSONObject? {
+            val request = Request.Builder()
+                .url("${session.baseUrl}$path")
+                .header("Authorization", "Bearer ${session.accessToken}")
+                .get()
+                .build()
+            return try {
+                masterHttp.newCall(request).execute().use { response ->
+                    val body = response.body?.string().orEmpty()
+                    if (!response.isSuccessful) {
+                        errors += "$path: ${apiError(body, response.code)}"
+                        null
+                    } else {
+                        require(body.toByteArray(Charsets.UTF_8).size <= 2 * 1024 * 1024) {
+                            "Macro research response exceeds the 2 MB safety limit."
+                        }
+                        JSONObject(body)
+                    }
+                }
+            } catch (failure: Exception) {
+                errors += "$path: ${failure.message ?: "provider unavailable"}"
+                null
+            }
+        }
+
+        val worldBank = getJson("/api/v1/app/research/macro/world-bank")
+        val worldBankRows = worldBank?.optJSONArray("series") ?: JSONArray()
+        val series = buildList {
+            for (index in 0 until worldBankRows.length()) {
+                val item = worldBankRows.optJSONObject(index) ?: continue
+                val latest = item.optJSONArray("observations")
+                val latestRow = latest?.optJSONObject((latest.length() - 1).coerceAtLeast(0))
+                val rawValue = latestRow?.optDouble("value", Double.NaN) ?: Double.NaN
+                add(MacroSeriesObservation(
+                    key = item.optString("key"),
+                    label = item.optString("label"),
+                    frequency = item.optString("frequency"),
+                    unit = item.optString("unit"),
+                    latestPeriod = latestRow?.optString("period")?.takeIf { !it.isNullOrBlank() && it != "null" },
+                    latestValue = rawValue.takeIf { it.isFinite() },
+                    source = item.optString("source")
+                ))
+            }
+        }
+        val amfi = getJson("/api/v1/app/research/macro/amfi-nav?limit=10")
+        val navRows = amfi?.optJSONArray("observations") ?: JSONArray()
+        val navs = buildList {
+            for (index in 0 until navRows.length()) {
+                val item = navRows.optJSONObject(index) ?: continue
+                val nav = item.optDouble("nav", Double.NaN)
+                if (!nav.isFinite()) continue
+                add(AmfiNavObservation(
+                    schemeCode = item.optInt("scheme_code"),
+                    schemeName = item.optString("scheme_name"),
+                    nav = nav,
+                    navDate = item.optString("nav_date")
+                ))
+            }
+        }
+        val fred = getJson("/api/v1/app/research/macro/fred")
+        val fredRows = fred?.optJSONArray("series")
+        return MacroResearchSummary(
+            retrievedAt = worldBank?.optString("retrieved_at")?.takeIf { it != "null" }.orEmpty(),
+            worldBankSeries = series,
+            amfiNavCount = amfi?.optInt("result_count") ?: 0,
+            amfiExamples = navs,
+            fredConfigured = fred?.optBoolean("configured", false) ?: false,
+            fredSeriesCount = fredRows?.length() ?: 0,
+            providerErrors = errors
+        )
     }
 
     fun fetchAiProviders(session: QuantSession): List<AiProvider> {

@@ -304,3 +304,89 @@ def test_collect_claimed_snapshot_marks_failed_run(monkeypatch):
 
     assert failed["run_id"] == "run-failed"
     assert failed["code"] == "RuntimeError"
+
+
+def test_enqueue_ingestion_run_creates_run_and_durable_job_atomically(monkeypatch):
+    from rovexquant.market_data import eod_ingestion
+
+    class Result:
+        def __init__(self, row=None):
+            self.row = row
+        def fetchone(self):
+            return self.row
+
+    class Connection:
+        def __init__(self):
+            self.statements = []
+        def __enter__(self):
+            return self
+        def __exit__(self, *_args):
+            return False
+        def execute(self, statement, params=None):
+            self.statements.append((statement, params))
+            if "SELECT r.run_id FROM market_ingestion_runs r" in statement:
+                return Result()
+            if "SELECT run_id FROM market_ingestion_runs" in statement:
+                return Result()
+            return Result()
+
+    connection = Connection()
+    monkeypatch.setattr(eod_ingestion, "connect", lambda: connection)
+    run_id, started, status = eod_ingestion.enqueue_ingestion_run("nse", force=True)
+
+    assert started is True
+    assert status == "QUEUED"
+    assert any("INSERT INTO market_ingestion_runs" in sql for sql, _ in connection.statements)
+    assert any("INSERT INTO market_ingestion_jobs" in sql for sql, _ in connection.statements)
+    assert len([sql for sql, _ in connection.statements if "INSERT INTO" in sql]) == 2
+
+
+def test_claim_next_ingestion_job_uses_skip_locked_and_leases(monkeypatch):
+    from rovexquant.market_data import eod_ingestion
+
+    class Result:
+        def __init__(self, row=None, rows=None):
+            self.row, self.rows = row, rows or []
+        def fetchone(self):
+            return self.row
+        def fetchall(self):
+            return self.rows
+
+    class Connection:
+        def __init__(self):
+            self.statements = []
+        def __enter__(self):
+            return self
+        def __exit__(self, *_args):
+            return False
+        def execute(self, statement, params=None):
+            self.statements.append((statement, params))
+            if "SELECT run_id, exchange" in statement:
+                return Result(("run-1", "NSE"))
+            return Result(rows=[])
+
+    connection = Connection()
+    monkeypatch.setattr(eod_ingestion, "connect", lambda: connection)
+    job = eod_ingestion.claim_next_ingestion_job("worker-1")
+
+    assert job == {"run_id": "run-1", "exchange": "NSE"}
+    claim_sql = next(sql for sql, _ in connection.statements if "SELECT run_id, exchange" in sql)
+    assert "SKIP LOCKED" in claim_sql
+    lease_sql = next(sql for sql, _ in connection.statements if "lease_expires_at" in sql and "UPDATE" in sql)
+    assert "lease_owner" in lease_sql
+
+
+def test_collect_claimed_snapshot_can_defer_failure_transition_for_worker_retry(monkeypatch):
+    import asyncio
+    from rovexquant.market_data import eod_ingestion
+
+    async def unavailable(exchange, max_lookback_days):
+        raise RuntimeError("temporary provider failure")
+
+    failed = []
+    monkeypatch.setattr(eod_ingestion, "fetch_latest_snapshot", unavailable)
+    monkeypatch.setattr(eod_ingestion, "fail_run", lambda **kwargs: failed.append(kwargs))
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(eod_ingestion.collect_claimed_snapshot("NSE", "run-1", mark_failed=False))
+    assert failed == []
