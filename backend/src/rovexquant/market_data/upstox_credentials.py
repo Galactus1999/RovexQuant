@@ -350,9 +350,15 @@ def _research_connector_storage_key(connector_id: str) -> str:
 def store_research_connector_api_key(connector_id: str, api_key: str) -> None:
     """Encrypt an owner-managed external MCP key in the existing provider-token vault."""
     storage_key = _research_connector_storage_key(connector_id)
-    if not isinstance(api_key, str) or len(api_key.strip()) < 20 or len(api_key) > 4096:
+    if (
+        not isinstance(api_key, str)
+        or len(api_key.strip()) < 20
+        or len(api_key) > 4096
+        or not api_key.strip().isascii()
+        or any(ord(character) < 33 or ord(character) > 126 for character in api_key.strip())
+    ):
         raise UpstoxCredentialError("Invalid research connector API key", 422)
-    encrypted = _fernet().encrypt(api_key.strip().encode())
+    encrypted = _fernet().encrypt(api_key.strip().encode("ascii"))
     now = int(time.time())
     placeholder = "%s" if _storage_mode() == "postgresql" else "?"
     with _connect() as connection:
