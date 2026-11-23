@@ -79,7 +79,8 @@ def reserve_ai_research_run(
                     (period,),
                 ).fetchone()[0]
                 if int(used or 0) + estimated_tokens > limit:
-                    raise EodStoreError(f"AI {period} token budget exhausted", 429)
+                    period_label = "daily" if period == "day" else "monthly"
+                    raise EodStoreError(f"AI {period_label} token budget exhausted", 429)
             connection.execute(
                 """
                 INSERT INTO ai_research_runs (
