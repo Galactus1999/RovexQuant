@@ -6,8 +6,6 @@ from datetime import date, datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-import duckdb
-
 from rovexquant.market_data.eod_store import connect
 from rovexquant.market_data.historical_backfill import (
     BATCH_ROWS, PROVIDER, _download_parquet, validate_exchange_year, HF_DATASET,
@@ -60,6 +58,10 @@ def _start_run(connection, exchange: str, year: int, kind: str, url: str, digest
 
 
 def _import_rows(connection, *, market: str, kind: str, year: int, digest: str, path) -> tuple[int, int]:
+    try:
+        import duckdb
+    except ImportError as error:
+        raise RuntimeError("Install the pinned DuckDB operator dependency to import derived Parquet files") from error
     db = duckdb.connect(":memory:")
     try:
         if kind == "ADJUSTED_PRICES":
@@ -137,7 +139,7 @@ def _import_rows(connection, *, market: str, kind: str, year: int, digest: str, 
                             str(action_type or "other").strip().lower()[:40],
                             _optional_int(ratio_num), _optional_int(ratio_den),
                             _optional_float(cash), _optional_float(face_from), _optional_float(face_to),
-                            str(raw or "")[:1000], PROVIDER, digest, now,
+                            str(raw or ""), PROVIDER, digest, now,
                         ))
                     if payload:
                         connection.cursor().executemany(
