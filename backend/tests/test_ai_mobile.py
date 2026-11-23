@@ -57,10 +57,6 @@ def test_mobile_ai_provider_catalogue_requires_app_session(mobile_client):
     assert groq["fallback_model_configured"] is True
     assert "groq-fallback-test-model" not in response.text
     assert "groq-server-secret" not in response.text
-    assert response.json()["archive_status"] in {"PERSISTED", "UNAVAILABLE"}
-    assert response.json()["task_type"] == "chat"
-    assert response.json()["cost_usd"] == 0.0004
-    assert response.json()["cost_status"] == "PROVIDER_REPORTED"
     assert "QUANT_AI_GATEWAY_TOKEN" not in response.text
 
 
@@ -76,6 +72,10 @@ def test_mobile_chat_uses_app_session_and_server_provider_secret(mobile_client):
     assert FakeAsyncClient.requests[0]["headers"]["Authorization"] == "Bearer groq-server-secret"
     assert FakeAsyncClient.requests[0]["json"]["messages"][0]["role"] == "system"
     assert "groq-server-secret" not in response.text
+    assert response.json()["archive_status"] in {"PERSISTED", "UNAVAILABLE"}
+    assert response.json()["task_type"] == "chat"
+    assert response.json()["cost_usd"] == 0.0004
+    assert response.json()["cost_status"] == "PROVIDER_REPORTED"
 
 
 def test_strategy_evidence_summary_does_not_claim_live_data(monkeypatch):
@@ -191,7 +191,7 @@ def test_adjusted_eod_data_is_returned_when_ai_provider_is_not_configured(monkey
     assert result["bar_count"] == 40
     assert result["data_mode"] == "END_OF_DAY_ADJUSTED"
     assert result["ai"] is None
-    assert "Configure an AI provider" in result["ai_error"]
+    assert "Configure an AI provider/model" in result["ai_error"]
 
 
 def test_adjusted_eod_data_survives_ai_provider_failure(monkeypatch):
