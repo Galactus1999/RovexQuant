@@ -225,6 +225,9 @@ async def complete_chat(
                 for key in ("prompt_tokens", "completion_tokens", "total_tokens")
                 if isinstance(usage, dict) and isinstance(usage.get(key), (int, float))
             }
+            reported_cost = usage.get("cost") if isinstance(usage, dict) else None
+            cost_usd = float(reported_cost) if isinstance(reported_cost, (int, float)) and not isinstance(reported_cost, bool) and reported_cost >= 0 else None
+            cost_status = "PROVIDER_REPORTED" if cost_usd is not None else "NOT_TRACKED"
             return {
                 "provider_id": candidate,
                 "credential_id": credential.credential_id,
@@ -232,8 +235,8 @@ async def complete_chat(
                 "content": content,
                 "usage": safe_usage,
                 "task_type": task_type,
-                "cost_usd": None,
-                "cost_status": "NOT_TRACKED",
+                "cost_usd": cost_usd,
+                "cost_status": cost_status,
                 "fallback_used": index > 0,
             }
         except GatewayError as error:
