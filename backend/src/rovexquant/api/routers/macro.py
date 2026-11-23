@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from rovexquant.market_data.macro_data import (
-    MacroProviderError, fetch_fred, fetch_world_bank,
+    MacroProviderError, fetch_amfi_nav, fetch_fred, fetch_world_bank,
 )
 from rovexquant.security.dependencies import require_app_session
 from rovexquant.security.request_controls import rate_limit
@@ -35,6 +35,23 @@ async def fred_macro(
 ):
     try:
         return await fetch_fred(series)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except MacroProviderError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+
+@router.get(
+    "/api/v1/app/research/macro/amfi-nav",
+    dependencies=[Depends(require_app_session), Depends(macro_rate_limit)],
+)
+async def amfi_nav(
+    search: str = Query(default="", max_length=100),
+    limit: int = Query(default=50, ge=1, le=100),
+):
+    try:
+        return await fetch_amfi_nav(search, limit)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except MacroProviderError as error:
