@@ -773,7 +773,7 @@ object QuantApi {
                         runId = item.optString("run_id"), taskType = item.optString("task_type"),
                         providerId = item.optString("provider_id"), model = item.optString("model"),
                         status = item.optString("status"), promptTokens = usage.optLong("prompt_tokens"),
-                        completionTokens = usage.optLong("completion_tokens"), totalTokens = usage.optLong("total_tokens"),
+                        completionTokens = usage.optLong("completion_tokens"), totalTokens = usage.optLong("total_tokens", usage.optLong("reserved_tokens")),
                         costUsd = cost, costStatus = item.optString("cost_status", "NOT_TRACKED"),
                         fallbackUsed = item.optBoolean("fallback_used"), createdAt = item.optString("created_at")
                     ))
