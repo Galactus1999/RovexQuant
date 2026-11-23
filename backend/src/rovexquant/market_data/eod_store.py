@@ -279,8 +279,9 @@ def latest_persisted_snapshot(exchange: str = "NSE", *, limit: int = 20) -> dict
     } for row in stored_rows]
     from rovexquant.market_data.tejhq_service import summarize_snapshot_rows
 
+    breadth_series = frozenset({"EQ"}) if market == "NSE" else _SERIES[market]
     summary = summarize_snapshot_rows(
-        rows, limit=limit, allowed_series=_SERIES[market]
+        rows, limit=limit, allowed_series=breadth_series
     )
     quality = {row[7] for row in stored_rows}
     return {
