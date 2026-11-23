@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -167,19 +168,6 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
                     enabled = !keySaving && !keyDeleting
                 )
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (tool.requiresConfirmation) {
-                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                            Checkbox(
-                                checked = confirmQuotaAction,
-                                onCheckedChange = { confirmQuotaAction = it },
-                                enabled = !calling
-                            )
-                            Text(
-                                "I authorize this tool to queue filing processing and/or consume my DalalOS plan credits for this request.",
-                                color = Gold, fontSize = 10.sp, lineHeight = 14.sp
-                            )
-                        }
-                    }
                     Button(
                         onClick = {
                             if (keySaving || dalalOsKey.length !in 20..4096) return@Button
@@ -299,6 +287,19 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
                         maxLines = 7,
                         enabled = !calling
                     )
+                    if (tool.requiresConfirmation) {
+                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = confirmQuotaAction,
+                                onCheckedChange = { confirmQuotaAction = it },
+                                enabled = !calling
+                            )
+                            Text(
+                                "I authorize this tool to queue filing processing and/or consume my DalalOS plan credits for this request.",
+                                color = Gold, fontSize = 10.sp, lineHeight = 14.sp
+                            )
+                        }
+                    }
                     Button(
                         onClick = {
                             val chosen = selectedTool ?: return@Button
