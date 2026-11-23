@@ -119,7 +119,6 @@ def test_extracted_eod_research_routes_require_app_session():
     ).status_code == 401
     assert client.get("/api/v1/app/research/market-data/status").status_code == 401
 
-
 def test_dalalos_credential_routes_require_app_session():
     client = TestClient(api.app)
     assert client.get("/api/v1/app/integrations/research/dalalos/status").status_code == 401
