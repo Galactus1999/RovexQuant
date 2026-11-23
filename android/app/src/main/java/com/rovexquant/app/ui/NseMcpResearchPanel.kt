@@ -56,6 +56,7 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
     var result by remember { mutableStateOf<NseMcpResult?>(null) }
     var dalalOsKey by remember { mutableStateOf("") }
     var dalalOsConfigured by remember { mutableStateOf(false) }
+    var dalalOsTermsAccepted by rememberSaveable { mutableStateOf(false) }
     var keySaving by remember { mutableStateOf(false) }
     var keyDeleting by remember { mutableStateOf(false) }
     var keyError by remember { mutableStateOf<String?>(null) }
@@ -216,6 +217,17 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
                     else "Create a free DalalOS account and API key, then store it here. The key is never returned to the app after saving.",
                     color = Muted, fontSize = 10.sp, lineHeight = 15.sp
                 )
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = dalalOsTermsAccepted,
+                        onCheckedChange = { dalalOsTermsAccepted = it },
+                        enabled = !keySaving && !keyDeleting
+                    )
+                    Text(
+                        "I have reviewed DalalOS terms and will use this only for my private research, preserving source attribution and respecting provider quotas.",
+                        color = Muted, fontSize = 9.sp, lineHeight = 13.sp
+                    )
+                }
                 OutlinedTextField(
                     value = dalalOsKey,
                     onValueChange = { dalalOsKey = it.take(4096) },
@@ -246,7 +258,7 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
                                 }
                             }
                         },
-                        enabled = !keySaving && !keyDeleting && dalalOsKey.length in 20..4096,
+                        enabled = !keySaving && !keyDeleting && dalalOsTermsAccepted && dalalOsKey.length in 20..4096,
                         modifier = Modifier.weight(1f)
                     ) {
                         if (keySaving) CircularProgressIndicator() else Text("Save key")
