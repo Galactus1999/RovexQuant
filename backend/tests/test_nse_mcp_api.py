@@ -118,3 +118,92 @@ def test_extracted_eod_research_routes_require_app_session():
         "/api/v1/app/research/market-data/ohlcv/nse/RELIANCE?from=2025-01-01&to=2025-01-31"
     ).status_code == 401
     assert client.get("/api/v1/app/research/market-data/status").status_code == 401
+
+
+def test_dalalos_credential_routes_require_app_session():
+    client = TestClient(api.app)
+    assert client.get("/api/v1/app/integrations/research/dalalos/status").status_code == 401
+    assert client.put(
+        "/api/v1/app/integrations/research/dalalos/api-key",
+        json={"api_key": "d" * 32},
+    ).status_code == 401
+    assert client.delete("/api/v1/app/integrations/research/dalalos/api-key").status_code == 401
+
+
+def test_dalalos_credential_is_encrypted_and_never_returned(monkeypatch, tmp_path):
+    from cryptography.fernet import Fernet
+    from rovexquant.market_data.upstox_credentials import get_research_connector_api_key
+
+    token = _session(monkeypatch)
+    monkeypatch.setenv("QUANT_TOKEN_ENCRYPTION_KEY", Fernet.generate_key().decode("ascii"))
+    monkeypatch.setenv("QUANT_TOKEN_STORAGE_MODE", "sqlite")
+    monkeypatch.setenv("QUANT_TOKEN_DB_PATH", str(tmp_path / "quant-vault.sqlite3"))
+    client = TestClient(api.app)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    saved = client.put(
+        "/api/v1/app/integrations/research/dalalos/api-key",
+        json={"api_key": "d" * 32},
+        headers=headers,
+    )
+    assert saved.status_code == 200
+    assert saved.json()["credential_storage"] == "encrypted_server_side"
+    assert "api_key" not in saved.text
+    assert get_research_connector_api_key("dalalos") == "d" * 32
+
+    status = client.get("/api/v1/app/integrations/research/dalalos/status", headers=headers)
+    assert status.status_code == 200
+    assert status.json()["configured"] is True
+    assert "d" * 32 not in status.text
+
+    deleted = client.delete("/api/v1/app/integrations/research/dalalos/api-key", headers=headers)
+    assert deleted.status_code == 200
+    assert deleted.json()["deleted"] is True
+    assert get_research_connector_api_key("dalalos") is None
+
+
+def test_dalalos_tools_route_is_authenticated_and_labels_manual_quota_tools(monkeypatch):
+    token = _session(monkeypatch)
+
+    async def fake_discover(server):
+        assert server == "dalalos"
+        return {"dalalos": [
+            {"name": "get_company_exposures", "read_only": True, "requires_confirmation": False},
+            {"name": "get_filing_extract", "read_only": False, "requires_confirmation": True},
+        ]}, {}
+
+    monkeypatch.setattr(nse_mcp_service, "discover_tools", fake_discover)
+    client = TestClient(api.app)
+    assert client.get("/api/v1/app/research/nse-mcp/tools?server=dalalos").status_code == 401
+    response = client.get(
+        "/api/v1/app/research/nse-mcp/tools?server=dalalos",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    catalog = response.json()["catalog"]["dalalos"]
+    assert catalog[0]["read_only"] is True
+    assert catalog[1]["requires_confirmation"] is True
+
+
+def test_dalalos_tool_call_passes_explicit_quota_confirmation(monkeypatch):
+    token = _session(monkeypatch)
+    calls = []
+
+    async def fake_invoke(server, tool, arguments, *, confirm_non_read_only=False):
+        calls.append((server, tool, arguments, confirm_non_read_only))
+        return {"tool": tool, "content": [{"type": "text", "text": "filing facts"}]}
+
+    monkeypatch.setattr(nse_mcp_service, "invoke_tool", fake_invoke)
+    response = TestClient(api.app).post(
+        "/api/v1/app/research/nse-mcp/call",
+        json={
+            "server": "dalalos",
+            "tool": "get_filing_extract",
+            "arguments": {"query": "RELIANCE", "news_id": "filing-1"},
+            "confirm_non_read_only": True,
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["data_mode"] == "SOURCE_ATTRIBUTED_RESEARCH"
+    assert calls == [("dalalos", "get_filing_extract", {"query": "RELIANCE", "news_id": "filing-1"}, True)]
