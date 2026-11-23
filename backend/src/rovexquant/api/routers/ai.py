@@ -59,6 +59,7 @@ class AIStrategyBriefRequest(BaseModel):
     strategy_context: str = Field(min_length=1, max_length=1500)
     credential_id: str | None = Field(default=None, min_length=1, max_length=80)
     fallback_providers: list[str] = Field(default_factory=list, max_length=3)
+    automatic_task_routing: bool = False
 
     @model_validator(mode="after")
     def validate_date_range(self):
@@ -72,6 +73,8 @@ class AIStrategyBriefRequest(BaseModel):
     def validate_provider_model_pair(self):
         if bool(self.provider_id) != bool(self.model):
             raise ValueError("provider_id and model must be supplied together, or both omitted for task routing")
+        if self.automatic_task_routing and (self.provider_id or self.model):
+            raise ValueError("automatic_task_routing cannot be combined with a manual provider/model")
         return self
 
 
@@ -359,22 +362,25 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
         }
         completion = None
         ai_error = None
-        try:
-            completion = await complete_chat(
-                provider_id=request.provider_id,
-                model=request.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": json.dumps(user_evidence, separators=(",", ":"), sort_keys=True)},
-                ],
-                max_tokens=1400,
-                temperature=0.1,
-                credential_id=request.credential_id,
-                fallback_providers=request.fallback_providers,
-                task_type="research",
-            )
-        except GatewayError as error:
-            ai_error = f"Data was recovered, but AI commentary is unavailable: {error}"
+        if request.automatic_task_routing or (request.provider_id and request.model):
+            try:
+                completion = await complete_chat(
+                    provider_id=request.provider_id,
+                    model=request.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": json.dumps(user_evidence, separators=(",", ":"), sort_keys=True)},
+                    ],
+                    max_tokens=1400,
+                    temperature=0.1,
+                    credential_id=request.credential_id,
+                    fallback_providers=request.fallback_providers,
+                    task_type="research",
+                )
+            except GatewayError as error:
+                ai_error = f"Data was recovered, but AI commentary is unavailable: {error}"
+        else:
+            ai_error = "Data was recovered. Select a provider/model or enable the configured research task route."
 
         return {
             "provider": provider_id,
