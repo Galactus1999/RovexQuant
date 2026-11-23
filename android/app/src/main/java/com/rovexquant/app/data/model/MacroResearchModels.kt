@@ -58,9 +58,19 @@ data class HistoricalBackfillSummary(
     val completedAt: String?
 )
 
+data class DerivedBackfillSummary(
+    val year: Int,
+    val datasetKind: String,
+    val status: String,
+    val rowsSeen: Long,
+    val rowsUpserted: Long,
+    val completedAt: String?
+)
+
 data class MarketIntegrityStatus(
     val exchange: String,
     val status: String,
     val latestReport: MarketReconciliationReport?,
-    val backfills: List<HistoricalBackfillSummary>
+    val backfills: List<HistoricalBackfillSummary>,
+    val derivedBackfills: List<DerivedBackfillSummary>
 )
