@@ -20,6 +20,7 @@ import com.rovexquant.app.data.model.MarketIntegrityDifference
 import com.rovexquant.app.data.model.MarketIntegrityStatus
 import com.rovexquant.app.data.model.MarketReconciliationReport
 import com.rovexquant.app.data.model.HistoricalBackfillSummary
+import com.rovexquant.app.data.model.DerivedBackfillSummary
 import com.rovexquant.app.data.model.MacroSeriesObservation
 import com.rovexquant.app.data.model.AmfiNavObservation
 import com.rovexquant.app.data.model.EventStudyResult
@@ -372,11 +373,27 @@ object QuantApi {
                     ))
                 }
             }
+
+            val derivedJson = json.optJSONArray("derived_backfills") ?: JSONArray()
+            val derivedBackfills = buildList {
+                for (index in 0 until derivedJson.length()) {
+                    val item = derivedJson.optJSONObject(index) ?: continue
+                    add(DerivedBackfillSummary(
+                        year = item.optInt("year"),
+                        datasetKind = item.optString("dataset_kind"),
+                        status = item.optString("status"),
+                        rowsSeen = item.optLong("rows_seen"),
+                        rowsUpserted = item.optLong("rows_upserted"),
+                        completedAt = item.optString("completed_at").takeIf { it.isNotBlank() && it != "null" }
+                    ))
+                }
+            }
             return MarketIntegrityStatus(
                 exchange = json.optString("exchange", exchange.uppercase()),
                 status = json.optString("status", "UNKNOWN"),
                 latestReport = report,
-                backfills = backfills
+                backfills = backfills,
+                derivedBackfills = derivedBackfills
             )
         }
     }
