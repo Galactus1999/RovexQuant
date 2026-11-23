@@ -140,10 +140,11 @@ class QuantRepository(context: Context) : QuantDataRepository {
         toDate: String,
         strategyContext: String,
         credentialId: String?,
-        fallbackProviders: List<String>
+        fallbackProviders: List<String>,
+        automaticTaskRouting: Boolean
     ): AiStrategyBrief = withContext(Dispatchers.IO) {
         QuantApi.requestAiStrategyBrief(
-            session, providerId, model, symbol, exchange, fromDate, toDate, strategyContext, credentialId, fallbackProviders
+            session, providerId, model, symbol, exchange, fromDate, toDate, strategyContext, credentialId, fallbackProviders, automaticTaskRouting
         )
     }
 
