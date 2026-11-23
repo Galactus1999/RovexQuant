@@ -50,7 +50,8 @@ Recheck current Yahoo terms before broader use.
 Worker environment:
 - QUANT_TOKEN_DATABASE_URL or QUANT_MARKET_DATABASE_URL: private PostgreSQL URL
   with TLS enabled (sslmode=require or stronger).
-- QUANT_TOKEN_MIGRATION_DATABASE_URL: direct, non-pooler URL for Alembic only.
+- QUANT_TOKEN_MIGRATION_DATABASE_URL: direct, non-pooler URL for the token/runtime database.
+- QUANT_MARKET_MIGRATION_DATABASE_URL: optional direct URL when QUANT_MARKET_DATABASE_URL points to a separate PostgreSQL database. The API fails startup if a distinct market database is not at the expected Alembic revision.
 
 Apply the schema from backend/:
 
