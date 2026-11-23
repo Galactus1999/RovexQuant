@@ -74,3 +74,38 @@ def test_fred_adapter_never_accepts_arbitrary_series(monkeypatch):
         assert "Unsupported" in str(error)
     else:
         raise AssertionError("unapproved FRED series must be rejected")
+
+
+def test_rbi_dbie_mirror_parser_preserves_vintage_and_values():
+    observations, as_of, label = macro_data._extract_dbie_observations({
+        "as_of": "2026-09",
+        "series": [{
+            "label": "Foreign exchange reserves",
+            "observations": [
+                {"period": "2026-W35", "value": 690000.0},
+                {"period": "2026-W36", "obs_value": 692500.0},
+            ],
+        }],
+    })
+    assert as_of == "2026-09"
+    assert label == "Foreign exchange reserves"
+    assert observations[-1] == {"period": "2026-W36", "value": 692500.0}
+
+
+def test_rbi_dbie_mirror_parser_fails_closed_on_unknown_payload():
+    try:
+        macro_data._extract_dbie_observations({"unexpected": [{"date": "2026", "value": 1}]})
+    except macro_data.MacroProviderError:
+        pass
+    else:
+        raise AssertionError("unknown DBIE payload shape must not be guessed")
+
+
+def test_rbi_dbie_mirror_rejects_unallowlisted_series():
+    try:
+        import asyncio
+        asyncio.run(macro_data.fetch_rbi_dbie_mirror(["arbitrary"]))
+    except ValueError as error:
+        assert "Unsupported" in str(error)
+    else:
+        raise AssertionError("unapproved RBI series must be rejected")
