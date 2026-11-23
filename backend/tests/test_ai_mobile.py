@@ -9,6 +9,7 @@ from rovexquant.ai import gateway
 from rovexquant.api.main import app
 from rovexquant.auth import issue_app_session
 from rovexquant.market_data.tejhq import TejHqDailyBar
+from rovexquant.market_data.eod_store import EodStoreError
 
 
 class FakeResponse:
@@ -56,6 +57,8 @@ def test_mobile_ai_provider_catalogue_requires_app_session(mobile_client):
     assert groq["fallback_model_configured"] is True
     assert "groq-fallback-test-model" not in response.text
     assert "groq-server-secret" not in response.text
+    assert response.json()["archive_status"] in {"PERSISTED", "UNAVAILABLE"}
+    assert response.json()["task_type"] == "chat"
     assert "QUANT_AI_GATEWAY_TOKEN" not in response.text
 
 
@@ -351,3 +354,65 @@ def test_task_route_rejects_unknown_task_and_malformed_provider(monkeypatch):
     monkeypatch.setenv("QUANT_AI_TASK_ROUTES", '{"research":{"provider_id":"unknown","model":"x"}}')
     with pytest.raises(gateway.GatewayError):
         gateway.configured_task_routes()
+
+
+def test_research_archive_persists_bounded_reproducible_run(monkeypatch):
+    from rovexquant.ai import research_archive
+
+    class FakeConnection:
+        def __init__(self):
+            self.query = None
+            self.params = None
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return False
+        def execute(self, query, params):
+            self.query = query
+            self.params = params
+
+    fake = FakeConnection()
+    monkeypatch.setattr(research_archive, "connect", lambda: fake)
+    run_id = research_archive.persist_ai_research_run(
+        task_type="research",
+        provider_id="groq",
+        model="test-model",
+        credential_id="app",
+        request_payload={"messages": [{"role": "user", "content": "Check this EOD evidence."}]},
+        response_payload={"content": "Evidence is mixed."},
+        usage={"prompt_tokens": 50, "completion_tokens": 20, "total_tokens": 70},
+        cost_status="NOT_TRACKED",
+        source_refs=[{"provider": "tejhq_eod", "symbol": "RELIANCE"}],
+    )
+    assert len(run_id) == 36
+    assert "INSERT INTO ai_research_runs" in fake.query
+    assert fake.params[5] == "SUCCEEDED"
+    assert len(fake.params[6]) == 64
+    assert "groq-server-secret" not in str(fake.params)
+
+
+def test_research_archive_rejects_oversized_payload():
+    from rovexquant.ai.research_archive import persist_ai_research_run
+
+    with pytest.raises(EodStoreError):
+        persist_ai_research_run(
+            task_type="chat",
+            provider_id="groq",
+            model="test-model",
+            credential_id=None,
+            request_payload={"text": "x" * (129 * 1024)},
+            response_payload={"content": "ok"},
+        )
+
+
+def test_ai_research_history_endpoints_require_app_session(mobile_client, monkeypatch):
+    client, headers = mobile_client
+    assert client.get("/api/v1/app/ai/research/runs").status_code == 401
+    from rovexquant.api.routers import ai as ai_router
+    monkeypatch.setattr(ai_router, "list_ai_research_runs", lambda **kwargs: {"runs": [], "count": 0})
+    response = client.get("/api/v1/app/ai/research/runs", headers=headers)
+    assert response.status_code == 200
+    assert response.json() == {"runs": [], "count": 0}
+    monkeypatch.setattr(ai_router, "get_ai_research_run", lambda run_id: None)
+    missing = client.get("/api/v1/app/ai/research/runs/not-a-run", headers=headers)
+    assert missing.status_code == 404
