@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.model.MacroResearchSummary
+import com.rovexquant.app.data.model.MarketIntegrityStatus
 import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.data.repository.QuantDataRepository
 import kotlinx.coroutines.CancellationException
@@ -17,6 +18,9 @@ data class MacroEventResearchUiState(
     val macroLoading: Boolean = false,
     val macro: MacroResearchSummary? = null,
     val macroError: String? = null,
+    val integrityLoading: Boolean = false,
+    val integrity: MarketIntegrityStatus? = null,
+    val integrityError: String? = null,
     val symbol: String = "RELIANCE",
     val eventDate: String = "",
     val benchmarkSymbol: String = "NIFTY 50",
@@ -33,10 +37,12 @@ class MacroEventResearchViewModel(
     private val _uiState = MutableStateFlow(MacroEventResearchUiState())
     val uiState = _uiState.asStateFlow()
     private var macroJob: Job? = null
+    private var integrityJob: Job? = null
     private var eventJob: Job? = null
 
     init {
         refreshMacro()
+        refreshIntegrity()
     }
 
     fun setSymbol(value: String) {
@@ -63,6 +69,24 @@ class MacroEventResearchViewModel(
             } catch (failure: Exception) {
                 _uiState.update {
                     it.copy(macroLoading = false, macroError = failure.message ?: "Macro providers are unavailable.")
+                }
+            }
+        }
+    }
+
+
+    fun refreshIntegrity() {
+        integrityJob?.cancel()
+        integrityJob = viewModelScope.launch {
+            _uiState.update { it.copy(integrityLoading = true, integrityError = null) }
+            try {
+                val result = repository.fetchMarketIntegrityStatus(session, "NSE")
+                _uiState.update { it.copy(integrityLoading = false, integrity = result, integrityError = null) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                _uiState.update {
+                    it.copy(integrityLoading = false, integrityError = failure.message ?: "Market integrity status unavailable.")
                 }
             }
         }
