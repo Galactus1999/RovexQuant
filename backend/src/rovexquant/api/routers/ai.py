@@ -10,7 +10,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field, SecretStr, model_validator
 
-from rovexquant.ai.gateway import GatewayError, authorize_gateway, complete_chat, configured_providers
+from rovexquant.ai.gateway import GatewayError, authorize_gateway, complete_chat, configured_providers, configured_task_routes
 from rovexquant.ai.providers import SUPPORTED
 from rovexquant.market_data import tejhq_service
 from rovexquant.market_data.tejhq_service import TejHqError
@@ -33,8 +33,9 @@ class AIMessage(BaseModel):
 
 
 class AIChatRequest(BaseModel):
-    provider_id: str
-    model: str = Field(min_length=1, max_length=160)
+    provider_id: str | None = None
+    model: str | None = Field(default=None, min_length=1, max_length=160)
+    task_type: Literal["chat", "research", "macro_analysis", "filing_extraction", "claim_verification", "summarization"] = "chat"
     messages: list[AIMessage] = Field(min_length=1, max_length=32)
     credential_id: str | None = Field(default=None, min_length=1, max_length=80)
     fallback_providers: list[str] = Field(default_factory=list, max_length=3)
@@ -58,6 +59,8 @@ class AIStrategyBriefRequest(BaseModel):
     strategy_context: str = Field(min_length=1, max_length=1500)
     credential_id: str | None = Field(default=None, min_length=1, max_length=80)
     fallback_providers: list[str] = Field(default_factory=list, max_length=3)
+    automatic_task_routing: bool = False
+    max_tokens: int = Field(default=1400, ge=1, le=4096)
 
     @model_validator(mode="after")
     def validate_date_range(self):
@@ -65,6 +68,14 @@ class AIStrategyBriefRequest(BaseModel):
             raise ValueError("from_date must be on or before to_date")
         if (self.to_date - self.from_date).days > 6200:
             raise ValueError("Requested history range exceeds the supported EOD window")
+        return self
+
+    @model_validator(mode="after")
+    def validate_provider_model_pair(self):
+        if bool(self.provider_id) != bool(self.model):
+            raise ValueError("provider_id and model must be supplied together, or both omitted for task routing")
+        if self.automatic_task_routing and (self.provider_id or self.model):
+            raise ValueError("automatic_task_routing cannot be combined with a manual provider/model")
         return self
 
 
@@ -207,6 +218,18 @@ def app_ai_providers():
 
 
 
+@router.get(
+    "/api/v1/app/ai/task-routes",
+    dependencies=[Depends(require_app_session)],
+)
+def app_ai_task_routes():
+    """Return configured task-specific model routes without credential material."""
+    try:
+        return {"routes": configured_task_routes()}
+    except GatewayError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
 @router.put(
     "/api/v1/app/ai/providers/{provider_id}/credential",
     dependencies=[Depends(require_app_session), Depends(provider_credential_rate_limit)],
@@ -274,6 +297,7 @@ async def app_ai_chat(request: AIChatRequest):
             temperature=request.temperature,
             credential_id=request.credential_id,
             fallback_providers=request.fallback_providers,
+            task_type=request.task_type,
         )
     except GatewayError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
@@ -339,7 +363,7 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
         }
         completion = None
         ai_error = None
-        if request.provider_id and request.model:
+        if request.automatic_task_routing or (request.provider_id and request.model):
             try:
                 completion = await complete_chat(
                     provider_id=request.provider_id,
@@ -348,15 +372,16 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": json.dumps(user_evidence, separators=(",", ":"), sort_keys=True)},
                     ],
-                    max_tokens=1400,
+                    max_tokens=request.max_tokens,
                     temperature=0.1,
                     credential_id=request.credential_id,
                     fallback_providers=request.fallback_providers,
+                    task_type="research",
                 )
             except GatewayError as error:
                 ai_error = f"Data was recovered, but AI commentary is unavailable: {error}"
         else:
-            ai_error = "Data was recovered. Configure an AI provider and model to generate the strategy commentary."
+            ai_error = "Data was recovered. Configure an AI provider/model or enable the configured research task route to receive AI commentary."
 
         return {
             "provider": provider_id,
