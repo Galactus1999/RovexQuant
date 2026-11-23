@@ -81,7 +81,7 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithText("Scan").performClick()
         composeRule.onNodeWithTag("scanner.list").performScrollToNode(hasText("Open AI data recovery"))
         composeRule.onNodeWithText("Open AI data recovery").performClick()
-        composeRule.onNodeWithText("Quant AI.").assertIsDisplayed()
+        composeRule.onNodeWithText("Quant Intelligence.").assertIsDisplayed()
         composeRule.onNodeWithText("Groq", substring = true).assertIsDisplayed()
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.model"))
         composeRule.onNodeWithTag("ai.model").performTextInput("test-model")
@@ -97,6 +97,36 @@ class QuantDashboardRegressionTest {
             hasText("Deterministic EOD strategy fixture response.")
         )
         composeRule.onNodeWithText("Deterministic EOD strategy fixture response.").assertIsDisplayed()
+    }
+
+    @Test fun aiStudioTestsProviderAndAttachesLiveResearchToolResults() {
+        waitForDashboard()
+        composeRule.onNodeWithText("Scan").performClick()
+        composeRule.onNodeWithTag("scanner.list").performScrollToNode(hasText("Open AI data recovery"))
+        composeRule.onNodeWithText("Open AI data recovery").performClick()
+        composeRule.onNodeWithText("Quant Intelligence.").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.model"))
+        composeRule.onNodeWithTag("ai.model").performTextInput("test-model")
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.provider.test"))
+        composeRule.onNodeWithTag("ai.provider.test").assertIsDisplayed()
+        composeRule.onNodeWithText("Open Groq API console / manage key").assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.provider.test").performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("Connected · groq / test-model").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.tool.market"))
+        composeRule.onNodeWithTag("ai.tool.market").assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.tool.events").assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.tool.macro").assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.tool.market").performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("NSE EOD snapshot attached", substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.chat.input"))
+        composeRule.onNodeWithTag("ai.chat.input").assertTextContains("NSE EOD SNAPSHOT")
     }
 
     @Test fun intelligenceCentreLoadsEventEvidenceAndSectorTransmission() {
