@@ -14,6 +14,7 @@ import httpx
 
 WORLD_BANK_ENDPOINT = "https://api.worldbank.org/v2/country/IND/indicator"
 FRED_ENDPOINT = "https://api.stlouisfed.org/fred/series/observations"
+AMFI_NAV_ENDPOINT = "https://www.amfiindia.com/spages/NAVAll.txt"
 
 WORLD_BANK_INDICATORS = {
     "gdp_growth": ("NY.GDP.MKTP.KD.ZG", "GDP growth (annual %)", "ANNUAL", "PERCENT"),
@@ -135,3 +136,69 @@ async def fetch_fred(series: list[str] | None = None) -> dict[str, Any]:
             "data_delay": "OFFICIAL_RELEASE_FREQUENCY",
         })
     return {"provider": "FRED", "configured": True, "retrieved_at": retrieved, "series": output}
+
+
+
+async def fetch_amfi_nav(search: str = "", limit: int = 50) -> dict[str, Any]:
+    """Fetch and parse AMFI's published daily NAV text report; never treat NAV as equity price."""
+    cleaned = " ".join(search.split()).casefold()
+    if len(cleaned) > 100:
+        raise ValueError("AMFI search must be at most 100 characters")
+    if not 1 <= limit <= 100:
+        raise ValueError("AMFI result limit must be between 1 and 100")
+    try:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(20.0, connect=5.0),
+            headers={"User-Agent": "RovexQuant-Research/1.0"},
+        ) as client:
+            response = await client.get(AMFI_NAV_ENDPOINT)
+            response.raise_for_status()
+            raw = response.content
+    except httpx.HTTPError as error:
+        raise MacroProviderError("AMFI NAV report is temporarily unavailable") from error
+    if len(raw) > 12 * 1024 * 1024:
+        raise MacroProviderError("AMFI NAV report exceeded the 12 MB safety limit")
+    try:
+        content = raw.decode("utf-8-sig")
+    except UnicodeDecodeError as error:
+        raise MacroProviderError("AMFI NAV report encoding was not recognized") from error
+    retrieved = datetime.now(timezone.utc).isoformat()
+    output = []
+    for line in content.splitlines():
+        fields = [field.strip() for field in line.split(";")]
+        if len(fields) < 6 or not fields[0].isdigit():
+            continue
+        try:
+            nav = float(fields[4])
+            if not nav >= 0 or not fields[5]:
+                continue
+        except ValueError:
+            continue
+        scheme_name = fields[3]
+        if cleaned and cleaned not in scheme_name.casefold() and cleaned != fields[0]:
+            continue
+        output.append({
+            "scheme_code": int(fields[0]),
+            "isin_growth": fields[1] or None,
+            "isin_dividend_reinvestment": fields[2] or None,
+            "scheme_name": scheme_name[:240],
+            "nav": nav,
+            "nav_date": fields[5],
+            "source": "AMFI_NAVALL_DAILY_REPORT",
+            "source_url": "https://www.amfiindia.com/net-asset-value/nav-download",
+            "retrieved_at": retrieved,
+            "data_mode": "DAILY_MUTUAL_FUND_NAV",
+        })
+        if len(output) >= limit:
+            break
+    return {
+        "provider": "AMFI",
+        "configured": True,
+        "retrieved_at": retrieved,
+        "result_count": len(output),
+        "search": search,
+        "data_mode": "DAILY_MUTUAL_FUND_NAV",
+        "not_equity_quotes": True,
+        "source_url": "https://www.amfiindia.com/net-asset-value/nav-download",
+        "observations": output,
+    }
