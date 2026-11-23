@@ -72,3 +72,16 @@ data class AiTaskRoute(
     val model: String,
     val fallbackProviders: List<String>
 )
+
+
+data class AiResearchRun(
+    val runId: String, val taskType: String, val providerId: String, val model: String,
+    val status: String, val promptTokens: Long, val completionTokens: Long, val totalTokens: Long,
+    val costUsd: Double?, val costStatus: String, val fallbackUsed: Boolean, val createdAt: String
+)
+
+data class AiBudgetStatus(
+    val enabled: Boolean, val dailyUsedTokens: Long, val dailyLimitTokens: Long?,
+    val dailyRemainingTokens: Long?, val monthlyUsedTokens: Long, val monthlyLimitTokens: Long?,
+    val monthlyRemainingTokens: Long?
+)

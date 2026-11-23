@@ -10,10 +10,16 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field, SecretStr, model_validator
 
-from rovexquant.ai.gateway import GatewayError, authorize_gateway, complete_chat, configured_providers, configured_task_routes
+from rovexquant.ai.gateway import GatewayError, authorize_gateway, complete_chat, configured_providers, configured_task_routes, resolve_task_route
 from rovexquant.ai.providers import SUPPORTED
 from rovexquant.market_data import tejhq_service
 from rovexquant.market_data.tejhq_service import TejHqError
+from rovexquant.market_data.eod_store import EodStoreError
+from rovexquant.ai.research_archive import (
+    ai_token_budgets_enabled, estimate_reserved_tokens, reserve_ai_research_run,
+    finish_ai_research_run, fail_ai_research_run,
+    list_ai_research_runs, get_ai_research_run, get_ai_token_budget_status,
+)
 from rovexquant.research.contracts import IndicatorRequest
 from rovexquant.research.service import calculate_indicators
 from rovexquant.security.dependencies import require_app_session
@@ -218,6 +224,43 @@ def app_ai_providers():
 
 
 
+
+@router.get(
+    "/api/v1/app/ai/budget",
+    dependencies=[Depends(require_app_session)],
+)
+def app_ai_budget_status():
+    try:
+        return get_ai_token_budget_status()
+    except EodStoreError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+@router.get(
+    "/api/v1/app/ai/research/runs",
+    dependencies=[Depends(require_app_session)],
+)
+def app_ai_research_runs(limit: int = 30, task_type: str | None = None):
+    try:
+        return list_ai_research_runs(limit=limit, task_type=task_type)
+    except EodStoreError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+@router.get(
+    "/api/v1/app/ai/research/runs/{run_id}",
+    dependencies=[Depends(require_app_session)],
+)
+def app_ai_research_run(run_id: str):
+    try:
+        result = get_ai_research_run(run_id)
+    except EodStoreError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+    if result is None:
+        raise HTTPException(status_code=404, detail="AI research run not found")
+    return result
+
+
 @router.get(
     "/api/v1/app/ai/task-routes",
     dependencies=[Depends(require_app_session)],
@@ -273,7 +316,11 @@ def delete_app_ai_provider_credential(provider_id: str):
 )
 async def app_ai_chat(request: AIChatRequest):
     """Mobile AI access is authorized by the short-lived Quant app session."""
+    run_id = None
     try:
+        provider_id, model, fallback_providers = resolve_task_route(
+            request.task_type, request.provider_id, request.model, request.fallback_providers
+        )
         mobile_messages = [
             {
                 "role": "system",
@@ -289,19 +336,58 @@ async def app_ai_chat(request: AIChatRequest):
             },
             *[message.model_dump() for message in request.messages if message.role != "system"],
         ]
-        return await complete_chat(
-            provider_id=request.provider_id,
-            model=request.model,
-            messages=mobile_messages,
-            max_tokens=request.max_tokens,
-            temperature=request.temperature,
-            credential_id=request.credential_id,
-            fallback_providers=request.fallback_providers,
-            task_type=request.task_type,
-        )
+        request_payload = {
+            "messages": mobile_messages,
+            "max_tokens": request.max_tokens,
+            "temperature": request.temperature,
+        }
+        archive_error = None
+        try:
+            run_id = reserve_ai_research_run(
+                task_type=request.task_type,
+                provider_id=provider_id,
+                model=model,
+                credential_id=request.credential_id,
+                request_payload=request_payload,
+                estimated_tokens=estimate_reserved_tokens(request_payload, request.max_tokens),
+            )
+        except EodStoreError as error:
+            if ai_token_budgets_enabled() or error.status_code == 429:
+                raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+            archive_error = str(error)
+
+        try:
+            completion = await complete_chat(
+                provider_id=provider_id,
+                model=model,
+                messages=mobile_messages,
+                max_tokens=request.max_tokens,
+                temperature=request.temperature,
+                credential_id=request.credential_id,
+                fallback_providers=fallback_providers,
+                task_type=request.task_type,
+            )
+        except GatewayError:
+            if run_id:
+                fail_ai_research_run(run_id)
+            raise
+
+        if run_id:
+            try:
+                finish_ai_research_run(run_id, completion)
+                completion["run_id"] = run_id
+                completion["archive_status"] = "PERSISTED"
+            except EodStoreError as error:
+                completion["run_id"] = run_id
+                completion["archive_status"] = "UNAVAILABLE"
+                completion["archive_error"] = str(error)
+        else:
+            completion["archive_status"] = "UNAVAILABLE"
+            if archive_error:
+                completion["archive_error"] = archive_error
+        return completion
     except GatewayError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
-
 
 @router.post(
     "/api/v1/app/ai/strategy-brief",
@@ -363,22 +449,62 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
         }
         completion = None
         ai_error = None
+        research_run = {"archive_status": "NOT_CREATED"}
         if request.automatic_task_routing or (request.provider_id and request.model):
+            run_id = None
+            request_payload = {
+                "system_prompt": system_prompt,
+                "evidence": user_evidence,
+            }
             try:
+                route_provider, route_model, route_fallbacks = resolve_task_route(
+                    "research", request.provider_id, request.model, request.fallback_providers
+                )
+                try:
+                    run_id = reserve_ai_research_run(
+                        task_type="research",
+                        provider_id=route_provider,
+                        model=route_model,
+                        credential_id=request.credential_id,
+                        request_payload=request_payload,
+                        estimated_tokens=estimate_reserved_tokens(request_payload, 1400),
+                        source_refs=[{
+                            "provider": provider_id,
+                            "data_mode": "END_OF_DAY_ADJUSTED",
+                            "exchange": request.exchange,
+                            "symbol": request.symbol.upper(),
+                            "from": request.from_date.isoformat(),
+                            "to": request.to_date.isoformat(),
+                        }],
+                    )
+                except EodStoreError as archive_error:
+                    if ai_token_budgets_enabled() or archive_error.status_code == 429:
+                        raise
+                    research_run = {"archive_status": "UNAVAILABLE", "error": str(archive_error)}
                 completion = await complete_chat(
-                    provider_id=request.provider_id,
-                    model=request.model,
+                    provider_id=route_provider,
+                    model=route_model,
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": json.dumps(user_evidence, separators=(",", ":"), sort_keys=True)},
                     ],
-                    max_tokens=request.max_tokens,
+                    max_tokens=1400,
                     temperature=0.1,
                     credential_id=request.credential_id,
-                    fallback_providers=request.fallback_providers,
+                    fallback_providers=route_fallbacks,
                     task_type="research",
                 )
+                if run_id:
+                    try:
+                        finish_ai_research_run(run_id, completion)
+                        research_run = {"run_id": run_id, "archive_status": "PERSISTED"}
+                    except EodStoreError as archive_error:
+                        research_run = {"run_id": run_id, "archive_status": "UNAVAILABLE", "error": str(archive_error)}
+            except EodStoreError as error:
+                ai_error = f"Data was recovered, but the AI token budget or research archive is unavailable: {error}"
             except GatewayError as error:
+                if run_id:
+                    fail_ai_research_run(run_id)
                 ai_error = f"Data was recovered, but AI commentary is unavailable: {error}"
         else:
             ai_error = "Data was recovered. Select a provider/model or enable the configured research task route."
@@ -409,6 +535,7 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
             ],
             "ai": completion,
             "ai_error": ai_error,
+            "research_run": research_run,
             "data_rights": (
                 "Private personal research only. Do not redistribute raw data or expose it to other users. "
                 "Exchange terms may independently apply; this endpoint does not grant exchange display rights."

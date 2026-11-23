@@ -268,7 +268,11 @@ async def complete_chat(
                 for key in ("prompt_tokens", "completion_tokens", "total_tokens")
                 if isinstance(usage, dict) and isinstance(usage.get(key), (int, float))
             }
-            cost_usd, cost_status = estimate_completion_cost_usd(candidate, selected_model, safe_usage)
+            reported_cost = usage.get("cost") if isinstance(usage, dict) else None
+            if isinstance(reported_cost, (int, float)) and not isinstance(reported_cost, bool) and math.isfinite(float(reported_cost)) and reported_cost >= 0:
+                cost_usd, cost_status = float(reported_cost), "PROVIDER_REPORTED"
+            else:
+                cost_usd, cost_status = estimate_completion_cost_usd(candidate, selected_model, safe_usage)
             return {
                 "provider_id": candidate,
                 "credential_id": credential.credential_id,
