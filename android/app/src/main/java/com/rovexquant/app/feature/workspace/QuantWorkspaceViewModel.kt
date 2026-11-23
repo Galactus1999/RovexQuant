@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 data class QuantWorkspaceUiState(
     val restoringSession: Boolean = true,
@@ -75,7 +76,6 @@ class QuantWorkspaceViewModel(
                     }
                     startMarketStream(session)
                     refreshEodSnapshot(session)
-                    refreshMarketIngestionStatus(session)
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -126,7 +126,6 @@ class QuantWorkspaceViewModel(
                             _uiState.update { it.copy(session = stored) }
                             startMarketStream(stored)
                             refreshEodSnapshot(stored)
-                            refreshMarketIngestionStatus(stored)
                         } else {
                             repository.clearSession()
                         }
@@ -156,8 +155,7 @@ class QuantWorkspaceViewModel(
 
     fun refreshEodSnapshot() {
         val session = _uiState.value.session ?: return
-        refreshEodSnapshot(session)
-        refreshMarketIngestionStatus(session)
+        refreshEodSnapshot(session, force = true)
     }
 
     fun refreshMarketIngestionStatus() {
@@ -197,10 +195,64 @@ class QuantWorkspaceViewModel(
         }
     }
 
-    private fun refreshEodSnapshot(session: QuantSession) {
+    private fun refreshEodSnapshot(session: QuantSession, force: Boolean = false) {
         eodSnapshotJob?.cancel()
-        _uiState.update { it.copy(eodSnapshotStatus = "Loading latest NSE EOD snapshot…") }
+        _uiState.update {
+            it.copy(
+                eodSnapshotStatus = "Requesting latest NSE EOD collection…",
+                marketIngestionStatusLabel = "Checking persistent collection state…"
+            )
+        }
         eodSnapshotJob = viewModelScope.launch {
+            try {
+                val requestStatus = repository.requestMarketIngestion(session, "nse", force)
+                _uiState.update {
+                    it.copy(
+                        eodSnapshotStatus = if (requestStatus == "RUNNING") {
+                            "Collecting latest available NSE EOD data…"
+                        } else {
+                            "Checking the latest persisted NSE snapshot…"
+                        }
+                    )
+                }
+
+                var ingestion = repository.fetchMarketIngestionStatus(session, "nse")
+                fun publishStatus(status: MarketIngestionStatus) {
+                    val label = when (status.status) {
+                        "SUCCEEDED" -> "Latest collection completed"
+                        "FAILED" -> "Latest collection failed"
+                        "RUNNING" -> "Collection currently running"
+                        "EMPTY" -> "Collection returned no usable rows"
+                        "NOT_RUN" -> "No collection recorded yet"
+                        else -> "Ingestion status: ${status.status}"
+                    }
+                    _uiState.update {
+                        it.copy(marketIngestionStatus = status, marketIngestionStatusLabel = label)
+                    }
+                }
+                publishStatus(ingestion)
+
+                if (ingestion.status == "RUNNING") {
+                    for (attempt in 0 until 15) {
+                        delay(2_000)
+                        ingestion = repository.fetchMarketIngestionStatus(session, "nse")
+                        publishStatus(ingestion)
+                        if (ingestion.status != "RUNNING") break
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                _uiState.update {
+                    it.copy(
+                        marketIngestionStatusLabel = failure.message
+                            ?: "Automatic market collection could not be started; checking cached data"
+                    )
+                }
+            }
+
+            // Always attempt the read after collection. The backend serves the last
+            // successful batch, so a failed refresh never replaces good cached data.
             try {
                 val snapshot = repository.fetchLatestEodMarketSnapshot(session, "nse")
                 _uiState.update {
@@ -214,7 +266,8 @@ class QuantWorkspaceViewModel(
             } catch (failure: Exception) {
                 _uiState.update {
                     it.copy(
-                        eodSnapshotStatus = failure.message ?: "Latest NSE EOD snapshot unavailable; showing the last successful snapshot if available"
+                        eodSnapshotStatus = failure.message
+                            ?: "Latest NSE EOD snapshot unavailable; the previous successful snapshot is retained"
                     )
                 }
             }
