@@ -902,13 +902,22 @@ object QuantApi {
         }
     }
 
-    private fun parseAiCompletion(json: JSONObject) = AiCompletion(
-        providerId = json.optString("provider_id"),
-        credentialId = json.optString("credential_id").takeIf { it.isNotBlank() && it != "null" },
-        model = json.optString("model"),
-        content = json.optString("content"),
-        fallbackUsed = json.optBoolean("fallback_used", false)
-    )
+    private fun parseAiCompletion(json: JSONObject): AiCompletion {
+        val usage = json.optJSONObject("usage") ?: JSONObject()
+        return AiCompletion(
+            providerId = json.optString("provider_id"),
+            credentialId = json.optString("credential_id").takeIf { it.isNotBlank() && it != "null" },
+            model = json.optString("model"),
+            content = json.optString("content"),
+            fallbackUsed = json.optBoolean("fallback_used", false),
+            taskType = json.optString("task_type", "chat"),
+            promptTokens = usage.optInt("prompt_tokens", 0),
+            completionTokens = usage.optInt("completion_tokens", 0),
+            totalTokens = usage.optInt("total_tokens", 0),
+            costUsd = json.optionalDouble("cost_usd"),
+            costStatus = json.optString("cost_status", "UNKNOWN_MODEL_PRICING")
+        )
+    }
 
     private fun JSONObject.optionalDouble(key: String): Double? {
         if (!has(key) || isNull(key)) return null
