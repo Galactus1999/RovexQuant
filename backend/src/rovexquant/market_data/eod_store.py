@@ -9,6 +9,8 @@ from typing import Any, Iterable
 
 import psycopg
 
+from rovexquant.db.schema import EXPECTED_SCHEMA_REVISION
+
 _SYMBOL = re.compile(r"^[A-Z0-9][A-Z0-9&._-]{0,39}$")
 _SERIES = {"NSE": frozenset({"EQ", "BE", "BZ"}), "BSE": frozenset({"A", "B", "T"})}
 _INSERT_BAR = """
@@ -56,6 +58,25 @@ def connect():
         return psycopg.connect(database_url(), connect_timeout=8)
     except psycopg.Error as error:
         raise EodStoreError("Market database connection failed") from error
+
+
+def validate_market_schema() -> None:
+    """Fail closed when the separate market database has not reached Alembic head."""
+    market_url = os.getenv("QUANT_MARKET_DATABASE_URL", "").strip()
+    token_url = os.getenv("QUANT_TOKEN_DATABASE_URL", "").strip()
+    if not market_url or market_url == token_url:
+        return
+    try:
+        with connect() as connection:
+            row = connection.execute("SELECT version_num FROM alembic_version").fetchone()
+    except (EodStoreError, psycopg.Error) as error:
+        raise EodStoreError(
+            "Market PostgreSQL schema is unavailable; apply the market database migrations"
+        ) from error
+    if not row or row[0] != EXPECTED_SCHEMA_REVISION:
+        raise EodStoreError(
+            "Market PostgreSQL schema revision does not match this application; apply migrations"
+        )
 
 
 def _number(value: Any, field: str, *, optional: bool = False) -> float | None:
