@@ -10,15 +10,24 @@ import com.rovexquant.app.data.model.EodMarketSnapshot
 import com.rovexquant.app.data.model.EodStockMove
 import com.rovexquant.app.data.model.IntelligenceFeed
 import com.rovexquant.app.data.model.IntelligenceSource
+import com.rovexquant.app.data.model.IssuerMapping
 import com.rovexquant.app.data.model.MarketEvent
 import com.rovexquant.app.data.model.SectorImpact
 import com.rovexquant.app.data.model.MarketIndexInstrument
 import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.MarketIngestionStatus
 import com.rovexquant.app.data.model.MacroResearchSummary
+import com.rovexquant.app.data.model.MarketIntegrityDifference
+import com.rovexquant.app.data.model.MarketIntegrityStatus
+import com.rovexquant.app.data.model.DataHealthItem
+import com.rovexquant.app.data.model.MarketDataHealth
+import com.rovexquant.app.data.model.MarketReconciliationReport
+import com.rovexquant.app.data.model.HistoricalBackfillSummary
+import com.rovexquant.app.data.model.DerivedBackfillSummary
 import com.rovexquant.app.data.model.MacroSeriesObservation
 import com.rovexquant.app.data.model.AmfiNavObservation
 import com.rovexquant.app.data.model.EventStudyResult
+import com.rovexquant.app.data.model.CorporateActionEvidence
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.NseMcpTool
@@ -196,6 +205,7 @@ object QuantApi {
                     val sourceRows = item.optJSONArray("sources") ?: JSONArray()
                     val impactRows = item.optJSONArray("sector_impacts") ?: JSONArray()
                     val tagRows = item.optJSONArray("event_tags") ?: JSONArray()
+                    val issuerRows = item.optJSONArray("issuer_mappings") ?: JSONArray()
                     val sources = buildList {
                         for (sourceIndex in 0 until sourceRows.length()) {
                             val source = sourceRows.optJSONObject(sourceIndex) ?: continue
@@ -204,7 +214,11 @@ object QuantApi {
                                 url = source.optString("url"),
                                 seenAt = source.optString("seen_at"),
                                 language = source.optString("language"),
-                                sourceCountry = source.optString("source_country")
+                                sourceCountry = source.optString("source_country"),
+                                title = source.optString("title"),
+                                summary = source.optString("summary"),
+                                provider = source.optString("provider"),
+                                evidenceClass = source.optString("evidence_class")
                             ))
                         }
                     }
@@ -223,6 +237,21 @@ object QuantApi {
                             tagRows.optString(tagIndex).takeIf { it.isNotBlank() }?.let(::add)
                         }
                     }
+                    val issuerMappings = buildList {
+                        for (mappingIndex in 0 until issuerRows.length()) {
+                            val mapping = issuerRows.optJSONObject(mappingIndex) ?: continue
+                            add(IssuerMapping(
+                                exchange = mapping.optString("exchange"),
+                                symbol = mapping.optString("symbol"),
+                                isin = mapping.optString("isin"),
+                                companyName = mapping.optString("company_name"),
+                                mappingMethod = mapping.optString("mapping_method"),
+                                confidence = mapping.optDouble("confidence", 0.0),
+                                evidence = mapping.optString("evidence"),
+                                mappingScope = mapping.optString("mapping_scope")
+                            ))
+                        }
+                    }
                     add(MarketEvent(
                         eventId = item.optString("event_id"),
                         headline = item.optString("headline"),
@@ -237,7 +266,8 @@ object QuantApi {
                         sectorImpacts = impacts,
                         stockMappingStatus = item.optString("stock_mapping_status"),
                         stockMappingNote = item.optString("stock_mapping_note"),
-                        impactStatus = item.optString("impact_status")
+                        impactStatus = item.optString("impact_status"),
+                        issuerMappings = issuerMappings
                     ))
                 }
             }
@@ -255,7 +285,66 @@ object QuantApi {
                 articleCount = json.optInt("article_count"),
                 eventCount = json.optInt("event_count"),
                 events = events,
-                limitations = limitations
+                limitations = limitations,
+                archiveStatus = json.optString("archive_status", "UNAVAILABLE"),
+                issuerMasterStatus = json.optString("issuer_master_status", "UNAVAILABLE"),
+                mappedEventCount = json.optInt("mapped_event_count")
+            )
+        }
+    }
+
+
+    fun fetchMarketDataHealth(session: QuantSession, exchange: String = "NSE"): MarketDataHealth {
+        require(exchange.uppercase() in setOf("NSE", "BSE")) { "Exchange must be NSE or BSE." }
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/market/data-health?exchange=${exchange.uppercase()}")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(body, response.code))
+            require(body.toByteArray(Charsets.UTF_8).size <= 512 * 1024) {
+                "Market data health response exceeds the 512 KB safety limit."
+            }
+            val json = JSONObject(body)
+            fun parseItem(item: JSONObject?, fallbackName: String): DataHealthItem {
+                val value = item ?: JSONObject()
+                return DataHealthItem(
+                    name = value.optString("name", fallbackName),
+                    status = value.optString("status", "NOT_RUN"),
+                    updatedAt = value.optString("updated_at").takeIf { it.isNotBlank() && it != "null" },
+                    ageHours = value.optDouble("age_hours", Double.NaN).takeIf { it.isFinite() },
+                    freshness = value.optString("freshness", "UNKNOWN"),
+                    records = if (value.has("records") && !value.isNull("records")) value.optLong("records") else null,
+                    detail = value.optString("detail").takeIf { it.isNotBlank() && it != "null" }
+                )
+            }
+            fun parseItems(key: String): List<DataHealthItem> {
+                val array = json.optJSONArray(key) ?: JSONArray()
+                return buildList {
+                    for (index in 0 until array.length()) {
+                        add(parseItem(array.optJSONObject(index), "$key ${index + 1}"))
+                    }
+                }
+            }
+            val notesJson = json.optJSONArray("notes") ?: JSONArray()
+            val notes = buildList {
+                for (index in 0 until notesJson.length()) {
+                    notesJson.optString(index).takeIf { it.isNotBlank() }?.let(::add)
+                }
+            }
+            return MarketDataHealth(
+                exchange = json.optString("exchange", exchange.uppercase()),
+                overallStatus = json.optString("overall_status", "UNKNOWN"),
+                generatedAt = json.optString("generated_at"),
+                marketDataMode = json.optString("market_data_mode", "END_OF_DAY_ONLY"),
+                eod = parseItem(json.optJSONObject("eod"), "EOD"),
+                macroProviders = parseItems("macro_providers"),
+                intelligence = parseItem(json.optJSONObject("intelligence"), "Intelligence"),
+                derivedBackfills = parseItems("derived_backfills"),
+                reconciliation = parseItem(json.optJSONObject("reconciliation"), "Reconciliation"),
+                notes = notes
             )
         }
     }
@@ -286,6 +375,21 @@ object QuantApi {
                 "Event-study response exceeds the 512 KB safety limit."
             }
             val json = JSONObject(body)
+            val actionJson = json.optJSONArray("corporate_actions") ?: JSONArray()
+            val corporateActions = buildList {
+                for (index in 0 until actionJson.length()) {
+                    val item = actionJson.optJSONObject(index) ?: continue
+                    add(CorporateActionEvidence(
+                        exDate = item.optString("ex_date"),
+                        actionType = item.optString("action_type"),
+                        rawSubject = item.optString("raw_subject"),
+                        companyName = item.optString("company_name"),
+                        ratioNum = item.optLong("ratio_num").takeIf { item.has("ratio_num") && !item.isNull("ratio_num") },
+                        ratioDen = item.optLong("ratio_den").takeIf { item.has("ratio_den") && !item.isNull("ratio_den") },
+                        cashAmount = item.optDouble("cash_amount", Double.NaN).takeIf { it.isFinite() }
+                    ))
+                }
+            }
             val limitationsJson = json.optJSONArray("limitations") ?: JSONArray()
             val limitations = buildList {
                 for (index in 0 until limitationsJson.length()) {
@@ -309,24 +413,115 @@ object QuantApi {
                 benchmarkMatches = json.optInt("benchmark_observations_matched"),
                 postBarsUsed = json.optInt("post_event_bars_used"),
                 method = json.optString("method"),
-                limitations = limitations
+                priceBasis = json.optString("price_basis", "RAW_OR_MIXED_CLOSE"),
+                corporateActions = corporateActions,
+                limitations = limitations,
+                isin = json.optString("isin").takeIf { it.isNotBlank() && it != "null" },
+                symbolAsOfAnchor = json.optString("symbol_as_of_anchor").takeIf { it.isNotBlank() && it != "null" },
+                symbolValidFrom = json.optString("symbol_valid_from").takeIf { it.isNotBlank() && it != "null" },
+                symbolValidTo = json.optString("symbol_valid_to").takeIf { it.isNotBlank() && it != "null" },
+                symbolHistoryProvider = json.optString("symbol_history_provider").takeIf { it.isNotBlank() && it != "null" }
             )
         }
     }
 
+
+    fun fetchMarketIntegrityStatus(session: QuantSession, exchange: String = "NSE"): MarketIntegrityStatus {
+        require(exchange.uppercase() in setOf("NSE", "BSE")) { "Exchange must be NSE or BSE." }
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/market/data-integrity?exchange=${exchange.uppercase()}")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(body, response.code))
+            require(body.toByteArray(Charsets.UTF_8).size <= 512 * 1024) {
+                "Market integrity response exceeds the 512 KB safety limit."
+            }
+            val json = JSONObject(body)
+            val reportJson = json.optJSONObject("latest_report")
+            val differencesJson = reportJson?.optJSONArray("differences") ?: JSONArray()
+            val differences = buildList {
+                for (index in 0 until differencesJson.length()) {
+                    val item = differencesJson.optJSONObject(index) ?: continue
+                    add(MarketIntegrityDifference(
+                        kind = item.optString("kind"),
+                        symbol = item.optString("symbol"),
+                        series = item.optString("series"),
+                        field = item.optString("field").takeIf { it.isNotBlank() && it != "null" },
+                        officialValue = item.optString("official_value").takeIf { it.isNotBlank() && it != "null" },
+                        storedValue = item.optString("stored_value").takeIf { it.isNotBlank() && it != "null" }
+                    ))
+                }
+            }
+            val report = reportJson?.let {
+                MarketReconciliationReport(
+                    tradingDate = it.optString("trading_date"),
+                    status = it.optString("status"),
+                    officialRows = it.optInt("official_rows"),
+                    referenceRows = it.optInt("reference_rows"),
+                    matchedRows = it.optInt("matched_rows"),
+                    mismatchRows = it.optInt("mismatch_rows"),
+                    missingReferenceRows = it.optInt("missing_reference_rows"),
+                    missingOfficialRows = it.optInt("missing_official_rows"),
+                    sourceUrl = it.optString("source_url"),
+                    differences = differences
+                )
+            }
+            val backfillJson = json.optJSONArray("backfills") ?: JSONArray()
+            val backfills = buildList {
+                for (index in 0 until backfillJson.length()) {
+                    val item = backfillJson.optJSONObject(index) ?: continue
+                    add(HistoricalBackfillSummary(
+                        year = item.optInt("year"),
+                        status = item.optString("status"),
+                        rowsSeen = item.optLong("rows_seen"),
+                        rowsUpserted = item.optLong("rows_upserted"),
+                        completedAt = item.optString("completed_at").takeIf { it.isNotBlank() && it != "null" }
+                    ))
+                }
+            }
+
+            val derivedJson = json.optJSONArray("derived_backfills") ?: JSONArray()
+            val derivedBackfills = buildList {
+                for (index in 0 until derivedJson.length()) {
+                    val item = derivedJson.optJSONObject(index) ?: continue
+                    add(DerivedBackfillSummary(
+                        year = item.optInt("year"),
+                        datasetKind = item.optString("dataset_kind"),
+                        status = item.optString("status"),
+                        rowsSeen = item.optLong("rows_seen"),
+                        rowsUpserted = item.optLong("rows_upserted"),
+                        completedAt = item.optString("completed_at").takeIf { it.isNotBlank() && it != "null" }
+                    ))
+                }
+            }
+            return MarketIntegrityStatus(
+                exchange = json.optString("exchange", exchange.uppercase()),
+                status = json.optString("status", "UNKNOWN"),
+                latestReport = report,
+                backfills = backfills,
+                derivedBackfills = derivedBackfills
+            )
+        }
+    }
+
+
     fun fetchMacroResearch(session: QuantSession): MacroResearchSummary {
         val errors = mutableListOf<String>()
-        fun getJson(path: String): JSONObject? {
-            val request = Request.Builder()
-                .url("${session.baseUrl}$path")
+        fun requestJson(path: String, post: Boolean = false): JSONObject? {
+            val builder = Request.Builder()
+                .url("${session.baseUrl}${path}")
                 .header("Authorization", "Bearer ${session.accessToken}")
-                .get()
-                .build()
+            val request = if (post) {
+                builder.post("{}".toRequestBody("application/json".toMediaType())).build()
+            } else builder.get().build()
             return try {
                 masterHttp.newCall(request).execute().use { response ->
                     val body = response.body?.string().orEmpty()
                     if (!response.isSuccessful) {
-                        errors += "$path: ${apiError(body, response.code)}"
+                        errors += "${path}: ${apiError(body, response.code)}"
                         null
                     } else {
                         require(body.toByteArray(Charsets.UTF_8).size <= 2 * 1024 * 1024) {
@@ -336,31 +531,43 @@ object QuantApi {
                     }
                 }
             } catch (failure: Exception) {
-                errors += "$path: ${failure.message ?: "provider unavailable"}"
+                errors += "${path}: ${failure.message ?: "provider unavailable"}"
                 null
             }
         }
 
-        val worldBank = getJson("/api/v1/app/research/macro/world-bank")
-        val worldBankRows = worldBank?.optJSONArray("series") ?: JSONArray()
-        val series = buildList {
-            for (index in 0 until worldBankRows.length()) {
-                val item = worldBankRows.optJSONObject(index) ?: continue
-                val latest = item.optJSONArray("observations")
-                val latestRow = latest?.optJSONObject((latest.length() - 1).coerceAtLeast(0))
-                val rawValue = latestRow?.optDouble("value", Double.NaN) ?: Double.NaN
-                add(MacroSeriesObservation(
-                    key = item.optString("key"),
-                    label = item.optString("label"),
-                    frequency = item.optString("frequency"),
-                    unit = item.optString("unit"),
-                    latestPeriod = latestRow?.optString("period")?.takeIf { !it.isNullOrBlank() && it != "null" },
-                    latestValue = rawValue.takeIf { it.isFinite() },
-                    source = item.optString("source")
-                ))
+        val refresh = requestJson("/api/v1/app/research/macro/refresh", post = true)
+        val history = requestJson("/api/v1/app/research/macro/history?limit=2000")
+        val historyRows = history?.optJSONArray("observations") ?: JSONArray()
+        val latestBySeries = linkedMapOf<String, JSONObject>()
+        val fredSeries = linkedSetOf<String>()
+        for (index in 0 until historyRows.length()) {
+            val item = historyRows.optJSONObject(index) ?: continue
+            val provider = item.optString("provider")
+            val key = item.optString("series_key")
+            if (provider == "FRED") fredSeries += key
+            if (provider != "WORLD_BANK" && provider != "RBIH_DBIE_MIRROR") continue
+            if (key.isBlank()) continue
+            val groupKey = "$provider:$key"
+            val prior = latestBySeries[groupKey]
+            if (prior == null || item.optString("period") >= prior.optString("period")) {
+                latestBySeries[groupKey] = item
             }
         }
-        val amfi = getJson("/api/v1/app/research/macro/amfi-nav?limit=10")
+        val macroSeries = latestBySeries.values.map { item ->
+            val metadata = item.optJSONObject("metadata")
+            MacroSeriesObservation(
+                key = item.optString("series_key"),
+                label = item.optString("label"),
+                frequency = item.optString("frequency"),
+                unit = item.optString("unit"),
+                latestPeriod = item.optString("period").takeIf { it.isNotBlank() && it != "null" },
+                latestValue = item.optDouble("value", Double.NaN).takeIf { it.isFinite() },
+                source = item.optString("provider") + (metadata?.optString("source")?.let { " · $it" } ?: "")
+            )
+        }
+
+        val amfi = requestJson("/api/v1/app/research/macro/amfi-nav?limit=10")
         val navRows = amfi?.optJSONArray("observations") ?: JSONArray()
         val navs = buildList {
             for (index in 0 until navRows.length()) {
@@ -375,16 +582,30 @@ object QuantApi {
                 ))
             }
         }
-        val fred = getJson("/api/v1/app/research/macro/fred")
-        val fredRows = fred?.optJSONArray("series")
+        val providerRows = refresh?.optJSONArray("providers") ?: JSONArray()
+        val providerStatuses = buildList {
+            for (index in 0 until providerRows.length()) {
+                val item = providerRows.optJSONObject(index) ?: continue
+                val provider = item.optString("provider")
+                val status = item.optString("status")
+                val rows = item.optInt("rows_seen")
+                add(if (rows > 0) "$provider · $status · $rows observations" else "$provider · $status")
+                if (status == "FAILED") {
+                    errors += "$provider: ${item.optString("error", "refresh failed")}"
+                }
+            }
+        }
         return MacroResearchSummary(
-            retrievedAt = worldBank?.optString("retrieved_at")?.takeIf { it != "null" }.orEmpty(),
-            worldBankSeries = series,
+            retrievedAt = refresh?.optString("retrieved_at")?.takeIf { it != "null" }.orEmpty(),
+            worldBankSeries = macroSeries,
             amfiNavCount = amfi?.optInt("result_count") ?: 0,
             amfiExamples = navs,
-            fredConfigured = fred?.optBoolean("configured", false) ?: false,
-            fredSeriesCount = fredRows?.length() ?: 0,
-            providerErrors = errors
+            fredConfigured = fredSeries.isNotEmpty(),
+            fredSeriesCount = fredSeries.size,
+            providerErrors = errors,
+            persistedObservationCount = history?.optInt("count") ?: 0,
+            rbiDbieSeriesCount = latestBySeries.keys.count { it.startsWith("RBIH_DBIE_MIRROR:") },
+            providerStatuses = providerStatuses
         )
     }
 
