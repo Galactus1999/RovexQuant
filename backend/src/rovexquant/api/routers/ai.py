@@ -10,7 +10,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field, SecretStr, model_validator
 
-from rovexquant.ai.gateway import GatewayError, authorize_gateway, complete_chat, configured_providers
+from rovexquant.ai.gateway import GatewayError, authorize_gateway, complete_chat, configured_providers, configured_task_routes
 from rovexquant.ai.providers import SUPPORTED
 from rovexquant.market_data import tejhq_service
 from rovexquant.market_data.tejhq_service import TejHqError
@@ -33,8 +33,9 @@ class AIMessage(BaseModel):
 
 
 class AIChatRequest(BaseModel):
-    provider_id: str
-    model: str = Field(min_length=1, max_length=160)
+    provider_id: str | None = None
+    model: str | None = Field(default=None, min_length=1, max_length=160)
+    task_type: Literal["chat", "research", "macro_analysis", "filing_extraction", "claim_verification", "summarization"] = "chat"
     messages: list[AIMessage] = Field(min_length=1, max_length=32)
     credential_id: str | None = Field(default=None, min_length=1, max_length=80)
     fallback_providers: list[str] = Field(default_factory=list, max_length=3)
@@ -207,6 +208,18 @@ def app_ai_providers():
 
 
 
+@router.get(
+    "/api/v1/app/ai/task-routes",
+    dependencies=[Depends(require_app_session)],
+)
+def app_ai_task_routes():
+    """Return configured task-specific model routes without credential material."""
+    try:
+        return {"routes": configured_task_routes()}
+    except GatewayError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
 @router.put(
     "/api/v1/app/ai/providers/{provider_id}/credential",
     dependencies=[Depends(require_app_session), Depends(provider_credential_rate_limit)],
@@ -274,6 +287,7 @@ async def app_ai_chat(request: AIChatRequest):
             temperature=request.temperature,
             credential_id=request.credential_id,
             fallback_providers=request.fallback_providers,
+            task_type=request.task_type,
         )
     except GatewayError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
