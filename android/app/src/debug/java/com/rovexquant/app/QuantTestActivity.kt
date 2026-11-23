@@ -22,6 +22,7 @@ import com.rovexquant.app.data.model.MarketIngestionStatus
 import com.rovexquant.app.data.model.MacroResearchSummary
 import com.rovexquant.app.data.model.MacroSeriesObservation
 import com.rovexquant.app.data.model.AmfiNavObservation
+import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.QuantSession
@@ -172,6 +173,18 @@ class FakeQuantRepository(
             impactStatus = "HYPOTHESIS_REQUIRES_COMPANY_LEVEL_VERIFICATION"
         )),
         limitations = listOf("Global news discovery is not primary-source verification.")
+    )
+
+    override suspend fun fetchEventStudy(
+        session: QuantSession, symbol: String, eventDate: String, benchmarkSymbol: String?
+    ) = EventStudyResult(
+        exchange = "NSE", symbol = symbol, eventDate = eventDate, anchorDate = "2026-11-20",
+        firstPostEventDate = "2026-11-23", lastPostEventDate = "2026-11-23",
+        preEventReturn = 0.02, cumulativeReturn = 0.015,
+        marketAdjustedReturn = null, cumulativeAbnormalReturn = null,
+        benchmarkSymbol = benchmarkSymbol, benchmarkMatches = 0, postBarsUsed = 1,
+        method = "UNADJUSTED_CLOSE_TO_CLOSE_EVENT_WINDOW",
+        limitations = listOf("Deterministic test fixture; not live data.")
     )
 
     override suspend fun fetchMacroResearch(session: QuantSession) = MacroResearchSummary(
