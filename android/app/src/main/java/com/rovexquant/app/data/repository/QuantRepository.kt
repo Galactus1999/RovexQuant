@@ -5,6 +5,7 @@ import com.rovexquant.app.data.local.QuantSessionStore
 import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiProvider
+import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.EodMarketSnapshot
 import com.rovexquant.app.data.model.IntelligenceFeed
@@ -58,7 +59,7 @@ class QuantRepository(context: Context) : QuantDataRepository {
     override suspend fun fetchAiProviders(session: QuantSession): List<AiProvider> =
         withContext(Dispatchers.IO) { QuantApi.fetchAiProviders(session) }
 
-    override suspend fun fetchAiTaskRoutes(session: QuantSession): Set<String> =
+    override suspend fun fetchAiTaskRoutes(session: QuantSession): Map<String, AiTaskRoute> =
         withContext(Dispatchers.IO) { QuantApi.fetchAiTaskRoutes(session) }
 
     override suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) =
