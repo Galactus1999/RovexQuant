@@ -355,7 +355,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
         }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionHeading("Connected research tools", "NSE MCP.", "Discover permitted read-only exchange research tools and explicitly attach a selected result to an AI request.")
+                SectionHeading("Connected research tools", "Research MCP.", "Discover, enable and run permitted NSE and DalalOS research tools. Quota-consuming actions require explicit confirmation; attach selected results to AI only when you choose.")
                 NseMcpResearchPanel(session, repository) { context ->
                     chatInput = (context + "\n\n" + chatInput).take(10000)
                     chatError = null
