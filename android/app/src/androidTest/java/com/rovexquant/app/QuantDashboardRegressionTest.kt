@@ -99,6 +99,52 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithText("Deterministic EOD strategy fixture response.").assertIsDisplayed()
     }
 
+    @Test fun aiStudioTestsProviderAndAttachesLiveResearchToolResults() {
+        waitForDashboard()
+        composeRule.onNodeWithText("Scan").performClick()
+        composeRule.onNodeWithTag("scanner.list").performScrollToNode(hasText("Open AI data recovery"))
+        composeRule.onNodeWithText("Open AI data recovery").performClick()
+        composeRule.onNodeWithText("Quant Intelligence.").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.model"))
+        composeRule.onNodeWithTag("ai.model").performTextInput("test-model")
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasText("Open Groq API console / manage key"))
+        composeRule.onNodeWithText("Open Groq API console / manage key").assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.provider.test"))
+        composeRule.onNodeWithTag("ai.provider.test").assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.provider.test").performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("Connected · groq / test-model").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.tool.market"))
+        composeRule.onNodeWithTag("ai.tool.market").assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.tool.events"))
+        composeRule.onNodeWithTag("ai.tool.events").assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.tool.macro"))
+        composeRule.onNodeWithTag("ai.tool.macro").assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.tool.market"))
+        composeRule.onNodeWithTag("ai.tool.market").performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("NSE EOD snapshot attached", substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.chat.input"))
+        composeRule.onNodeWithTag("ai.chat.input").assertTextContains("NSE EOD SNAPSHOT")
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.brief.generate"))
+        composeRule.onNodeWithTag("ai.brief.generate").assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.brief.generate").performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("Deterministic AI fixture response.").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.brief.output"))
+        composeRule.onNodeWithTag("ai.brief.output").assertTextContains("Deterministic AI fixture response.")
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(
+            hasText("No machine-verifiable source references returned.")
+        )
+        composeRule.onNodeWithText("No machine-verifiable source references returned.", substring = true).assertIsDisplayed()
+    }
+
     @Test fun intelligenceCentreLoadsEventEvidenceAndSectorTransmission() {
         waitForDashboard()
         composeRule.onNodeWithText("Intel").performClick()
