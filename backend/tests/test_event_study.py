@@ -24,7 +24,8 @@ def test_event_study_uses_trading_bars_and_reports_non_causal_metrics():
     assert result["last_post_event_date"] == "2026-01-06"
     assert result["pre_event_bars_used"] == 2
     assert result["post_event_bars_used"] == 2
-    assert result["abnormal_return"] is None
+    assert result["market_adjusted_cumulative_return"] is None
+    assert result["cumulative_abnormal_return"] is None
     assert result["causal_inference"] is False
 
 
