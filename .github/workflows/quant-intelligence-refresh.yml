@@ -19,8 +19,8 @@ jobs:
     timeout-minutes: 20
     env:
       QUANT_ENV: production
-      QUANT_MARKET_DATABASE_URL: \${{ secrets.QUANT_MARKET_DATABASE_URL }}
-      QUANT_TOKEN_DATABASE_URL: \${{ secrets.QUANT_TOKEN_DATABASE_URL }}
+      QUANT_MARKET_DATABASE_URL: ${{ secrets.QUANT_MARKET_DATABASE_URL }}
+      QUANT_TOKEN_DATABASE_URL: ${{ secrets.QUANT_TOKEN_DATABASE_URL }}
     steps:
       - name: Checkout RovexQuant
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -40,14 +40,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -z "\${QUANT_MARKET_DATABASE_URL:-}" && -z "\${QUANT_TOKEN_DATABASE_URL:-}" ]]; then
+          if [[ -z "${QUANT_MARKET_DATABASE_URL:-}" && -z "${QUANT_TOKEN_DATABASE_URL:-}" ]]; then
             echo "::error::Configure QUANT_MARKET_DATABASE_URL or QUANT_TOKEN_DATABASE_URL."
             exit 1
           fi
       - name: Apply reviewed schema migrations
         working-directory: backend
         env:
-          QUANT_TOKEN_MIGRATION_DATABASE_URL: \${{ secrets.QUANT_MARKET_MIGRATION_DATABASE_URL || secrets.QUANT_TOKEN_MIGRATION_DATABASE_URL }}
+          QUANT_TOKEN_MIGRATION_DATABASE_URL: ${{ secrets.QUANT_MARKET_MIGRATION_DATABASE_URL || secrets.QUANT_TOKEN_MIGRATION_DATABASE_URL }}
         run: alembic -c alembic.ini upgrade head
       - name: Refresh intelligence archive
         working-directory: backend
