@@ -7,6 +7,7 @@ import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiDailyBar
 import com.rovexquant.app.data.model.AiProvider
+import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.EodMarketSnapshot
 import com.rovexquant.app.data.model.EodStockMove
@@ -105,8 +106,14 @@ class FakeQuantRepository(
     override suspend fun fetchAiProviders(session: QuantSession) =
         listOf(AiProvider("groq", true, listOf("default")))
 
+    override suspend fun fetchAiTaskRoutes(session: QuantSession): Map<String, AiTaskRoute> =
+        mapOf("research" to AiTaskRoute("groq", "fixture-research-model", listOf("openrouter")))
+
     override suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) = Unit
     override suspend fun deleteAiProviderCredential(session: QuantSession, providerId: String) = Unit
+    override suspend fun saveDalalOsApiKey(session: QuantSession, apiKey: String) = Unit
+    override suspend fun deleteDalalOsApiKey(session: QuantSession) = Unit
+    override suspend fun fetchDalalOsConfigured(session: QuantSession): Boolean = false
     override suspend fun saveUpstoxAnalyticsToken(session: QuantSession, token: String) = Unit
     override suspend fun fetchUpstoxConfigured(session: QuantSession): Boolean = false
     override suspend fun requestMarketIngestion(
@@ -231,24 +238,28 @@ class FakeQuantRepository(
 
     override suspend fun sendAiMessage(
         session: QuantSession,
-        providerId: String,
-        model: String,
+        providerId: String?,
+        model: String?,
         messages: List<AiChatMessage>,
         credentialId: String?,
-        fallbackProviders: List<String>
-    ) = AiCompletion(providerId, credentialId, model, "Deterministic AI fixture response.", false)
+        fallbackProviders: List<String>,
+        taskType: String,
+        maxTokens: Int
+    ) = AiCompletion(providerId ?: "task-router", credentialId, model ?: taskType, "Deterministic AI fixture response.", false)
 
     override suspend fun requestAiStrategyBrief(
         session: QuantSession,
-        providerId: String,
-        model: String,
+        providerId: String?,
+        model: String?,
         symbol: String,
         exchange: String,
         fromDate: String,
         toDate: String,
         strategyContext: String,
         credentialId: String?,
-        fallbackProviders: List<String>
+        fallbackProviders: List<String>,
+        automaticTaskRouting: Boolean,
+        maxTokens: Int
     ) = AiStrategyBrief(
         provider = "tejhq_eod",
         dataMode = "END_OF_DAY",
@@ -272,7 +283,7 @@ class FakeQuantRepository(
             trendContext = "CLOSE_ABOVE_SMA20_AND_SMA50"
         ),
         bars = listOf(AiDailyBar(toDate, 2480.0, 2520.0, 2470.0, 2500.0, 100000)),
-        ai = AiCompletion(providerId, credentialId, model, "Deterministic EOD strategy fixture response.", false),
+        ai = AiCompletion(providerId ?: "fixture-provider", credentialId ?: "fixture-credential", model ?: "fixture-model", "Deterministic EOD strategy fixture response.", false),
         dataRights = "Private personal research only.",
         limitations = listOf("EOD daily bars only.")
     )
@@ -281,7 +292,8 @@ class FakeQuantRepository(
         session: QuantSession,
         server: String,
         tool: String,
-        argumentsJson: String
+        argumentsJson: String,
+        confirmNonReadOnly: Boolean
     ) = NseMcpResult("test", "TEST", null, null, JSONObject().toString())
 
     override fun createMarketStream(
