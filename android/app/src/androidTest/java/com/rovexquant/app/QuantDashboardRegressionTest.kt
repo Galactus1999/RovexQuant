@@ -81,7 +81,7 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithText("Scan").performClick()
         composeRule.onNodeWithTag("scanner.list").performScrollToNode(hasText("Open AI data recovery"))
         composeRule.onNodeWithText("Open AI data recovery").performClick()
-        composeRule.onNodeWithText("Quant AI.").assertIsDisplayed()
+        composeRule.onNodeWithText("Quant Intelligence.").assertIsDisplayed()
         composeRule.onNodeWithText("Groq", substring = true).assertIsDisplayed()
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.model"))
         composeRule.onNodeWithTag("ai.model").performTextInput("test-model")
