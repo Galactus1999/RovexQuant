@@ -23,7 +23,7 @@ data class MacroEventResearchUiState(
     val integrityError: String? = null,
     val symbol: String = "RELIANCE",
     val eventDate: String = "",
-    val benchmarkSymbol: String = "NIFTY 50",
+    val benchmarkSymbol: String = "NIFTYBEES",
     val eventLoading: Boolean = false,
     val eventStudy: EventStudyResult? = null,
     val eventError: String? = null
