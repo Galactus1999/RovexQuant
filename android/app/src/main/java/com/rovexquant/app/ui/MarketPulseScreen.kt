@@ -120,6 +120,7 @@ fun MarketPulseScreen(
             if (activeSession != null) {
                 isRefreshing = true
                 onRefreshEodSnapshot()
+                onReconnect()
             } else {
                 isRefreshing = false
             }
