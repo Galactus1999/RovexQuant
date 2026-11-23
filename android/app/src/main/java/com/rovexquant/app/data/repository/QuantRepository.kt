@@ -14,6 +14,7 @@ import com.rovexquant.app.data.model.MarketTick
 import com.rovexquant.app.data.model.MarketIngestionStatus
 import com.rovexquant.app.data.model.MacroResearchSummary
 import com.rovexquant.app.data.model.MarketIntegrityStatus
+import com.rovexquant.app.data.model.MarketDataHealth
 import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
@@ -98,6 +99,9 @@ class QuantRepository(context: Context) : QuantDataRepository {
 
     override suspend fun fetchMarketIntegrityStatus(session: QuantSession, exchange: String): MarketIntegrityStatus =
         withContext(Dispatchers.IO) { QuantApi.fetchMarketIntegrityStatus(session, exchange) }
+
+    override suspend fun fetchMarketDataHealth(session: QuantSession, exchange: String): MarketDataHealth =
+        withContext(Dispatchers.IO) { QuantApi.fetchMarketDataHealth(session, exchange) }
 
     override suspend fun sendAiMessage(
         session: QuantSession,

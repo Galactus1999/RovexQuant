@@ -20,6 +20,8 @@ import com.rovexquant.app.data.model.SectorImpact
 import com.rovexquant.app.data.model.MarketTick
 import com.rovexquant.app.data.model.MarketIngestionStatus
 import com.rovexquant.app.data.model.MarketIntegrityStatus
+import com.rovexquant.app.data.model.MarketDataHealth
+import com.rovexquant.app.data.model.DataHealthItem
 import com.rovexquant.app.data.model.MacroResearchSummary
 import com.rovexquant.app.data.model.MacroSeriesObservation
 import com.rovexquant.app.data.model.AmfiNavObservation
@@ -210,6 +212,20 @@ class FakeQuantRepository(
             latestReport = null,
             backfills = emptyList(),
             derivedBackfills = emptyList()
+        )
+
+    override suspend fun fetchMarketDataHealth(session: QuantSession, exchange: String) =
+        MarketDataHealth(
+            exchange = exchange.uppercase(),
+            overallStatus = "PARTIAL",
+            generatedAt = "fixture",
+            marketDataMode = "END_OF_DAY_ONLY",
+            eod = DataHealthItem("EOD", "NO_DATA", null, null, "UNKNOWN", 0, "No fixture data"),
+            macroProviders = emptyList(),
+            intelligence = DataHealthItem("Intelligence", "NOT_RUN", null, null, "UNKNOWN", 0, null),
+            derivedBackfills = emptyList(),
+            reconciliation = DataHealthItem("Reconciliation", "NOT_RUN", null, null, "UNKNOWN", 0, null),
+            notes = emptyList()
         )
 
     override suspend fun sendAiMessage(

@@ -63,6 +63,66 @@ fun IntelligenceCentreScreen(session: QuantSession, repository: QuantDataReposit
             )
         }
         item {
+            TerminalCard(Modifier.testTag("market.data-health")) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Eyebrow("Market data pipeline")
+                    StatusPill(
+                        state.dataHealth?.overallStatus ?: if (state.dataHealthLoading) "CHECKING" else "UNAVAILABLE",
+                        when (state.dataHealth?.overallStatus) {
+                            "HEALTHY" -> Mint
+                            "DEGRADED" -> Coral
+                            else -> Gold
+                        }
+                    )
+                }
+                Text(
+                    "NSE · ${state.dataHealth?.marketDataMode ?: "END_OF_DAY_ONLY"}",
+                    color = Muted, fontSize = 9.sp
+                )
+                state.dataHealth?.let { health ->
+                    val eod = health.eod
+                    Text(
+                        "EOD: ${eod.status} · ${eod.records ?: 0} rows · ${eod.freshness} · ${eod.updatedAt ?: "no successful import"}",
+                        color = MaterialTheme.colorScheme.onBackground, fontSize = 10.sp, lineHeight = 15.sp
+                    )
+                    health.macroProviders.forEach { item ->
+                        Text(
+                            "Macro · ${item.name}: ${item.status} · ${item.records ?: 0} rows · ${item.freshness}",
+                            color = if (item.status == "FAILED") Coral else Muted, fontSize = 9.sp
+                        )
+                    }
+                    Text(
+                        "Intelligence: ${health.intelligence.status} · ${health.intelligence.records ?: 0} events · ${health.intelligence.freshness}",
+                        color = if (health.intelligence.status == "FAILED") Coral else Muted, fontSize = 9.sp
+                    )
+                    health.derivedBackfills.forEach { item ->
+                        Text(
+                            "History · ${item.name}: ${item.status} · ${item.records ?: 0} rows",
+                            color = if (item.status == "FAILED") Coral else Muted, fontSize = 9.sp
+                        )
+                    }
+                    Text(
+                        "Official reconciliation: ${health.reconciliation.status} · ${health.reconciliation.detail ?: "No report yet"}",
+                        color = if (health.reconciliation.status == "MISMATCHED") Coral else Muted,
+                        fontSize = 9.sp, lineHeight = 14.sp
+                    )
+                }
+                state.dataHealthError?.let { EmptyPanel("Data health unavailable", it, Coral) }
+                Button(
+                    onClick = model::refreshHealth,
+                    enabled = !state.dataHealthLoading,
+                    modifier = Modifier.fillMaxWidth().testTag("market.data-health.refresh")
+                ) {
+                    Text(if (state.dataHealthLoading) "Checking data sources…" else "Refresh data health")
+                }
+                Text(
+                    "EOD and delayed research data only. A successful fetch is not the same as official-source reconciliation.",
+                    color = Muted, fontSize = 9.sp, lineHeight = 14.sp
+                )
+            }
+        }
+
+        item {
             TerminalCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Eyebrow("Global event discovery")

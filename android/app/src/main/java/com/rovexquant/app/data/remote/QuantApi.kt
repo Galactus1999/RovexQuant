@@ -19,6 +19,8 @@ import com.rovexquant.app.data.model.MarketIngestionStatus
 import com.rovexquant.app.data.model.MacroResearchSummary
 import com.rovexquant.app.data.model.MarketIntegrityDifference
 import com.rovexquant.app.data.model.MarketIntegrityStatus
+import com.rovexquant.app.data.model.DataHealthItem
+import com.rovexquant.app.data.model.MarketDataHealth
 import com.rovexquant.app.data.model.MarketReconciliationReport
 import com.rovexquant.app.data.model.HistoricalBackfillSummary
 import com.rovexquant.app.data.model.DerivedBackfillSummary
@@ -283,6 +285,62 @@ object QuantApi {
                 archiveStatus = json.optString("archive_status", "UNAVAILABLE"),
                 issuerMasterStatus = json.optString("issuer_master_status", "UNAVAILABLE"),
                 mappedEventCount = json.optInt("mapped_event_count")
+            )
+        }
+    }
+
+
+    fun fetchMarketDataHealth(session: QuantSession, exchange: String = "NSE"): MarketDataHealth {
+        require(exchange.uppercase() in setOf("NSE", "BSE")) { "Exchange must be NSE or BSE." }
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/market/data-health?exchange=${exchange.uppercase()}")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(body, response.code))
+            require(body.toByteArray(Charsets.UTF_8).size <= 512 * 1024) {
+                "Market data health response exceeds the 512 KB safety limit."
+            }
+            val json = JSONObject(body)
+            fun parseItem(item: JSONObject?, fallbackName: String): DataHealthItem {
+                val value = item ?: JSONObject()
+                return DataHealthItem(
+                    name = value.optString("name", fallbackName),
+                    status = value.optString("status", "NOT_RUN"),
+                    updatedAt = value.optString("updated_at").takeIf { it.isNotBlank() && it != "null" },
+                    ageHours = value.optDouble("age_hours", Double.NaN).takeIf { it.isFinite() },
+                    freshness = value.optString("freshness", "UNKNOWN"),
+                    records = if (value.has("records") && !value.isNull("records")) value.optLong("records") else null,
+                    detail = value.optString("detail").takeIf { it.isNotBlank() && it != "null" }
+                )
+            }
+            fun parseItems(key: String): List<DataHealthItem> {
+                val array = json.optJSONArray(key) ?: JSONArray()
+                return buildList {
+                    for (index in 0 until array.length()) {
+                        add(parseItem(array.optJSONObject(index), "$key ${index + 1}"))
+                    }
+                }
+            }
+            val notesJson = json.optJSONArray("notes") ?: JSONArray()
+            val notes = buildList {
+                for (index in 0 until notesJson.length()) {
+                    notesJson.optString(index).takeIf { it.isNotBlank() }?.let(::add)
+                }
+            }
+            return MarketDataHealth(
+                exchange = json.optString("exchange", exchange.uppercase()),
+                overallStatus = json.optString("overall_status", "UNKNOWN"),
+                generatedAt = json.optString("generated_at"),
+                marketDataMode = json.optString("market_data_mode", "END_OF_DAY_ONLY"),
+                eod = parseItem(json.optJSONObject("eod"), "EOD"),
+                macroProviders = parseItems("macro_providers"),
+                intelligence = parseItem(json.optJSONObject("intelligence"), "Intelligence"),
+                derivedBackfills = parseItems("derived_backfills"),
+                reconciliation = parseItem(json.optJSONObject("reconciliation"), "Reconciliation"),
+                notes = notes
             )
         }
     }
