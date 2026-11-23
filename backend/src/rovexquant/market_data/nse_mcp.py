@@ -374,6 +374,7 @@ def provider_status() -> list[dict[str, Any]]:
             "usage": "Authenticated owner's private educational research only",
         }
         for server, endpoint in NSE_MCP_ENDPOINTS.items()
+        if server != "dalalos"
     ]
 
 
