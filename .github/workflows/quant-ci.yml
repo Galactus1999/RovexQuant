@@ -633,8 +633,8 @@ jobs:
           alembic -c alembic.ini current --verbose
 
   quant-regression:
-    name: Quant Optional Unit & Backend Tests
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_regression == true }}
+    name: Quant Unit & Backend Regression
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_regression == true }}
     runs-on: ubuntu-latest
     timeout-minutes: 55
     steps:
