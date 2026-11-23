@@ -807,7 +807,8 @@ object QuantApi {
         toDate: String,
         strategyContext: String,
         credentialId: String?,
-        fallbackProviders: List<String>
+        fallbackProviders: List<String>,
+        automaticTaskRouting: Boolean = false
     ): AiStrategyBrief {
         val body = JSONObject()
             .put("symbol", symbol.trim().uppercase())
@@ -815,6 +816,7 @@ object QuantApi {
             .put("from_date", fromDate)
             .put("to_date", toDate)
             .put("strategy_context", strategyContext)
+            .put("automatic_task_routing", automaticTaskRouting)
         if (!providerId.isNullOrBlank()) body.put("provider_id", providerId)
         if (!model.isNullOrBlank()) body.put("model", model)
         if (!credentialId.isNullOrBlank()) body.put("credential_id", credentialId)
