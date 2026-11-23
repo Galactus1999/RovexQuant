@@ -428,6 +428,38 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
         else:
             ai_error = "Data was recovered. Select a provider/model or enable the configured research task route."
 
+        research_run = {"archive_status": "NOT_CREATED"}
+        if completion is not None:
+            try:
+                research_run = {
+                    "run_id": persist_ai_research_run(
+                        task_type="research",
+                        provider_id=completion["provider_id"],
+                        model=completion["model"],
+                        credential_id=completion.get("credential_id"),
+                        request_payload={
+                            "system_prompt": system_prompt,
+                            "evidence": user_evidence,
+                        },
+                        response_payload={"content": completion["content"]},
+                        usage=completion.get("usage"),
+                        cost_usd=completion.get("cost_usd"),
+                        cost_status=completion.get("cost_status", "NOT_TRACKED"),
+                        fallback_used=completion.get("fallback_used", False),
+                        source_refs=[{
+                            "provider": provider_id,
+                            "data_mode": "END_OF_DAY_ADJUSTED",
+                            "exchange": request.exchange,
+                            "symbol": request.symbol.upper(),
+                            "from": request.from_date.isoformat(),
+                            "to": request.to_date.isoformat(),
+                        }],
+                    ),
+                    "archive_status": "PERSISTED",
+                }
+            except EodStoreError as archive_error:
+                research_run = {"archive_status": "UNAVAILABLE", "error": str(archive_error)}
+
         return {
             "provider": provider_id,
             "data_mode": "END_OF_DAY_ADJUSTED",
@@ -454,6 +486,7 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
             ],
             "ai": completion,
             "ai_error": ai_error,
+            "research_run": research_run,
             "data_rights": (
                 "Private personal research only. Do not redistribute raw data or expose it to other users. "
                 "Exchange terms may independently apply; this endpoint does not grant exchange display rights."
