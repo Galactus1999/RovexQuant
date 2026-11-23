@@ -41,7 +41,7 @@ private fun auditResearchCitations(output: String, evidence: String): CitationAu
     Regex("""macroKey=([^;\s]+);[^\n]*?period=([^;\s]+)""").findAll(evidence).forEach {
         allowedRefs += "macro:${it.groupValues[1]}:${it.groupValues[2]}"
     }
-    Regex("""["']?news_id["']?\\s*[:=]\\s*["']?([^"'\\s,}]+)""")
+    Regex("""["']?news_id["']?\s*[:=]\s*["']?([^"'\s,}]+)""")
         .findAll(evidence)
         .forEach { allowedRefs += "filing:${it.groupValues[1]}" }
 
