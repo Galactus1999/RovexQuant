@@ -134,21 +134,26 @@ def analyze_articles(articles: list[dict[str, Any]]) -> list[dict[str, Any]]:
         for item in group:
             domain = str(item.get("domain") or "")
             url = str(item.get("url") or "")
-            key = domain.casefold() or url
+            key = url or f"{domain}:{item.get('title', '')}"
             if key and key not in unique_sources:
                 unique_sources[key] = {
-                    "domain": domain,
-                    "url": url,
+                    "domain": domain, "url": url,
+                    "title": str(item.get("title") or "")[:500],
+                    "summary": str(item.get("summary") or "")[:1000],
                     "seen_at": str(item.get("seen_at") or ""),
                     "language": str(item.get("language") or ""),
                     "source_country": str(item.get("source_country") or ""),
+                    "provider": str(item.get("provider") or "GDELT"),
+                    "evidence_class": str(item.get("evidence_class") or "GLOBAL_NEWS_DISCOVERY"),
                 }
         rule_hits = sum(1 for phrase in dict(_EVENT_RULES).get(category, ()) if phrase in str(representative["title"]).casefold())
-        confidence = min(0.80, 0.45 + (0.07 * min(rule_hits, 3)) + (0.05 if len(unique_sources) > 1 else 0.0))
+        independent_domains = {source["domain"].casefold() for source in unique_sources.values() if source["domain"]}
+        confidence = min(0.80, 0.45 + (0.07 * min(rule_hits, 3)) + (0.05 if len(independent_domains) > 1 else 0.0))
         event_key = f"{day}:{normalized}".encode("utf-8")
-        event_id = hashlib.sha256(event_key).hexdigest()[:20]
+        event_id = hashlib.sha256(event_key).hexdigest()
         events.append({
             "event_id": event_id,
+            "event_key": event_id,
             "headline": str(representative["title"]),
             "event_category": category,
             "event_tags": tags,
