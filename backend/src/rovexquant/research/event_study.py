@@ -65,8 +65,13 @@ def calculate_event_window(
         "market_adjusted_cumulative_return": None,
         "cumulative_abnormal_return": None,
         "benchmark_observations_matched": 0,
+        "benchmark_price_basis": None,
     }
-    if benchmark_bars:
+    benchmark_fully_adjusted = bool(benchmark_bars) and all(
+        bar.get("price_basis") == "CORPORATE_ACTION_ADJUSTED" for bar in benchmark_bars
+    )
+    benchmark_basis_compatible = bool(benchmark_bars) and (fully_adjusted == benchmark_fully_adjusted)
+    if benchmark_basis_compatible:
         benchmark_ordered = sorted(
             (bar for bar in benchmark_bars
              if isinstance(bar.get("date"), str)
@@ -98,6 +103,7 @@ def calculate_event_window(
                     "market_adjusted_cumulative_return": asset_return - benchmark_return,
                     "cumulative_abnormal_return": sum(daily_abnormal),
                     "benchmark_observations_matched": len(matched),
+                    "benchmark_price_basis": "CORPORATE_ACTION_ADJUSTED" if benchmark_fully_adjusted else "RAW_CLOSE",
                 }
 
     return {
@@ -128,6 +134,7 @@ def calculate_event_window(
         "limitations": [
             "Market-adjusted return is descriptive and does not establish causation.",
             "Benchmark observations must match the asset's trading dates; unmatched dates are excluded.",
+            "Asset and benchmark must use the same adjustment basis; mismatched bases disable benchmark-relative output.",
             "Corporate-action adjustment follows the source dataset methodology; demergers, rights, buybacks and mergers are not scaled.",
             "If adjusted bars are unavailable for any asset observation, raw close fallback is used.",
             "Corporate actions and market-wide confounders can affect the observed move.",
