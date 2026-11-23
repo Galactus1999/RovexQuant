@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from alembic import op
 
-revision = "0004_historical_backfill_reconciliation"
+revision = "0004_hist_recon"
 down_revision = "0003_market_ingestion_queue"
 branch_labels = None
 depends_on = None
