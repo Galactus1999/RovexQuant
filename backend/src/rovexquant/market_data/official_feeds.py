@@ -80,7 +80,7 @@ async def fetch_official_updates(*, query: str = "", limit: int = 30) -> dict[st
                             link = child.attrib.get("href", "")
                             break
                 parsed = urlparse(link)
-                if not title or parsed.scheme != "https" or parsed.hostname not in domains:
+                if not title or parsed.scheme != "https" or not any(parsed.hostname == domain or parsed.hostname.endswith("." + domain) for domain in domains):
                     continue
                 summary = _text(item, "description") or _text(item, "summary")
                 published = _text(item, "pubDate") or _text(item, "published") or _text(item, "updated")
