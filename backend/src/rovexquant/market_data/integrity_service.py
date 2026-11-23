@@ -49,6 +49,17 @@ def latest_data_integrity(exchange: str = "NSE") -> dict[str, Any]:
                 """,
                 (market,),
             ).fetchall()
+            derived_backfills = connection.execute(
+                """
+                SELECT year, dataset_kind, status, rows_seen, rows_upserted,
+                       started_at, completed_at, error_message
+                FROM market_derived_backfill_runs
+                WHERE exchange=%s
+                ORDER BY year DESC, dataset_kind, started_at DESC
+                LIMIT 20
+                """,
+                (market,),
+            ).fetchall()
     except EodStoreError:
         raise
     except psycopg.Error as error:
@@ -66,6 +77,13 @@ def latest_data_integrity(exchange: str = "NSE") -> dict[str, Any]:
                 "completed_at": item[7].isoformat() if item[7] else None,
                 "error_message": item[8],
             } for item in backfills],
+            "derived_backfills": [{
+                "year": item[0], "dataset_kind": item[1], "status": item[2],
+                "rows_seen": item[3], "rows_upserted": item[4],
+                "started_at": item[5].isoformat(),
+                "completed_at": item[6].isoformat() if item[6] else None,
+                "error_message": item[7],
+            } for item in derived_backfills],
         }
 
     return {
@@ -92,4 +110,11 @@ def latest_data_integrity(exchange: str = "NSE") -> dict[str, Any]:
             "completed_at": item[7].isoformat() if item[7] else None,
             "error_message": item[8],
         } for item in backfills],
+        "derived_backfills": [{
+            "year": item[0], "dataset_kind": item[1], "status": item[2],
+            "rows_seen": item[3], "rows_upserted": item[4],
+            "started_at": item[5].isoformat(),
+            "completed_at": item[6].isoformat() if item[6] else None,
+            "error_message": item[7],
+        } for item in derived_backfills],
     }
