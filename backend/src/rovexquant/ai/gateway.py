@@ -117,25 +117,30 @@ def estimate_completion_cost_usd(
     ):
         return None, "INVALID_PROVIDER_USAGE"
     try:
-        from litellm import completion_cost
+        # Vendored, version-pinned excerpt from LiteLLM Core's model price map.
+        # Keep unknown models unpriced; never infer a rate from a similar model.
+        from importlib.resources import files
 
-        response = {
-            "model": model,
-            "usage": {
-                "prompt_tokens": int(prompt_tokens),
-                "completion_tokens": int(completion_tokens),
-                "total_tokens": int(usage.get("total_tokens", prompt_tokens + completion_tokens)),
-            },
-        }
-        amount = completion_cost(
-            completion_response=response,
-            model=model,
-            custom_llm_provider=provider_id,
-        )
-        if not isinstance(amount, (int, float)) or not math.isfinite(float(amount)) or amount < 0:
+        pricing_path = files("rovexquant.ai").joinpath("data/litellm_model_pricing_v1_110_2.json")
+        pricing_map = json.loads(pricing_path.read_text(encoding="utf-8"))
+        model_key = model.removeprefix(f"{provider_id}/").strip()
+        model_pricing = pricing_map.get("models", {}).get(model_key)
+        if not isinstance(model_pricing, dict) or model_pricing.get("litellm_provider") != provider_id:
             return None, "UNKNOWN_MODEL_PRICING"
-        return round(float(amount), 8), "ESTIMATED_FROM_LITELLM_CORE_1_110_2"
-    except Exception:
+        input_rate = model_pricing.get("input_cost_per_token")
+        output_rate = model_pricing.get("output_cost_per_token")
+        if (
+            not isinstance(input_rate, (int, float))
+            or not isinstance(output_rate, (int, float))
+            or not math.isfinite(float(input_rate))
+            or not math.isfinite(float(output_rate))
+            or input_rate < 0
+            or output_rate < 0
+        ):
+            return None, "UNKNOWN_MODEL_PRICING"
+        amount = int(prompt_tokens) * float(input_rate) + int(completion_tokens) * float(output_rate)
+        return round(amount, 8), "ESTIMATED_FROM_LITELLM_CORE_1_110_2"
+    except (OSError, ValueError, TypeError):
         return None, "UNKNOWN_MODEL_PRICING"
 
 
