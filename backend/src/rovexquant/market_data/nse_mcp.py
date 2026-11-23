@@ -24,6 +24,7 @@ _DALALOS_CAPABILITIES_PATH = Path(__file__).with_name("data") / "dalalos_capabil
 _PROTOCOL_VERSION = "2025-03-26"
 _TOOL_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
 _BLOCKED_TOOL_PARTS = ("trade", "order", "execute", "cancel", "modify", "place", "submit", "write", "delete")
+_DALALOS_DISABLED_TOOLS = {"add_to_watchlist", "remove_from_watchlist"}
 
 
 class NseMcpError(Exception):
@@ -241,6 +242,8 @@ class NseMcpClient:
             capability = _dalalos_capability(name)
             if capability is None or capability.get("deprecated") is True:
                 raise NseMcpError("DalalOS tool is not in the imported, current capability allowlist", 403)
+            if name in _DALALOS_DISABLED_TOOLS:
+                raise NseMcpError("DalalOS watchlist write tools are disabled", 403)
             if capability.get("destructive") is True:
                 raise NseMcpError("Destructive DalalOS tools are disabled", 403)
             read_only = capability.get("read_only") is True
@@ -333,7 +336,7 @@ def safe_tool_catalog(
         annotations = tool.get("annotations")
         if server == "dalalos":
             capability = capabilities.get(name)
-            if capability is None or capability.get("deprecated") is True:
+            if capability is None or capability.get("deprecated") is True or name in _DALALOS_DISABLED_TOOLS:
                 continue
             destructive = capability.get("destructive") is True
             read_only = capability.get("read_only") is True
