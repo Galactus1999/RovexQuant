@@ -91,6 +91,9 @@ fun MarketPulseScreen(
     var tokenConfigured by remember { mutableStateOf<Boolean?>(null) }
     var showTokenForm by remember { mutableStateOf(true) }
     var isRefreshing by remember { mutableStateOf(false) }
+    var showEodMovers by remember { mutableStateOf(false) }
+    var showAllSectors by remember { mutableStateOf(false) }
+    var showAllEquities by remember { mutableStateOf(false) }
     var freshnessClock by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     LaunchedEffect(ticks) {
@@ -194,17 +197,25 @@ fun MarketPulseScreen(
                         "${eodSnapshot.totalRows} source rows · ${eodSnapshot.equitySeriesRows} EQ-series breadth rows · EOD only",
                         color = Muted, fontSize = 9.sp
                     )
-                    if (eodSnapshot.topGainers.isNotEmpty()) {
-                        Text("TOP GAINERS", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                        eodSnapshot.topGainers.take(5).forEach { EodStockMoveRow(it, positive = true) }
-                    }
-                    if (eodSnapshot.topLosers.isNotEmpty()) {
-                        Text("TOP LOSERS", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                        eodSnapshot.topLosers.take(5).forEach { EodStockMoveRow(it, positive = false) }
-                    }
-                    if (eodSnapshot.mostActiveByVolume.isNotEmpty()) {
-                        Text("MOST ACTIVE BY VOLUME", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                        eodSnapshot.mostActiveByVolume.take(5).forEach { EodStockMoveRow(it, positive = null) }
+                    val moverCount = eodSnapshot.topGainers.size + eodSnapshot.topLosers.size + eodSnapshot.mostActiveByVolume.size
+                    if (moverCount > 0) {
+                        androidx.compose.material3.TextButton(onClick = { showEodMovers = !showEodMovers }) {
+                            Text(if (showEodMovers) "Hide market movers" else "Show market movers")
+                        }
+                        if (showEodMovers) {
+                            if (eodSnapshot.topGainers.isNotEmpty()) {
+                                Text("TOP GAINERS", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                eodSnapshot.topGainers.take(5).forEach { EodStockMoveRow(it, positive = true) }
+                            }
+                            if (eodSnapshot.topLosers.isNotEmpty()) {
+                                Text("TOP LOSERS", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                eodSnapshot.topLosers.take(5).forEach { EodStockMoveRow(it, positive = false) }
+                            }
+                            if (eodSnapshot.mostActiveByVolume.isNotEmpty()) {
+                                Text("MOST ACTIVE BY VOLUME", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                eodSnapshot.mostActiveByVolume.take(5).forEach { EodStockMoveRow(it, positive = null) }
+                            }
+                        }
                     }
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -448,7 +459,7 @@ fun MarketPulseScreen(
                 )
             }
         }
-        items(rankedSectors, key = { it.benchmark }) { sector ->
+        items(rankedSectors.take(if (showAllSectors) rankedSectors.size else 4), key = { it.benchmark }) { sector ->
             val instrumentKey = indexKeys[sector.benchmark]
             val quote = instrumentKey?.let { ticks[it] }
             TerminalCard {
@@ -478,6 +489,11 @@ fun MarketPulseScreen(
             }
         }
         item {
+            androidx.compose.material3.TextButton(onClick = { showAllSectors = !showAllSectors }, modifier = Modifier.fillMaxWidth()) {
+                Text(if (showAllSectors) "Show fewer sectors" else "View all sector benchmarks")
+            }
+        }
+        item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     "NSE listed equities · ${equityInstruments.size} instruments",
@@ -503,7 +519,7 @@ fun MarketPulseScreen(
         if (equityInstruments.isEmpty()) {
             item { EmptyPanel("NSE equity universe unavailable", "Check the official instrument master and backend connectivity. Index streaming can still operate independently.") }
         }
-        items(visibleEquities, key = { it.instrumentKey }) { instrument ->
+        items(visibleEquities.take(if (showAllEquities || equitySearch.isNotBlank()) 100 else 12), key = { it.instrumentKey }) { instrument ->
             val quote = ticks[instrument.instrumentKey]
             TerminalCard {
                 Row(
@@ -532,7 +548,14 @@ fun MarketPulseScreen(
                 }
             }
         }
-        item { EmptyPanel("Data integrity is enforced", "Stale, incomplete, delayed-without-permission or disconnected data will be visibly flagged and blocked from generating signals.") }
+        if (visibleEquities.size > 12 && equitySearch.isBlank()) {
+            item {
+                androidx.compose.material3.TextButton(onClick = { showAllEquities = !showAllEquities }, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (showAllEquities) "Show fewer instruments" else "Load more instruments")
+                }
+            }
+        }
+        item { Text("Only verified, fresh ticks are eligible for signals.", color = Muted, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 4.dp)) }
         }
     }
 }
