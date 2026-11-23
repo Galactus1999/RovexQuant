@@ -2,6 +2,14 @@ from rovexquant.intelligence.archive import _canonical_url, map_issuer_candidate
 from rovexquant.intelligence.analysis import analyze_articles
 
 
+def _article(title: str, domain: str, url: str) -> dict[str, str]:
+    return {
+        "title": title, "domain": domain, "url": url,
+        "seen_at": "20261122T090000Z", "language": "English",
+        "source_country": "India",
+    }
+
+
 def test_event_fingerprint_is_full_sha256_and_sources_are_preserved():
     event = analyze_articles([
         _article("RBI announces policy rate cut", "rbi.org.in", "https://rbi.org.in/a"),

@@ -10,6 +10,7 @@ import com.rovexquant.app.data.model.EodMarketSnapshot
 import com.rovexquant.app.data.model.EodStockMove
 import com.rovexquant.app.data.model.IntelligenceFeed
 import com.rovexquant.app.data.model.IntelligenceSource
+import com.rovexquant.app.data.model.IssuerMapping
 import com.rovexquant.app.data.model.MarketEvent
 import com.rovexquant.app.data.model.SectorImpact
 import com.rovexquant.app.data.model.MarketIndexInstrument

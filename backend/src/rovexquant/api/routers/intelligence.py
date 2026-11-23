@@ -10,7 +10,7 @@ from rovexquant.intelligence.archive import (
     latest_intelligence_runs,
 )
 from rovexquant.market_data.eod_store import EodStoreError
-from rovexquant.market_data.gdelt_service import discover_articles
+from rovexquant.market_data import gdelt_service
 from rovexquant.market_data.instruments import get_nse_equity_instruments
 from rovexquant.market_data.official_feeds import fetch_official_updates
 from rovexquant.security.dependencies import require_app_session
@@ -25,7 +25,7 @@ async def _refresh(query: str, timespan: Literal["1d", "3d", "7d"], limit: int):
     try:
         return await discover_and_archive(
             query, timespan=timespan, limit=limit,
-            gdelt_fetcher=discover_articles,
+            gdelt_fetcher=gdelt_service.discover_articles,
             official_fetcher=fetch_official_updates,
             instrument_fetcher=get_nse_equity_instruments,
         )
