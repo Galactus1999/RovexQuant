@@ -68,7 +68,7 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
         }.getOrDefault(emptySet())
     }
     fun setEnabledTools(next: Set<String>) {
-        enabledToolsJson = JSONArray().apply { next.sorted().forEach(::put) }.toString()
+        enabledToolsJson = JSONArray().apply { next.sorted().forEach { put(it) } }.toString()
     }
     var showToolRegistry by remember { mutableStateOf(false) }
 
