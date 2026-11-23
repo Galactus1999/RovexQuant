@@ -69,6 +69,8 @@ async def invoke_tool(
     else:
         client_context = NseMcpClient(server)
     async with client_context as client:
-        return await client.call_tool(
-            tool, arguments, confirm_non_read_only=confirm_non_read_only
-        )
+        if server == "dalalos":
+            return await client.call_tool(
+                tool, arguments, confirm_non_read_only=confirm_non_read_only
+            )
+        return await client.call_tool(tool, arguments)
