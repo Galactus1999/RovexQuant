@@ -104,6 +104,9 @@ class FakeQuantRepository(
 
     override suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) = Unit
     override suspend fun deleteAiProviderCredential(session: QuantSession, providerId: String) = Unit
+    override suspend fun saveDalalOsApiKey(session: QuantSession, apiKey: String) = Unit
+    override suspend fun deleteDalalOsApiKey(session: QuantSession) = Unit
+    override suspend fun fetchDalalOsConfigured(session: QuantSession): Boolean = false
     override suspend fun saveUpstoxAnalyticsToken(session: QuantSession, token: String) = Unit
     override suspend fun fetchUpstoxConfigured(session: QuantSession): Boolean = false
     override suspend fun requestMarketIngestion(
