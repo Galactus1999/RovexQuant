@@ -309,6 +309,7 @@ object QuantApi {
                 benchmarkMatches = json.optInt("benchmark_observations_matched"),
                 postBarsUsed = json.optInt("post_event_bars_used"),
                 method = json.optString("method"),
+                priceBasis = json.optString("price_basis", "RAW_OR_MIXED_CLOSE"),
                 limitations = limitations
             )
         }
