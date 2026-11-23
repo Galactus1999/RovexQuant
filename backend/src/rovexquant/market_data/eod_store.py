@@ -331,11 +331,13 @@ def symbol_history(exchange: str, symbol: str, *, from_date: date, to_date: date
     try:
         with connect() as connection:
             rows = connection.execute("""
-                SELECT trading_date, open, high, low, close, previous_close, volume,
+                SELECT DISTINCT ON (trading_date)
+                       trading_date, open, high, low, close, previous_close, volume,
                        turnover, provider, quality_status, source_retrieved_at, isin, trades
                 FROM market_eod_bars
                 WHERE exchange=%s AND symbol=%s AND trading_date BETWEEN %s AND %s
-                ORDER BY trading_date LIMIT %s
+                ORDER BY trading_date, source_retrieved_at DESC, provider
+                LIMIT %s
             """, (market, ticker, from_date, to_date, limit)).fetchall()
     except psycopg.Error as error:
         raise EodStoreError("Market history schema is unavailable; apply database migrations") from error
