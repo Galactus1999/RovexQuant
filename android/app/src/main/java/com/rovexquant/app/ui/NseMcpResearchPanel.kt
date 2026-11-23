@@ -50,6 +50,8 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
     var calling by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var result by remember { mutableStateOf<NseMcpResult?>(null) }
+    var showSchema by remember { mutableStateOf(false) }
+    var showUsageLimits by remember { mutableStateOf(false) }
 
     val currentCatalog = catalogs.firstOrNull { it.server == server }
     val readOnlyTools = currentCatalog?.tools?.filter { it.readOnly }.orEmpty()
@@ -136,12 +138,16 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
                     }
                 }
                 selectedTool?.let { tool ->
-                    Text(tool.description.ifBlank { "No description supplied by NSE." }, color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
-                    Text("INPUT SCHEMA", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    Text(
-                        tool.inputSchema.toString(2).take(5000),
-                        color = Cyan, fontSize = 9.sp, lineHeight = 13.sp
-                    )
+                    Text(tool.description.ifBlank { "No description supplied by NSE." }, color = Muted, fontSize = 10.sp, lineHeight = 15.sp, maxLines = 2)
+                    TextButton(onClick = { showSchema = !showSchema }) {
+                        Text(if (showSchema) "Hide input schema" else "View input schema")
+                    }
+                    if (showSchema) {
+                        Text(
+                            tool.inputSchema.toString(2).take(5000),
+                            color = Cyan, fontSize = 9.sp, lineHeight = 13.sp
+                        )
+                    }
                     OutlinedTextField(
                         value = arguments,
                         onValueChange = { arguments = it },
@@ -208,10 +214,15 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
                 }
             }
         }
-        Text(
-            "No raw MCP archive, redistribution, commercial use, order execution or AI-model training. Do not use this research connector as an automated trading feed.",
-            color = Muted, fontSize = 9.sp, lineHeight = 14.sp,
-            modifier = Modifier.padding(horizontal = 3.dp)
-        )
+        TextButton(onClick = { showUsageLimits = !showUsageLimits }) {
+            Text(if (showUsageLimits) "Hide usage limits" else "Usage limits")
+        }
+        if (showUsageLimits) {
+            Text(
+                "No raw MCP archive, redistribution, commercial use, order execution or AI-model training. This research connector is not an automated trading feed.",
+                color = Muted, fontSize = 9.sp, lineHeight = 14.sp,
+                modifier = Modifier.padding(horizontal = 3.dp)
+            )
+        }
     }
 }
