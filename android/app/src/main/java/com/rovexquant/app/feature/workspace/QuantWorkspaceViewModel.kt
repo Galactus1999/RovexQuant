@@ -76,11 +76,6 @@ class QuantWorkspaceViewModel(
                     }
                     startMarketStream(session)
                     refreshEodSnapshot(session)
-                    if (ingestion.status == "RUNNING") {
-                        _uiState.update {
-                            it.copy(eodSnapshotStatus = "Collection is still running · retaining the last successful snapshot")
-                        }
-                    }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
