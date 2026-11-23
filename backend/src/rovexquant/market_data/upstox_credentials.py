@@ -354,8 +354,8 @@ def store_research_connector_api_key(connector_id: str, api_key: str) -> None:
         not isinstance(api_key, str)
         or len(api_key.strip()) < 20
         or len(api_key) > 4096
-        or not api_key.strip().isascii()
-        or any(ord(character) < 33 or ord(character) > 126 for character in api_key.strip())
+        or not api_key.isascii()
+        or any(ord(character) < 33 or ord(character) > 126 for character in api_key)
     ):
         raise UpstoxCredentialError("Invalid research connector API key", 422)
     encrypted = _fernet().encrypt(api_key.strip().encode("ascii"))
