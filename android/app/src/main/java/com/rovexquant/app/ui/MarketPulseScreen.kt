@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -35,6 +36,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Locale
+import java.time.Instant
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private data class SectorIndex(val sector: String, val benchmark: String)
@@ -88,6 +91,17 @@ fun MarketPulseScreen(
     var tokenConfigured by remember { mutableStateOf<Boolean?>(null) }
     var showTokenForm by remember { mutableStateOf(true) }
     var isRefreshing by remember { mutableStateOf(false) }
+    var freshnessClock by remember { mutableLongStateOf(System.currentTimeMillis()) }
+
+    LaunchedEffect(ticks) {
+        while (true) {
+            freshnessClock = System.currentTimeMillis()
+            delay(5_000)
+        }
+    }
+    fun isFresh(tick: MarketTick): Boolean = runCatching {
+        Instant.parse(tick.receivedAt).toEpochMilli() >= freshnessClock - 30_000
+    }.getOrDefault(false)
 
     LaunchedEffect(eodSnapshotStatus) {
         isRefreshing = eodSnapshotStatus.startsWith("Requesting") ||
@@ -352,13 +366,17 @@ fun MarketPulseScreen(
                 MetricTile(
                     "NIFTY 50",
                     nifty?.lastPrice?.let { String.format(Locale.US, "%.2f", it) } ?: "—",
-                    nifty?.quality ?: "Awaiting verified tick",
+                    nifty?.let {
+                        if (it.quality == "VALID" && isFresh(it)) "LIVE" else "STALE · ${it.quality}"
+                    } ?: "Awaiting verified tick",
                     modifier = Modifier.weight(1f)
                 )
                 MetricTile(
                     "NIFTY BANK",
                     bank?.lastPrice?.let { String.format(Locale.US, "%.2f", it) } ?: "—",
-                    bank?.quality ?: "Awaiting verified tick",
+                    bank?.let {
+                        if (it.quality == "VALID" && isFresh(it)) "LIVE" else "STALE · ${it.quality}"
+                    } ?: "Awaiting verified tick",
                     accent = Cyan,
                     modifier = Modifier.weight(1f)
                 )
@@ -398,8 +416,10 @@ fun MarketPulseScreen(
                     Text("SOURCE · UPSTOX V3 · $streamStatus", color = Muted, fontSize = 9.sp, letterSpacing = .5.sp, fontWeight = FontWeight.Bold)
                     Text("EXCHANGE · $exchangeClock UTC    RECEIVED · $receiveClock UTC", color = Muted, fontSize = 8.sp)
                     Text(
-                        "TICK QUALITY · ${latestTick?.quality ?: "NO VERIFIED TICK"}",
-                        color = latestTick?.let { if (it.quality == "VALID") Mint else Gold } ?: Muted,
+                        "TICK QUALITY · ${latestTick?.let {
+                            if (it.quality == "VALID" && isFresh(it)) "VALID" else "STALE / ${it.quality}"
+                        } ?: "NO VERIFIED TICK"}",
+                        color = latestTick?.let { if (it.quality == "VALID" && isFresh(it)) Mint else Gold } ?: Muted,
                         fontSize = 8.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -424,8 +444,14 @@ fun MarketPulseScreen(
                         Text(sector.benchmark, color = Muted, fontSize = 9.sp, letterSpacing = .5.sp, modifier = Modifier.testTag("sector.index.${sector.benchmark}"))
                     }
                     StatusPill(
-                        if (quote?.quality == "VALID") "Live" else if (instrumentKey == null) "Not listed" else "No tick",
-                        if (quote?.quality == "VALID") Mint else Gold
+                        when {
+                            quote == null && instrumentKey == null -> "Not listed"
+                            quote == null -> "No tick"
+                            quote.quality != "VALID" -> quote.quality
+                            !isFresh(quote) -> "Stale"
+                            else -> "Live"
+                        },
+                        if (quote?.quality == "VALID" && isFresh(quote)) Mint else Gold
                     )
                 }
                 Spacer(Modifier.height(10.dp))
