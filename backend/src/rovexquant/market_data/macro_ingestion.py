@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from rovexquant.market_data.macro_data import (
-    MacroProviderError, fetch_amfi_nav, fetch_fred, fetch_rbi_dbie_mirror, fetch_world_bank,
+    fetch_amfi_nav, fetch_fred, fetch_rbi_dbie_mirror, fetch_world_bank,
 )
 from rovexquant.market_data.macro_store import persist_macro_payload, record_macro_failure
 

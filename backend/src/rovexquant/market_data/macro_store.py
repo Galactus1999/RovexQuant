@@ -25,7 +25,10 @@ def normalize_macro_payload(provider: str, payload: dict[str, Any]) -> tuple[lis
         for item in payload.get("observations", []):
             if not isinstance(item, dict):
                 continue
-            series_key = f"scheme:{item.get('scheme_code', '')}"
+            scheme_code = str(item.get("scheme_code") or "").strip()
+            if not scheme_code.isdigit():
+                continue
+            series_key = f"scheme:{scheme_code}"
             period = str(item.get("nav_date") or "")[:32]
             raw_value = item.get("nav")
             metadata = {
@@ -114,6 +117,7 @@ def persist_macro_payload(provider: str, payload: dict[str, Any]) -> dict[str, A
     rows, digest = normalize_macro_payload(provider, payload)
     run_id = uuid4()
     started = datetime.now(timezone.utc)
+    rows_upserted = 0
     try:
         with connect() as connection:
             connection.execute(
@@ -122,7 +126,8 @@ def persist_macro_payload(provider: str, payload: dict[str, Any]) -> dict[str, A
             )
         with connect() as connection:
             with connection.transaction():
-                connection.cursor().executemany(
+                cursor = connection.cursor()
+                cursor.executemany(
                     """
                     INSERT INTO macro_observations
                         (provider, series_key, period, value, unit, frequency, label,
@@ -137,6 +142,7 @@ def persist_macro_payload(provider: str, payload: dict[str, Any]) -> dict[str, A
                         "metadata": Jsonb(row["metadata"]),
                     } for row in rows],
                 )
+                rows_upserted = max(cursor.rowcount, 0)
                 connection.execute(
                     """
                     UPDATE macro_ingestion_runs
@@ -144,7 +150,7 @@ def persist_macro_payload(provider: str, payload: dict[str, Any]) -> dict[str, A
                         source_sha256=%s, completed_at=%s, error_message=NULL
                     WHERE run_id=%s
                     """,
-                    (len(rows), len(rows), digest, datetime.now(timezone.utc), run_id),
+                    (len(rows), rows_upserted, digest, datetime.now(timezone.utc), run_id),
                 )
     except (EodStoreError, psycopg.Error) as error:
         try:
@@ -164,7 +170,7 @@ def persist_macro_payload(provider: str, payload: dict[str, Any]) -> dict[str, A
         raise EodStoreError("Macro observation persistence failed") from error
     return {
         "provider": provider.upper(), "status": "SUCCEEDED", "rows_seen": len(rows),
-        "rows_upserted": len(rows), "source_sha256": digest,
+        "rows_upserted": rows_upserted, "source_sha256": digest,
     }
 
 
