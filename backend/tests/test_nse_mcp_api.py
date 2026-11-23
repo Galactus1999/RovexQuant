@@ -140,6 +140,13 @@ def test_dalalos_credential_is_encrypted_and_never_returned(monkeypatch, tmp_pat
     client = TestClient(api.app)
     headers = {"Authorization": f"Bearer {token}"}
 
+    invalid = client.put(
+        "/api/v1/app/integrations/research/dalalos/api-key",
+        json={"api_key": "d" * 32 + "\\n"},
+        headers=headers,
+    )
+    assert invalid.status_code == 422
+
     saved = client.put(
         "/api/v1/app/integrations/research/dalalos/api-key",
         json={"api_key": "d" * 32},
