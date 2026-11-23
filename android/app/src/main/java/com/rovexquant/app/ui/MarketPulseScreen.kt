@@ -15,7 +15,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -59,6 +61,7 @@ private val coreSectorIndices = listOf(
     SectorIndex("Telecom", "NIFTY TELECOMMUNICATIONS")
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MarketPulseScreen(
     ticks: Map<String, MarketTick> = emptyMap(),
@@ -84,6 +87,12 @@ fun MarketPulseScreen(
     var tokenError by remember { mutableStateOf<String?>(null) }
     var tokenConfigured by remember { mutableStateOf<Boolean?>(null) }
     var showTokenForm by remember { mutableStateOf(true) }
+    var isRefreshing by remember { mutableStateOf(false) }
+
+    LaunchedEffect(eodSnapshotStatus) {
+        isRefreshing = eodSnapshotStatus.startsWith("Requesting") ||
+            eodSnapshotStatus.startsWith("Collecting")
+    }
 
     LaunchedEffect(activeSession, activeRepository) {
         if (activeSession != null && activeRepository != null) {
@@ -105,7 +114,19 @@ fun MarketPulseScreen(
     val exchangeClock = latestTick?.exchangeTimestamp?.substringAfter("T")?.take(8) ?: "unavailable"
     val receiveClock = latestTick?.receivedAt?.substringAfter("T")?.take(8) ?: "unavailable"
 
-    LazyColumn(modifier = Modifier.fillMaxSize().testTag("market.pulse.list"), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = {
+            if (activeSession != null) {
+                isRefreshing = true
+                onRefreshEodSnapshot()
+            } else {
+                isRefreshing = false
+            }
+        },
+        modifier = Modifier.fillMaxSize()
+    ) {
+        LazyColumn(modifier = Modifier.fillMaxSize().testTag("market.pulse.list"), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item { SectionHeading("The market, without the noise", "Market pulse.", "A clean overview of indices, breadth, sectors and your tracked universe.") }
         item {
             TerminalCard {
@@ -458,6 +479,7 @@ fun MarketPulseScreen(
             }
         }
         item { EmptyPanel("Data integrity is enforced", "Stale, incomplete, delayed-without-permission or disconnected data will be visibly flagged and blocked from generating signals.") }
+        }
     }
 }
 
