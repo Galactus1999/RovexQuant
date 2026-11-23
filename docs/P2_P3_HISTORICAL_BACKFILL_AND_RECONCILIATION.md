@@ -9,8 +9,9 @@
 - Rows are streamed in bounded batches, ordered by trading date, validated through the existing EOD normalizer, and upserted into market_eod_bars with provider tejhq_hf_parquet, mode END_OF_DAY, and quality PROVISIONAL.
 - Each trading date and its checkpoint commit atomically. Re-runs skip dates already imported from the same source hash. A changed source hash creates a new import generation; database uniqueness prevents duplicate provider bars.
 - Historical imports do not overwrite live/stream data and do not automatically become verified.
+- The separate backfill_derived operation imports the matching prices_adjusted, actions and symbol_history Parquet trees. Adjusted closes are kept in their own table with source hashes; raw prices remain unchanged.
 
-Manual execution: Actions → Quant Historical Backfill & Exchange Reconciliation → Run workflow → operation=backfill, choose NSE/BSE and a year. Import one year per run to bound memory, runtime, and rollback scope.
+Manual execution: Actions → Quant Historical Backfill & Exchange Reconciliation → Run workflow. Use operation=backfill for raw bars or operation=backfill_derived for adjusted bars/actions/symbol history; choose NSE/BSE and a year. Import one year per run to bound memory, runtime, and rollback scope.
 
 ## P3: independent exchange reconciliation
 
@@ -20,6 +21,7 @@ Manual execution: Actions → Quant Historical Backfill & Exchange Reconciliatio
 - OHLC and previous-close values use a ₹0.01 tolerance; volume and available trade counts must match exactly; ISIN mismatches are recorded separately.
 - Missing reference rows, extra stored rows and value/identifier discrepancies are persisted as auditable report rows with the official source URL and SHA-256.
 - Only individual rows that match the official file are promoted to VERIFIED_SOURCE; unmatched or missing rows remain provisional.
+- Event studies prefer TejHQ back-adjusted close when the adjusted archive is imported. The source methodology adjusts splits, bonuses and dividends, but does not scale demergers, rights, buybacks or mergers. Asset/benchmark comparisons are disabled if their adjustment bases differ.
 - Repeated downloads of the same official file are idempotent by (exchange, trading_date, source_sha256).
 
 The scheduled job runs at 19:30 IST and retries at 21:30 IST on weekdays. An official 404 is treated as unavailable for that date (often a holiday) and is not fabricated into a zero-row success.
