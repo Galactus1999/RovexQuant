@@ -59,6 +59,7 @@ def calculate_event_window(
         close = float(bar["close"])
         peak = max(peak, close)
         drawdown = min(drawdown, close / peak - 1.0)
+    fully_adjusted = bool(ordered) and all(bar.get("price_basis") == "CORPORATE_ACTION_ADJUSTED" for bar in ordered)
     benchmark_metrics: dict[str, Any] = {
         "benchmark_symbol": None,
         "market_adjusted_cumulative_return": None,
@@ -115,14 +116,20 @@ def calculate_event_window(
         "worst_close_return": min(returns),
         "post_window_max_drawdown": drawdown,
         "realized_daily_volatility": pstdev(daily_returns) * sqrt(252) if len(daily_returns) > 1 else None,
+        "price_basis": "CORPORATE_ACTION_ADJUSTED" if fully_adjusted else "RAW_OR_MIXED_CLOSE",
         "method": (
-            "MARKET_ADJUSTED_EVENT_WINDOW" if benchmark_metrics["benchmark_observations_matched"]
+            "CORPORATE_ACTION_ADJUSTED_MARKET_EVENT_WINDOW"
+            if fully_adjusted and benchmark_metrics["benchmark_observations_matched"]
+            else "CORPORATE_ACTION_ADJUSTED_EVENT_WINDOW" if fully_adjusted
+            else "MARKET_ADJUSTED_EVENT_WINDOW" if benchmark_metrics["benchmark_observations_matched"]
             else "UNADJUSTED_CLOSE_TO_CLOSE_EVENT_WINDOW"
         ),
         "causal_inference": False,
         "limitations": [
             "Market-adjusted return is descriptive and does not establish causation.",
             "Benchmark observations must match the asset's trading dates; unmatched dates are excluded.",
+            "Corporate-action adjustment follows the source dataset methodology; demergers, rights, buybacks and mergers are not scaled.",
+            "If adjusted bars are unavailable for any asset observation, raw close fallback is used.",
             "Corporate actions and market-wide confounders can affect the observed move.",
             "The event date is supplied by the researcher and is not independently verified.",
             "Only persisted EOD bars available to this account are included.",
