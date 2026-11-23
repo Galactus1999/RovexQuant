@@ -59,7 +59,11 @@ def calculate_event_window(
         close = float(bar["close"])
         peak = max(peak, close)
         drawdown = min(drawdown, close / peak - 1.0)
-    fully_adjusted = bool(ordered) and all(bar.get("price_basis") == "CORPORATE_ACTION_ADJUSTED" for bar in ordered)
+    adjusted_asset_count = sum(bar.get("price_basis") == "CORPORATE_ACTION_ADJUSTED" for bar in ordered)
+    asset_price_basis = (
+        "CORPORATE_ACTION_ADJUSTED" if ordered and adjusted_asset_count == len(ordered)
+        else "RAW_CLOSE" if adjusted_asset_count == 0 else "MIXED_RAW_AND_ADJUSTED"
+    )
     benchmark_metrics: dict[str, Any] = {
         "benchmark_symbol": None,
         "market_adjusted_cumulative_return": None,
@@ -67,10 +71,17 @@ def calculate_event_window(
         "benchmark_observations_matched": 0,
         "benchmark_price_basis": None,
     }
-    benchmark_fully_adjusted = bool(benchmark_bars) and all(
-        bar.get("price_basis") == "CORPORATE_ACTION_ADJUSTED" for bar in benchmark_bars
+    adjusted_benchmark_count = sum(
+        bar.get("price_basis") == "CORPORATE_ACTION_ADJUSTED" for bar in (benchmark_bars or [])
     )
-    benchmark_basis_compatible = bool(benchmark_bars) and (fully_adjusted == benchmark_fully_adjusted)
+    benchmark_price_basis = (
+        "CORPORATE_ACTION_ADJUSTED"
+        if benchmark_bars and adjusted_benchmark_count == len(benchmark_bars)
+        else "RAW_CLOSE" if adjusted_benchmark_count == 0 else "MIXED_RAW_AND_ADJUSTED"
+    )
+    benchmark_basis_compatible = bool(benchmark_bars) and (
+        asset_price_basis == benchmark_price_basis and asset_price_basis != "MIXED_RAW_AND_ADJUSTED"
+    )
     if benchmark_basis_compatible:
         benchmark_ordered = sorted(
             (bar for bar in benchmark_bars
@@ -103,7 +114,7 @@ def calculate_event_window(
                     "market_adjusted_cumulative_return": asset_return - benchmark_return,
                     "cumulative_abnormal_return": sum(daily_abnormal),
                     "benchmark_observations_matched": len(matched),
-                    "benchmark_price_basis": "CORPORATE_ACTION_ADJUSTED" if benchmark_fully_adjusted else "RAW_CLOSE",
+                    "benchmark_price_basis": benchmark_price_basis,
                 }
 
     return {
@@ -122,11 +133,11 @@ def calculate_event_window(
         "worst_close_return": min(returns),
         "post_window_max_drawdown": drawdown,
         "realized_daily_volatility": pstdev(daily_returns) * sqrt(252) if len(daily_returns) > 1 else None,
-        "price_basis": "CORPORATE_ACTION_ADJUSTED" if fully_adjusted else "RAW_OR_MIXED_CLOSE",
+        "price_basis": asset_price_basis,
         "method": (
             "CORPORATE_ACTION_ADJUSTED_MARKET_EVENT_WINDOW"
-            if fully_adjusted and benchmark_metrics["benchmark_observations_matched"]
-            else "CORPORATE_ACTION_ADJUSTED_EVENT_WINDOW" if fully_adjusted
+            if asset_price_basis == "CORPORATE_ACTION_ADJUSTED" and benchmark_metrics["benchmark_observations_matched"]
+            else "CORPORATE_ACTION_ADJUSTED_EVENT_WINDOW" if asset_price_basis == "CORPORATE_ACTION_ADJUSTED"
             else "MARKET_ADJUSTED_EVENT_WINDOW" if benchmark_metrics["benchmark_observations_matched"]
             else "UNADJUSTED_CLOSE_TO_CLOSE_EVENT_WINDOW"
         ),
