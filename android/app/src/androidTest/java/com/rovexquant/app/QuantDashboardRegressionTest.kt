@@ -108,9 +108,10 @@ class QuantDashboardRegressionTest {
 
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.model"))
         composeRule.onNodeWithTag("ai.model").performTextInput("test-model")
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasText("Open Groq API console / manage key"))
+        composeRule.onNodeWithText("Open Groq API console / manage key").assertIsDisplayed()
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.provider.test"))
         composeRule.onNodeWithTag("ai.provider.test").assertIsDisplayed()
-        composeRule.onNodeWithText("Open Groq API console / manage key").assertIsDisplayed()
         composeRule.onNodeWithTag("ai.provider.test").performClick()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithText("Connected · groq / test-model").fetchSemanticsNodes().isNotEmpty()
