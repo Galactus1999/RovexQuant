@@ -32,6 +32,7 @@ private enum class TerminalSection(val label: String, val glyph: String) {
     LAB("Lab", "⌘"),
     PORTFOLIO("Portfolio", "▤"),
     INTELLIGENCE("Intel", "✦"),
+    MACRO("Macro", "◎"),
     AI("Chat", "◉")
 }
 
@@ -95,6 +96,7 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
                     )
                     TerminalSection.PORTFOLIO -> PortfolioScreen()
                     TerminalSection.INTELLIGENCE -> IntelligenceCentreScreen(session = activeSession, repository = workspace.repository)
+                    TerminalSection.MACRO -> MacroEventResearchScreen(session = activeSession, repository = workspace.repository)
                     TerminalSection.AI -> AiWorkspaceScreen(session = activeSession, repository = workspace.repository)
                 }
             }
