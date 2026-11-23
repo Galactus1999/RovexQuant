@@ -4,6 +4,7 @@ import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiDailyBar
 import com.rovexquant.app.data.model.AiProvider
+import com.rovexquant.app.data.model.AiResearchRun
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.AiStrategyEvidence
 import com.rovexquant.app.data.model.EodMarketSnapshot
@@ -749,6 +750,34 @@ object QuantApi {
             if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
             val routes = JSONObject(text).optJSONObject("routes") ?: JSONObject()
             return routes.keys().asSequence().toSet()
+        }
+    }
+
+    fun fetchAiResearchRuns(session: QuantSession, limit: Int = 20): List<AiResearchRun> {
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/ai/research/runs?limit=${limit.coerceIn(1, 100)}")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            val rows = JSONObject(text).optJSONArray("runs") ?: JSONArray()
+            return buildList {
+                for (index in 0 until rows.length()) {
+                    val item = rows.optJSONObject(index) ?: continue
+                    val usage = item.optJSONObject("token_usage") ?: JSONObject()
+                    val cost = if (item.isNull("cost_usd")) null else item.optDouble("cost_usd")
+                    add(AiResearchRun(
+                        runId = item.optString("run_id"), taskType = item.optString("task_type"),
+                        providerId = item.optString("provider_id"), model = item.optString("model"),
+                        status = item.optString("status"), promptTokens = usage.optLong("prompt_tokens"),
+                        completionTokens = usage.optLong("completion_tokens"), totalTokens = usage.optLong("total_tokens"),
+                        costUsd = cost, costStatus = item.optString("cost_status", "NOT_TRACKED"),
+                        fallbackUsed = item.optBoolean("fallback_used"), createdAt = item.optString("created_at")
+                    ))
+                }
+            }
         }
     }
 
