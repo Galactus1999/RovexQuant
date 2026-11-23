@@ -59,6 +59,15 @@ class QuantRepository(context: Context) : QuantDataRepository {
     override suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) =
         withContext(Dispatchers.IO) { QuantApi.saveAiProviderCredential(session, providerId, apiKey) }
 
+    override suspend fun saveDalalOsApiKey(session: QuantSession, apiKey: String) =
+        withContext(Dispatchers.IO) { QuantApi.saveDalalOsApiKey(session, apiKey) }
+
+    override suspend fun deleteDalalOsApiKey(session: QuantSession) =
+        withContext(Dispatchers.IO) { QuantApi.deleteDalalOsApiKey(session) }
+
+    override suspend fun fetchDalalOsConfigured(session: QuantSession): Boolean =
+        withContext(Dispatchers.IO) { QuantApi.fetchDalalOsConfigured(session) }
+
     override suspend fun deleteAiProviderCredential(session: QuantSession, providerId: String) =
         withContext(Dispatchers.IO) { QuantApi.deleteAiProviderCredential(session, providerId) }
 
@@ -130,9 +139,10 @@ class QuantRepository(context: Context) : QuantDataRepository {
         session: QuantSession,
         server: String,
         tool: String,
-        argumentsJson: String
+        argumentsJson: String,
+        confirmNonReadOnly: Boolean
     ): NseMcpResult = withContext(Dispatchers.IO) {
-        QuantApi.callNseMcpTool(session, server, tool, argumentsJson)
+        QuantApi.callNseMcpTool(session, server, tool, argumentsJson, confirmNonReadOnly)
     }
 
     override fun createMarketStream(
