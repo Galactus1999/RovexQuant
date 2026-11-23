@@ -39,11 +39,18 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("quant.header").assertIsDisplayed()
         composeRule.onNodeWithText("Market pulse.").assertIsDisplayed()
         composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("market.eod.snapshot"))
+        composeRule.onNodeWithTag("market.eod.snapshot").assertIsDisplayed()
+        composeRule.onNodeWithText("END OF DAY").assertIsDisplayed()
+        // The EOD card intentionally collapses mover rows by default. Wait for
+        // the asynchronous snapshot payload, then explicitly expand it before
+        // asserting that the fixture symbol is rendered.
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("2450 priced symbols").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("Show market movers").performClick()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithText("FIXTURE").fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithTag("market.eod.snapshot").assertIsDisplayed()
-        composeRule.onNodeWithText("END OF DAY").assertIsDisplayed()
         composeRule.onNodeWithTag("market.pulse.list")
             .performScrollToNode(hasTestTag("market.ingestion.status"))
         composeRule.onNodeWithTag("market.ingestion.status").assertIsDisplayed()
