@@ -53,7 +53,8 @@ def test_claim_verifier_downgrades_unverifiable_source_quotes():
     assert claims[0]["verdict"] == "supported"
     assert claims[1]["verdict"] == "insufficient"
     assert claims[2]["verdict"] == "insufficient"
-    assert claims[1]["source_ref"] == ""
+    assert claims[1]["source_ref"] == "market:EOD:2026-11-20:NSE:RELIANCE"
+    assert claims[2]["source_ref"] == ""
 
 
 def test_claim_verifier_overall_status_is_conservative():
