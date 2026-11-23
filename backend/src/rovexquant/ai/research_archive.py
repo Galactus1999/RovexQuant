@@ -103,8 +103,25 @@ def reserve_ai_research_run(
 def finish_ai_research_run(run_id: str, completion: dict[str, Any]) -> None:
     response_doc = _bounded({"content": completion.get("content", "")}, "response")
     usage = completion.get("usage") if isinstance(completion.get("usage"), dict) else {}
+    prompt_tokens = usage.get("prompt_tokens")
+    completion_tokens = usage.get("completion_tokens")
+    total_tokens = usage.get("total_tokens")
+    if not isinstance(total_tokens, int) and isinstance(prompt_tokens, int) and isinstance(completion_tokens, int):
+        total_tokens = prompt_tokens + completion_tokens
+        usage = {**usage, "total_tokens": total_tokens}
     try:
         with connect() as connection:
+            reserved_row = connection.execute(
+                "SELECT token_usage->>'reserved_tokens' FROM ai_research_runs WHERE run_id = %s AND status = 'RUNNING'",
+                (run_id,),
+            ).fetchone()
+            reserved_tokens = int(reserved_row[0] or 0) if reserved_row else 0
+            if ai_token_budgets_enabled() and not isinstance(total_tokens, int):
+                usage = {
+                    "reserved_tokens": reserved_tokens,
+                    "total_tokens": reserved_tokens,
+                    "usage_status": "RESERVATION_FALLBACK",
+                }
             result = connection.execute(
                 """
                 UPDATE ai_research_runs SET status = 'SUCCEEDED', provider_id = %s, model = %s,
