@@ -133,6 +133,12 @@ def test_extract_source_timestamp_only_uses_explicit_source_fields():
     }) == "2026-11-22T10:15:00+05:30"
     assert extract_source_timestamp({"structured_content": {"retrieved_at": "now"}}) is None
     assert extract_source_timestamp({"structured_content": {"rows": [{"timestamp": "2026-11-22", "source_timestamp": "row-time"}]}}) is None
+    assert extract_source_timestamp({
+        "content": [{"type": "text", "text": json.dumps({"nseTimestamp": "2026-11-22T15:30:00+05:30"})}]
+    }) == "2026-11-22T15:30:00+05:30"
+    assert extract_source_timestamp({
+        "structured_content": {"metadata": {"updatedAt": "2026-11-22T15:31:00+05:30"}}
+    }) == "2026-11-22T15:31:00+05:30"
 
 
 
@@ -257,7 +263,7 @@ def test_tool_without_positive_read_only_annotation_is_denied():
         async with NseMcpClient("bhavcopy", transport=transport) as client:
             await client.call_tool("get_history", {})
 
-    with pytest.raises(NseMcpError, match="readOnlyHint must be true"):
+    with pytest.raises(NseMcpError, match="not marked read-only"):
         asyncio.run(run())
     assert not any(body["method"] == "tools/call" for body, _ in seen)
 
@@ -396,6 +402,133 @@ def test_remote_json_rpc_error_text_is_not_reflected():
         asyncio.run(run())
     assert remote_secret not in str(error.value)
 
+
+def test_gzip_encoded_mcp_response_is_decompressed_exactly_once():
+    import gzip
+
+    def handler(request):
+        message = json.loads(request.content)
+        if message["method"] == "initialize":
+            return _response(request, {
+                "jsonrpc": "2.0", "id": message["id"],
+                "result": {"protocolVersion": "2025-03-26", "capabilities": {},
+                           "serverInfo": {"name": "NSE", "version": "1"}},
+            })
+        if message["method"] == "notifications/initialized":
+            return httpx.Response(202)
+        if message["method"] == "tools/list":
+            payload = json.dumps({
+                "jsonrpc": "2.0",
+                "id": message["id"],
+                "result": {"tools": [{
+                    "name": "get_market_breadth",
+                    "inputSchema": {"type": "object"},
+                    "annotations": {"readOnlyHint": True},
+                }]},
+            }).encode("utf-8")
+            return httpx.Response(
+                200,
+                headers={
+                    "content-type": "application/json",
+                    "content-encoding": "gzip",
+                    "content-length": str(len(gzip.compress(payload))),
+                    "Mcp-Session-Id": "gzip-session",
+                },
+                content=gzip.compress(payload),
+            )
+        raise AssertionError(message["method"])
+
+    transport = httpx.MockTransport(handler)
+
+    async def run():
+        async with NseMcpClient("bhavcopy", transport=transport) as client:
+            return await client.list_tools()
+
+    tools = asyncio.run(run())
+    assert tools[0]["name"] == "get_market_breadth"
+
+
+def test_reviewed_nse_data_tool_without_read_only_annotation_is_allowed():
+    catalog = safe_tool_catalog([{
+        "name": "get_index_snapshot",
+        "description": "Get the end-of-day values of NSE indices on a specific date.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["date", "filter"],
+            "properties": {"date": {"type": "string"}, "filter": {"type": "string"}},
+        },
+        "annotations": {},
+    }])
+    assert catalog[0]["read_only"] is True
+
+
+def test_explicit_negative_read_only_hint_overrides_local_allowlist():
+    catalog = safe_tool_catalog([{
+        "name": "get_index_snapshot",
+        "description": "Get the end-of-day values of NSE indices on a specific date.",
+        "inputSchema": {"type": "object"},
+        "annotations": {"readOnlyHint": False},
+    }])
+    assert catalog[0]["read_only"] is False
+
+
+def test_unknown_nse_tool_without_positive_read_only_evidence_stays_blocked():
+    catalog = safe_tool_catalog([{
+        "name": "get_unreviewed_data",
+        "description": "Get some data from the server.",
+        "inputSchema": {"type": "object"},
+        "annotations": {},
+    }])
+    assert catalog[0]["read_only"] is False
+
+
+def test_call_tool_uses_reviewed_allowlist_when_nse_omits_annotations():
+    seen = []
+    transport = httpx.MockTransport(_handler_for({
+        "tools": [{
+            "name": "get_index_snapshot",
+            "description": "Get the end-of-day values of NSE indices on a specific date.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["date", "filter"],
+                "properties": {"date": {"type": "string"}, "filter": {"type": "string"}},
+                "additionalProperties": False,
+            },
+            "annotations": {},
+        }],
+        "call": {"structuredContent": {"date": "2026-11-20", "indices": []}},
+    }, seen))
+
+    async def run():
+        async with NseMcpClient("bhavcopy", transport=transport) as client:
+            return await client.call_tool(
+                "get_index_snapshot",
+                {"date": "2026-11-22", "filter": "Nifty 50"},
+            )
+
+    result = asyncio.run(run())
+    assert result["structured_content"]["date"] == "2026-11-20"
+    assert seen[-1][0]["method"] == "tools/call"
+
+
+def test_call_tool_blocks_allowlisted_name_with_negative_server_hint():
+    seen = []
+    transport = httpx.MockTransport(_handler_for({
+        "tools": [{
+            "name": "get_index_snapshot",
+            "description": "Get the end-of-day values of NSE indices on a specific date.",
+            "inputSchema": {"type": "object"},
+            "annotations": {"readOnlyHint": False},
+        }],
+    }, seen))
+
+    async def run():
+        async with NseMcpClient("bhavcopy", transport=transport) as client:
+            await client.call_tool("get_index_snapshot", {})
+
+    with pytest.raises(NseMcpError, match="not marked read-only"):
+        asyncio.run(run())
+    assert not any(body["method"] == "tools/call" for body, _ in seen)
 
 def test_dalalos_catalog_uses_imported_capability_allowlist():
     catalog = safe_tool_catalog([
