@@ -13,6 +13,14 @@ data class AiChatMessage(
     val content: String
 )
 
+data class AiVerifiedClaim(
+    val claim: String,
+    val sourceRef: String,
+    val evidenceQuote: String,
+    val verdict: String,
+    val reason: String
+)
+
 data class AiCompletion(
     val providerId: String,
     val credentialId: String?,
@@ -24,7 +32,10 @@ data class AiCompletion(
     val completionTokens: Int = 0,
     val totalTokens: Int = 0,
     val costUsd: Double? = null,
-    val costStatus: String = "UNKNOWN_MODEL_PRICING"
+    val costStatus: String = "UNKNOWN_MODEL_PRICING",
+    val verificationStatus: String? = null,
+    val verificationSummary: String? = null,
+    val verifiedClaims: List<AiVerifiedClaim> = emptyList()
 )
 
 data class AiDailyBar(
