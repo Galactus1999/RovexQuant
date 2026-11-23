@@ -150,7 +150,8 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                     fromDate = fromDate.trim(),
                     toDate = toDate.trim(),
                     strategyContext = strategyContext.trim(),
-                    fallbackProviders = if (automaticTaskRouting) emptyList() else selectedFallbacks.toList()
+                    fallbackProviders = if (automaticTaskRouting) emptyList() else selectedFallbacks.toList(),
+                    automaticTaskRouting = automaticTaskRouting
                 )
             } catch (cancelled: CancellationException) {
                 throw cancelled
