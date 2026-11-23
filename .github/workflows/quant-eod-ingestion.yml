@@ -55,8 +55,8 @@ jobs:
             echo "::error::EOD collection is blocked: configure QUANT_TOKEN_DATABASE_URL or QUANT_MARKET_DATABASE_URL."
             exit 1
           fi
-          if [[ -n "${QUANT_TOKEN_DATABASE_URL}" && -z "${QUANT_TOKEN_MIGRATION_DATABASE_URL}" ]]; then
-            echo "::error::PostgreSQL token storage requires QUANT_TOKEN_MIGRATION_DATABASE_URL with the direct PostgreSQL endpoint."
+          if [[ -z "${QUANT_TOKEN_MIGRATION_DATABASE_URL}" ]]; then
+            echo "::error::EOD collection is blocked: configure QUANT_TOKEN_MIGRATION_DATABASE_URL with the direct PostgreSQL endpoint."
             exit 1
           fi
           if [[ -n "${QUANT_MARKET_DATABASE_URL}" ]]; then
@@ -71,19 +71,9 @@ jobs:
       - name: Apply reviewed PostgreSQL migrations
         working-directory: backend
         run: |
-          # The token vault may intentionally use local SQLite while market data
-          # uses a separate PostgreSQL database. Migrate only configured stores.
-          if [[ -n "${QUANT_TOKEN_DATABASE_URL}" ]]; then
-            alembic -c alembic.ini upgrade head
-          fi
-          if [[ -n "${QUANT_MARKET_DATABASE_URL}" ]]; then
-            if [[ -n "${QUANT_MARKET_MIGRATION_DATABASE_URL}" ]]; then
-              QUANT_TOKEN_MIGRATION_DATABASE_URL="$QUANT_MARKET_MIGRATION_DATABASE_URL" alembic -c alembic.ini upgrade head
-            elif [[ -z "${QUANT_TOKEN_DATABASE_URL}" && -n "${QUANT_TOKEN_MIGRATION_DATABASE_URL}" ]]; then
-              # A single direct migration URL may serve the market database when
-              # the token vault is SQLite and both URLs identify the same database.
-              alembic -c alembic.ini upgrade head
-            fi
+          alembic -c alembic.ini upgrade head
+          if [[ -n "${QUANT_MARKET_MIGRATION_DATABASE_URL}" ]]; then
+            QUANT_TOKEN_MIGRATION_DATABASE_URL="$QUANT_MARKET_MIGRATION_DATABASE_URL" alembic -c alembic.ini upgrade head
           fi
       - name: Collect and persist EOD snapshot
         working-directory: backend
