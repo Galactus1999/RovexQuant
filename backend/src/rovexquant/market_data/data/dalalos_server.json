@@ -1,0 +1,18 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "in.dalalos/mcp",
+  "title": "DalalOS: Indian Stock Market Research (NSE/BSE)",
+  "description": "Filing-grounded Indian stock research (NSE/BSE): financials, ratios, screens. Sourced and dated.",
+  "websiteUrl": "https://dalalos.in",
+  "repository": {
+    "url": "https://github.com/BeyondNoww/DalalOS-Indian-Stock-Research",
+    "source": "github"
+  },
+  "version": "1.0.0",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.dalalos.in/mcp"
+    }
+  ]
+}
