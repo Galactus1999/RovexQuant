@@ -107,12 +107,14 @@ def finish_ai_research_run(run_id: str, completion: dict[str, Any]) -> None:
         with connect() as connection:
             result = connection.execute(
                 """
-                UPDATE ai_research_runs SET status = 'SUCCEEDED', response_payload = %s,
-                    token_usage = %s, cost_usd = %s, cost_status = %s,
+                UPDATE ai_research_runs SET status = 'SUCCEEDED', provider_id = %s, model = %s,
+                    credential_id = %s, response_payload = %s, token_usage = %s,
+                    cost_usd = %s, cost_status = %s,
                     fallback_used = %s, completed_at = %s
                 WHERE run_id = %s AND status = 'RUNNING'
                 """,
-                (Jsonb(response_doc), Jsonb(usage), completion.get("cost_usd"),
+                (completion.get("provider_id"), completion.get("model"), completion.get("credential_id"),
+                 Jsonb(response_doc), Jsonb(usage), completion.get("cost_usd"),
                  str(completion.get("cost_status", "NOT_TRACKED"))[:32],
                  bool(completion.get("fallback_used")), datetime.now(timezone.utc), run_id),
             )
