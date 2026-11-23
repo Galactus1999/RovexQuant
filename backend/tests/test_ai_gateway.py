@@ -132,3 +132,30 @@ def test_encrypted_app_credential_is_preferred_without_exposing_it(monkeypatch):
     assert credentials[0].credential_id == "app"
     assert credentials[0].api_key == secret
     assert secret not in repr(gateway.configured_providers())
+
+
+def test_litellm_core_cost_estimate_uses_pinned_model_pricing():
+    cost, status = gateway.estimate_completion_cost_usd(
+        "openai",
+        "gpt-4o-mini",
+        {"prompt_tokens": 1000, "completion_tokens": 1000, "total_tokens": 2000},
+    )
+    assert status == "ESTIMATED_FROM_LITELLM_CORE_1_110_2"
+    assert cost is not None
+    assert cost > 0
+
+
+def test_unknown_model_pricing_is_not_reported_as_zero():
+    cost, status = gateway.estimate_completion_cost_usd(
+        "openai",
+        "not-a-real-model-id",
+        {"prompt_tokens": 1000, "completion_tokens": 1000, "total_tokens": 2000},
+    )
+    assert cost is None
+    assert status == "UNKNOWN_MODEL_PRICING"
+
+
+def test_missing_provider_usage_keeps_cost_unknown():
+    cost, status = gateway.estimate_completion_cost_usd("groq", "some-model", {})
+    assert cost is None
+    assert status == "PROVIDER_USAGE_NOT_REPORTED"
