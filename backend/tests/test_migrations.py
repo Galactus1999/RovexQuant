@@ -226,14 +226,6 @@ def test_postgres_market_eod_migration_creates_provenance_tables(migrated_postgr
             ).fetchall()
         }
     assert tables == {"market_eod_bars", "market_ingestion_runs", "market_ingestion_jobs"}
-    queue_columns = {
-        row[0] for row in connection.execute(
-            """
-            SELECT column_name FROM information_schema.columns
-            WHERE table_schema = current_schema() AND table_name = 'market_ingestion_jobs'
-            """
-        ).fetchall()
-    }
     assert {
         "exchange", "trading_date", "symbol", "series", "open", "high",
         "low", "close", "volume", "isin", "trades", "provider", "data_mode",
