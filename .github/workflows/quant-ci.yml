@@ -568,6 +568,8 @@ jobs:
     env:
       QUANT_ENV: production
       QUANT_TOKEN_MIGRATION_DATABASE_URL: ${{ secrets.QUANT_TOKEN_MIGRATION_DATABASE_URL }}
+      QUANT_MARKET_DATABASE_URL: ${{ secrets.QUANT_MARKET_DATABASE_URL }}
+      QUANT_MARKET_MIGRATION_DATABASE_URL: ${{ secrets.QUANT_MARKET_MIGRATION_DATABASE_URL }}
     steps:
       - name: Require direct production migration URL
         shell: bash
@@ -575,6 +577,14 @@ jobs:
           if [[ -z "${QUANT_TOKEN_MIGRATION_DATABASE_URL}" ]]; then
             echo "::error::Set QUANT_TOKEN_MIGRATION_DATABASE_URL in GitHub Actions secrets before deploying a new database schema."
             exit 1
+          fi
+          if [[ -n "${QUANT_MARKET_DATABASE_URL}" && -z "${QUANT_MARKET_MIGRATION_DATABASE_URL}" ]]; then
+            TOKEN_DB="$(python -c 'import os; from urllib.parse import urlsplit; u=urlsplit(os.environ["QUANT_TOKEN_MIGRATION_DATABASE_URL"]); print((u.hostname,u.port,u.path))')"
+            MARKET_DB="$(python -c 'import os; from urllib.parse import urlsplit; u=urlsplit(os.environ["QUANT_MARKET_DATABASE_URL"]); print((u.hostname,u.port,u.path))')"
+            if [[ "$TOKEN_DB" != "$MARKET_DB" ]]; then
+              echo "::error::A separate QUANT_MARKET_DATABASE_URL requires QUANT_MARKET_MIGRATION_DATABASE_URL."
+              exit 1
+            fi
           fi
       - name: Checkout Quant source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -599,6 +609,9 @@ jobs:
         working-directory: backend
         run: |
           alembic -c alembic.ini upgrade head
+          if [[ -n "${QUANT_MARKET_MIGRATION_DATABASE_URL}" ]]; then
+            QUANT_TOKEN_MIGRATION_DATABASE_URL="$QUANT_MARKET_MIGRATION_DATABASE_URL" alembic -c alembic.ini upgrade head
+          fi
           alembic -c alembic.ini current --verbose
 
   quant-regression:
