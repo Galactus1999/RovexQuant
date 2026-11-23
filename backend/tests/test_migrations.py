@@ -213,7 +213,7 @@ def test_postgres_market_eod_migration_creates_provenance_tables(migrated_postgr
                 """
                 SELECT table_name FROM information_schema.tables
                 WHERE table_schema = current_schema()
-                  AND table_name IN ('market_eod_bars', 'market_ingestion_runs')
+                  AND table_name IN ('market_eod_bars', 'market_ingestion_runs', 'market_ingestion_jobs')
                 """
             ).fetchall()
         }
@@ -225,9 +225,42 @@ def test_postgres_market_eod_migration_creates_provenance_tables(migrated_postgr
                 """
             ).fetchall()
         }
-    assert tables == {"market_eod_bars", "market_ingestion_runs"}
+    assert tables == {"market_eod_bars", "market_ingestion_runs", "market_ingestion_jobs"}
+    queue_columns = {
+        row[0] for row in connection.execute(
+            """
+            SELECT column_name FROM information_schema.columns
+            WHERE table_schema = current_schema() AND table_name = 'market_ingestion_jobs'
+            """
+        ).fetchall()
+    }
     assert {
         "exchange", "trading_date", "symbol", "series", "open", "high",
         "low", "close", "volume", "isin", "trades", "provider", "data_mode",
         "quality_status", "source_retrieved_at",
     }.issubset(bar_columns)
+
+
+def test_postgres_market_ingestion_queue_has_lease_and_retry_contract(migrated_postgres):
+    with psycopg.connect(migrated_postgres, sslmode="disable") as connection:
+        columns = {
+            row[0] for row in connection.execute(
+                """
+                SELECT column_name FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                  AND table_name = 'market_ingestion_jobs'
+                """
+            ).fetchall()
+        }
+        indexes = {
+            row[0] for row in connection.execute(
+                """
+                SELECT indexname FROM pg_indexes
+                WHERE schemaname = current_schema()
+                  AND tablename = 'market_ingestion_jobs'
+                """
+            ).fetchall()
+        }
+    assert {"run_id", "status", "attempt_count", "available_at", "lease_owner",
+            "lease_expires_at", "heartbeat_at", "last_error"}.issubset(columns)
+    assert {"ix_market_ingestion_jobs_claim", "ix_market_ingestion_jobs_lease"}.issubset(indexes)
