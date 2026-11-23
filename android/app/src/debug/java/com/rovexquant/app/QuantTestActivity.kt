@@ -8,6 +8,7 @@ import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiDailyBar
 import com.rovexquant.app.data.model.AiProvider
 import com.rovexquant.app.data.model.AiResearchRun
+import com.rovexquant.app.data.model.AiBudgetStatus
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.EodMarketSnapshot
 import com.rovexquant.app.data.model.EodStockMove
@@ -110,6 +111,8 @@ class FakeQuantRepository(
         setOf("research", "macro_analysis", "claim_verification", "summarization")
 
     override suspend fun fetchAiResearchRuns(session: QuantSession, limit: Int): List<AiResearchRun> = emptyList()
+    override suspend fun fetchAiBudgetStatus(session: QuantSession): AiBudgetStatus =
+        AiBudgetStatus(false, 0, null, null, 0, null, null)
 
     override suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) = Unit
     override suspend fun deleteAiProviderCredential(session: QuantSession, providerId: String) = Unit
