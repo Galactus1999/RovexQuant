@@ -131,6 +131,15 @@ class QuantDashboardRegressionTest {
         }
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.chat.input"))
         composeRule.onNodeWithTag("ai.chat.input").assertTextContains("NSE EOD SNAPSHOT")
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.brief.generate"))
+        composeRule.onNodeWithTag("ai.brief.generate").assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.brief.generate").performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("Deterministic AI fixture response.").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.brief.output"))
+        composeRule.onNodeWithTag("ai.brief.output").assertTextContains("Deterministic AI fixture response.")
+        composeRule.onNodeWithText("No machine-verifiable source references returned.", substring = true).assertIsDisplayed()
     }
 
     @Test fun intelligenceCentreLoadsEventEvidenceAndSectorTransmission() {

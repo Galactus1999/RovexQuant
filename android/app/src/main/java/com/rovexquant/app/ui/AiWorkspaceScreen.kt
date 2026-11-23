@@ -363,6 +363,17 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
             }
         }
         item {
+            AiResearchBriefingPanel(
+                session = session,
+                repository = repository,
+                providerId = selectedProvider,
+                model = model,
+                fallbackProviders = selectedFallbacks.toList(),
+                canUseAi = canUseAi,
+                evidenceDraft = chatInput
+            )
+        }
+        item {
             TerminalCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Eyebrow("AI conversation")

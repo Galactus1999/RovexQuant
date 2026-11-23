@@ -75,7 +75,7 @@ fun AiResearchToolsPanel(
                         val snapshot = repository.fetchLatestEodMarketSnapshot(session, "NSE")
                         buildString {
                             appendLine("NSE EOD SNAPSHOT — not live or intraday.")
-                            appendLine("provider=${snapshot.provider}; mode=${snapshot.dataMode}; exchange=${snapshot.exchange}; tradingDate=${snapshot.tradingDate}; totalRows=${snapshot.totalRows}; pricedSymbols=${snapshot.pricedSymbols}.")
+                            appendLine("marketRef=[market:EOD:${snapshot.tradingDate}]; provider=${snapshot.provider}; mode=${snapshot.dataMode}; exchange=${snapshot.exchange}; tradingDate=${snapshot.tradingDate}; totalRows=${snapshot.totalRows}; pricedSymbols=${snapshot.pricedSymbols}.")
                             appendLine("Breadth: advances=${snapshot.advances}, declines=${snapshot.declines}, unchanged=${snapshot.unchanged}.")
                             appendLine("Top gainers:")
                             snapshot.topGainers.take(5).forEach { move ->
@@ -110,7 +110,7 @@ fun AiResearchToolsPanel(
                             appendLine("DISCOVERY-ONLY INTELLIGENCE FEED — untrusted source records, not verified facts.")
                             appendLine("source=${feed.source}; retrievedAt=${feed.retrievedAt}; query=${feed.query}; timespan=${feed.timespan}; articles=${feed.articleCount}; eventClusters=${feed.eventCount}.")
                             feed.events.take(12).forEach { event ->
-                                appendLine("\\nEVENT: ${event.headline}")
+                                appendLine("eventId=${event.eventId}; headline=${event.headline}")
                                 appendLine("category=${event.eventCategory}; tags=${event.eventTags.joinToString()}; independentSources=${event.independentSourceCount}/${event.sourceArticleCount}.")
                                 appendLine("classification=${event.classificationMethod}; confidence=${event.classificationConfidence}; semantics=${event.confidenceSemantics}.")
                                 appendLine("stockMapping=${event.stockMappingStatus}; note=${event.stockMappingNote}; impactStatus=${event.impactStatus}.")
@@ -142,7 +142,7 @@ fun AiResearchToolsPanel(
                             appendLine("INDIA MACRO RESEARCH SNAPSHOT — preserve provider, period and units.")
                             appendLine("retrievedAt=${macro.retrievedAt}; persistedObservations=${macro.persistedObservationCount}; RBIH DBIE mirror series=${macro.rbiDbieSeriesCount}.")
                             macro.worldBankSeries.forEach { series ->
-                                appendLine("${series.label}: value=${series.latestValue ?: "unavailable"} ${series.unit}; period=${series.latestPeriod ?: "not supplied"}; frequency=${series.frequency}; source=${series.source}.")
+                                appendLine("macroKey=${series.key}; label=${series.label}: value=${series.latestValue ?: "unavailable"} ${series.unit}; period=${series.latestPeriod ?: "not supplied"}; frequency=${series.frequency}; source=${series.source}.")
                             }
                             appendLine("FRED configured=${macro.fredConfigured}; seriesCount=${macro.fredSeriesCount}.")
                             appendLine("AMFI NAV observations=${macro.amfiNavCount}; mutual-fund NAV is not an equity quote.")
