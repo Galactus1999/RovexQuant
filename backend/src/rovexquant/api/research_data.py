@@ -221,7 +221,7 @@ async def app_nse_mcp_tools(server: Literal["bhavcopy", "cmmkt", "dalalos", "bot
             "catalog": catalog,
             "failures": failures,
             "received_at": datetime.now(timezone.utc),
-            "usage": "Private educational research; DalalOS plan quotas and source attribution apply; no raw data retention or AI training",
+            "usage": "Private research; DalalOS plan quotas and source attribution apply; no raw data retention or AI training",
         }
     except NseMcpError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
