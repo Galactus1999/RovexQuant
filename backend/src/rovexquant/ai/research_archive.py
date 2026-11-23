@@ -101,8 +101,15 @@ def reserve_ai_research_run(
     return str(run_id)
 
 
-def finish_ai_research_run(run_id: str, completion: dict[str, Any]) -> None:
-    response_doc = _bounded({"content": completion.get("content", "")}, "response")
+def finish_ai_research_run(
+    run_id: str, completion: dict[str, Any], *, status: str = "SUCCEEDED",
+    verification: dict[str, Any] | None = None,
+) -> None:
+    allowed_statuses = {"SUCCEEDED", "VERIFIED", "PARTIALLY_VERIFIED", "REJECTED", "VERIFICATION_PENDING"}
+    if status not in allowed_statuses:
+        raise EodStoreError("Invalid terminal AI research status", 422)
+    verification_doc = verification if isinstance(verification, dict) else {}
+    response_doc = _bounded({"content": completion.get("content", ""), "verification": verification_doc}, "response")
     raw_usage = completion.get("usage") if isinstance(completion.get("usage"), dict) else {}
     usage = {
         key: int(value) for key, value in raw_usage.items()
@@ -247,7 +254,7 @@ def get_ai_research_run(run_id: str) -> dict[str, Any] | None:
     keys = (
         "run_id", "task_type", "provider_id", "model", "status", "request_hash",
         "request_payload", "response_payload", "token_usage", "cost_usd",
-        "cost_status", "fallback_used", "source_refs", "created_at", "completed_at",
+        "cost_status", "fallback_used", "source_refs", "verification", "created_at", "completed_at",
     )
     try:
         with connect() as connection:
