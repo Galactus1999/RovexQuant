@@ -116,20 +116,20 @@ fun MacroEventResearchScreen(session: QuantSession, repository: QuantDataReposit
                     if (state.integrityLoading) "No report loaded yet." else "No official reconciliation report is stored yet.",
                     color = Muted, fontSize = 10.sp
                 )
-                if (state.integrity?.derivedBackfills?.isNotEmpty() == true) {
+                state.integrity?.derivedBackfills?.takeIf { it.isNotEmpty() }?.let { derivedBackfills ->
                     Spacer(Modifier.height(8.dp))
                     Eyebrow("Adjusted prices · corporate actions · symbol history")
-                    state.integrity.derivedBackfills.forEach { derived ->
+                    derivedBackfills.forEach { derived ->
                         Text(
                             "${if (derived.year == 0) "ALL" else derived.year} · ${derived.datasetKind} · ${derived.status} · ${derived.rowsSeen} rows scanned",
                             color = if (derived.status == "SUCCEEDED") Mint else Gold, fontSize = 9.sp
                         )
                     }
                 }
-                if (state.integrity?.backfills?.isNotEmpty() == true) {
+                state.integrity?.backfills?.takeIf { it.isNotEmpty() }?.let { backfills ->
                     Spacer(Modifier.height(8.dp))
                     Eyebrow("Historical Parquet imports")
-                    state.integrity.backfills.forEach { backfill ->
+                    backfills.forEach { backfill ->
                         Text(
                             "${backfill.year} · ${backfill.status} · ${backfill.rowsSeen} rows scanned · ${backfill.rowsUpserted} rows upserted",
                             color = if (backfill.status == "SUCCEEDED") Mint else Gold, fontSize = 9.sp
