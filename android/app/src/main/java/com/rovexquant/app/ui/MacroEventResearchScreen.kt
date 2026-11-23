@@ -268,6 +268,13 @@ private fun EventStudyContent(result: EventStudyResult) {
         Text("No benchmark-relative result was calculated.", color = Gold, fontSize = 10.sp)
     }
     Text("Method: ${result.method} · Price basis: ${result.priceBasis}", color = Muted, fontSize = 9.sp)
+    if (result.isin != null) {
+        Text(
+            "Point-in-time identity: ${result.exchange}:${result.symbolAsOfAnchor ?: result.symbol} · ISIN ${result.isin} · valid from ${result.symbolValidFrom ?: "—"} to ${result.symbolValidTo ?: "current"}",
+            color = Muted, fontSize = 9.sp, lineHeight = 13.sp
+        )
+        Text("Identity source: ${result.symbolHistoryProvider ?: "historical symbol archive"}", color = Muted, fontSize = 8.sp)
+    }
     if (result.corporateActions.isNotEmpty()) {
         Spacer(Modifier.height(8.dp))
         Eyebrow("Corporate actions within ±60 days")

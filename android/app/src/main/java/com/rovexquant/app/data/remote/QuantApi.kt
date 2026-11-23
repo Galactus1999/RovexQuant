@@ -353,7 +353,12 @@ object QuantApi {
                 method = json.optString("method"),
                 priceBasis = json.optString("price_basis", "RAW_OR_MIXED_CLOSE"),
                 corporateActions = corporateActions,
-                limitations = limitations
+                limitations = limitations,
+                isin = json.optString("isin").takeIf { it.isNotBlank() && it != "null" },
+                symbolAsOfAnchor = json.optString("symbol_as_of_anchor").takeIf { it.isNotBlank() && it != "null" },
+                symbolValidFrom = json.optString("symbol_valid_from").takeIf { it.isNotBlank() && it != "null" },
+                symbolValidTo = json.optString("symbol_valid_to").takeIf { it.isNotBlank() && it != "null" },
+                symbolHistoryProvider = json.optString("symbol_history_provider").takeIf { it.isNotBlank() && it != "null" }
             )
         }
     }

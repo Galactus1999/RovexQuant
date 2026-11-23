@@ -27,5 +27,10 @@ data class EventStudyResult(
     val method: String,
     val priceBasis: String,
     val corporateActions: List<CorporateActionEvidence>,
-    val limitations: List<String>
+    val limitations: List<String>,
+    val isin: String? = null,
+    val symbolAsOfAnchor: String? = null,
+    val symbolValidFrom: String? = null,
+    val symbolValidTo: String? = null,
+    val symbolHistoryProvider: String? = null
 )
