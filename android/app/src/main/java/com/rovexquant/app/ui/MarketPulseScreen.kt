@@ -436,7 +436,7 @@ fun MarketPulseScreen(
                         .testTag("market.feed.status").padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
-                    Text("SOURCE · UPSTOX V3 · $streamStatus", color = Muted, fontSize = 9.sp, letterSpacing = .5.sp, fontWeight = FontWeight.Bold)
+                    Text("SOURCE · UPSTOX V3 · ${if (tokenConfigured == false) "ANALYTICS TOKEN REQUIRED" else streamStatus}", color = Muted, fontSize = 9.sp, letterSpacing = .5.sp, fontWeight = FontWeight.Bold)
                     Text("EXCHANGE · $exchangeClock UTC    RECEIVED · $receiveClock UTC", color = Muted, fontSize = 8.sp)
                     Text(
                         "TICK QUALITY · ${latestTick?.let {
