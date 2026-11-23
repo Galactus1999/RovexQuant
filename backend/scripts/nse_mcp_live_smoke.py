@@ -7,31 +7,37 @@ without persisting or dumping raw market data.
 """
 import asyncio
 import json
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from rovexquant.market_data.nse_mcp import (
     NseMcpClient,
+    NseMcpError,
     extract_source_timestamp,
     safe_tool_catalog,
 )
 
 # Explicitly allowlisted read-only data/status tools. Never select arbitrary tools.
 CANDIDATES = {
-    "bhavcopy": ("get_market_breadth", "get_market_mood", "get_index_snapshot"),
-    "cmmkt": ("cm_get_data_status", "cm_get_allstocks_status", "cm_get_live_indices"),
+    "bhavcopy": ("get_market_breadth", "get_index_snapshot"),
+    "cmmkt": ("cm_get_live_indices", "cm_get_data_status", "cm_get_allstocks_status"),
 }
 
 # Only fixed, low-impact arguments for explicitly allowlisted read-only tools.
+def _today_nse() -> str:
+    return datetime.now(ZoneInfo("Asia/Kolkata")).date().isoformat()
+
 # The Bhavcopy tools require an as-of date; use today's ISO date and let NSE
 # return its documented nearest available trading day when the market is shut.
 def _safe_arguments(server: str, tool_name: str) -> dict[str, Any] | None:
     if server == "bhavcopy" and tool_name in {"get_market_breadth", "get_market_mood"}:
-        from datetime import date
-        return {"date": date.today().isoformat()}
+        return {"date": _today_nse()}
     if server == "bhavcopy" and tool_name == "get_index_snapshot":
-        from datetime import date
-        return {"date": date.today().isoformat(), "filter": "Nifty 50"}
-    if server == "cmmkt" and tool_name in {"cm_get_data_status", "cm_get_allstocks_status", "cm_get_live_indices"}:
+        return {"date": _today_nse(), "filter": "Nifty 50"}
+    if server == "cmmkt" and tool_name == "cm_get_live_indices":
+        return {"group": "all", "nameFilter": ""}
+    if server == "cmmkt" and tool_name in {"cm_get_data_status", "cm_get_allstocks_status"}:
         return {}
     return None
 
@@ -83,7 +89,7 @@ def _summarize(value: Any) -> dict[str, Any]:
     return {"type": type(value).__name__}
 
 
-async def check(server: str) -> None:
+async def _check_once(server: str) -> None:
     async with NseMcpClient(server, timeout=25.0) as client:
         raw_tools = await client.list_tools()
         tools = safe_tool_catalog(raw_tools)
@@ -102,8 +108,7 @@ async def check(server: str) -> None:
 
         by_name = {tool.get("name"): tool for tool in raw_tools}
         eligible_names = {item["name"] for item in eligible}
-        selected = None
-        arguments = None
+        selected_tools: list[tuple[dict[str, Any], dict[str, Any]]] = []
         for name in CANDIDATES[server]:
             if name not in by_name or name not in eligible_names:
                 continue
@@ -112,10 +117,10 @@ async def check(server: str) -> None:
                 continue
             required = set(_required_fields(by_name[name]))
             if required.issubset(candidate_arguments):
-                selected = by_name[name]
-                arguments = candidate_arguments
+                selected_tools.append((by_name[name], candidate_arguments))
+            if len(selected_tools) == 2:
                 break
-        if selected is None or arguments is None:
+        if not selected_tools:
             required_candidates = {
                 name: _required_fields(by_name[name])
                 for name in CANDIDATES[server]
@@ -126,28 +131,67 @@ async def check(server: str) -> None:
                 f"candidate required fields: {required_candidates}"
             )
 
-        result = await client.call_tool(selected["name"], arguments)
-        structured = result.get("structured_content")
-        content = result.get("content")
-        timestamp = extract_source_timestamp(result)
-        print(json.dumps({
-            "validation": "tool_call_completed",
-            "server": server,
-            "tool": selected["name"],
-            "argument_names": sorted(arguments),
-            "data_mode": "END_OF_DAY" if server == "bhavcopy" else "DELAYED",
-            "source_timestamp": timestamp,
-            "source_timestamp_status": "explicit_feed_timestamp" if timestamp is not None else "not_supplied",
-            "structured_content_shape": _summarize(structured),
-            "content_shape": _summarize(content),
-        }, sort_keys=True))
-        if structured is None and not content:
-            raise RuntimeError(f"NSE {server} tool {selected['name']} returned no content")
+        for selected, arguments in selected_tools:
+            result = await client.call_tool(selected["name"], arguments)
+            structured = result.get("structured_content")
+            content = result.get("content")
+            timestamp = extract_source_timestamp(result)
+            print(json.dumps({
+                "validation": "tool_call_completed",
+                "server": server,
+                "tool": selected["name"],
+                "argument_names": sorted(arguments),
+                "data_mode": "END_OF_DAY" if server == "bhavcopy" else "DELAYED",
+                "source_timestamp": timestamp,
+                "source_timestamp_status": "explicit_feed_timestamp" if timestamp is not None else "not_supplied",
+                "structured_content_shape": _summarize(structured),
+                "content_shape": _summarize(content),
+            }, sort_keys=True))
+            if structured is None and not content:
+                raise RuntimeError(f"NSE {server} tool {selected['name']} returned no content")
+
+
+async def check(server: str) -> None:
+    """Retry only transport/temporary upstream failures; schema or permission failures stay hard failures."""
+    max_attempts = 3 if server == "bhavcopy" else 2
+    for attempt in range(max_attempts):
+        try:
+            await _check_once(server)
+            return
+        except NseMcpError as error:
+            if not error.retryable or attempt == max_attempts - 1:
+                raise
+            delay = 2 ** attempt
+            print(f"{server}: transient upstream failure; retrying in {delay}s")
+            await asyncio.sleep(delay)
 
 
 async def main() -> None:
+    failures: list[str] = []
+    degraded: list[str] = []
     for server in ("bhavcopy", "cmmkt"):
-        await check(server)
+        try:
+            await check(server)
+        except NseMcpError as error:
+            if server == "cmmkt" and error.retryable:
+                degraded.append(f"{server}: {error}")
+                print(
+                    "::warning::CMMKT delayed-data service is temporarily unavailable. "
+                    "No live CMMKT data is claimed; Bhavcopy EOD remains independently verified. "
+                    f"Reason: {error}"
+                )
+            else:
+                failures.append(f"{server}: {error}")
+                print(f"{server}: validation blocked: {type(error).__name__}: {error}")
+        except Exception as error:
+            failures.append(f"{server}: {type(error).__name__}: {error}")
+            print(f"{server}: validation blocked: {type(error).__name__}: {error}")
+    if failures:
+        raise SystemExit("; ".join(failures))
+    if degraded:
+        print("NSE MCP smoke result: Bhavcopy verified; CMMKT explicitly degraded (transient upstream failure).")
+    else:
+        print("NSE MCP smoke result: Bhavcopy and CMMKT both verified.")
 
 
 if __name__ == "__main__":

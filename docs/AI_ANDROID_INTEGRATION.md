@@ -20,7 +20,7 @@ Provider API keys remain server-side. Configure one or more supported provider s
 
 The Android AI Studio asks for the provider's model ID because model catalogues change. It exposes an explicit connection test, removal of owner-stored app credentials, and selectable cross-provider fallback. A fallback is offered only when that provider has both a configured credential and a server-side `<PROVIDER>_FALLBACK_MODEL`; only classified transient failures trigger fallback. Authentication, entitlement and invalid-request errors do not silently switch providers. Same-provider key rotation is not used to evade rate limits.
 
-Do not put provider keys or `QUANT_AI_GATEWAY_TOKEN` in Android resources, BuildConfig, assets, local preferences, or APKs. Do not send secrets in chat. The AI workspace also embeds the existing read-only NSE MCP research panel; attaching a result to a model request is an explicit user action and sends that selected response to the configured AI provider for inference. Review the exchange/provider data-use terms before doing so.
+Do not put provider keys or `QUANT_AI_GATEWAY_TOKEN` in Android resources, BuildConfig, assets, local preferences, or APKs. Do not send secrets in chat. The AI workspace also embeds the existing read-only NSE MCP research panel; attaching a result to a model request is an explicit user action and sends that selected response to the configured AI provider for inference. Review exchange/provider data-use terms before doing so.
 
 ## Final strategy-stage data recovery
 

@@ -58,7 +58,24 @@ every data family.
 6. DuckDB/Polars research, event studies and point-in-time backtesting (P6).
 7. Provenance-rich mobile views and diagnostics (P7).
 
-## Current scope boundary
-P4 World Bank/FRED adapters and AMFI daily NAV adapter/API are implemented; RBI DBIE numeric-series import remains open because only official downloadable Excel tables were verified, not a stable documented API. P5 GDELT cache/rate limiting, official RBI/SEBI/PIB RSS adapters and merged Intelligence Centre feed are implemented; durable event archive/scheduled ingestion and issuer-level corroboration remain open. P6 EOD event-window calculations and optional matched-date benchmark-relative returns are implemented; corporate-action adjustment, point-in-time universe and survivorship-bias controls remain open. P7 authenticated backend routes and Android Research Lab macro/fund/event-study views are implemented; provider freshness/status unification and production integration tests remain open. P2/P3 are prioritized but not
-claimed complete. Production data availability still depends on applying
-migrations, provider connectivity, and configured optional credentials.
+## Implementation status — source complete, production validation gated
+
+The P4–P7 implementation is present in this branch and has been integrated with the latest `main` Pulse/EOD worker changes. The phase labels below describe source implementation, not a claim that a deployed service has already collected production data.
+
+- **P4 — macro persistence:** World Bank, optional FRED, AMFI NAV and the allowlisted delayed RBIH DBIE mirror adapters; versioned PostgreSQL observations, deduplication/content hashes, authenticated refresh/history/status routes and a scheduled/manual refresh workflow.
+- **P5 — event archive:** GDELT discovery plus RBI/SEBI/PIB source feeds; durable event/source/run persistence, normalized deduplication, scheduled/manual refresh, archive/status routes and conservative exact-name/symbol issuer candidates. Sector effects remain hypotheses, not verified causal links.
+- **P6 — point-in-time research:** ISIN-based identity resolution and historical ticker continuity, corporate-action-adjusted OHLC consistency, point-in-time constituent reconstruction and equal-weighted historical universe performance with coverage invalidation. Research output is descriptive and not a tradable portfolio.
+- **P7 — data health and Android:** authenticated health/reconciliation APIs and Android research views for macro, events and event studies, with provenance/freshness context and deterministic CSV research utilities.
+
+### Remaining release and production gates
+
+1. Complete the current GitHub Actions Android compile, lint and APK-integrity jobs on the merged phase branch; resolve any failures before calling the branch green.
+2. Merge only after the PR is mergeable and all required checks pass against the latest `main`.
+3. Apply the database migration in the deployed environment and verify the actual migration revision.
+4. Configure the existing database connection secret for the scheduled macro refresh; configure `FRED_API_KEY` only if FRED coverage is required.
+5. Verify scheduled GitHub Actions execution, persisted rows, source timestamps, archive freshness and health/reconciliation outputs against the deployed backend.
+6. Verify Android login, refresh, loading, stale-data, empty-data, provider-error and backend-unavailable states against the deployed service.
+
+A green GitHub build proves source/build/test correctness only. It does not prove production credentials, external-provider availability, scheduler execution or live data collection. AMFI NAV is fund NAV, not an equity quote; the RBIH DBIE mirror is delayed and must be checked against RBI's portal; GDELT is discovery rather than primary-source verification. NSE MCP and other providers remain subject to their own usage terms.
+
+P1–P3 (TejHQ EOD durability, bulk historical backfill and independent reconciliation) remain separate integration priorities and are not silently marked complete by P4–P7.

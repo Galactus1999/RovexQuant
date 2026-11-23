@@ -1,0 +1,54 @@
+name: Quant Intelligence Event Archive Refresh
+
+on:
+  schedule:
+    - cron: "10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quant-intelligence-archive-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Refresh GDELT and official event archive
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      QUANT_ENV: production
+      QUANT_MARKET_DATABASE_URL: \${{ secrets.QUANT_MARKET_DATABASE_URL }}
+      QUANT_TOKEN_DATABASE_URL: \${{ secrets.QUANT_TOKEN_DATABASE_URL }}
+    steps:
+      - name: Checkout RovexQuant
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.lock
+      - name: Install exact locked backend
+        working-directory: backend
+        run: |
+          python -m pip install --disable-pip-version-check "uv==0.12.9"
+          uv pip install --system --no-deps -r requirements.lock
+          uv pip install --system --no-deps -e .
+      - name: Require database configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "\${QUANT_MARKET_DATABASE_URL:-}" && -z "\${QUANT_TOKEN_DATABASE_URL:-}" ]]; then
+            echo "::error::Configure QUANT_MARKET_DATABASE_URL or QUANT_TOKEN_DATABASE_URL."
+            exit 1
+          fi
+      - name: Apply reviewed schema migrations
+        working-directory: backend
+        env:
+          QUANT_TOKEN_MIGRATION_DATABASE_URL: \${{ secrets.QUANT_MARKET_MIGRATION_DATABASE_URL || secrets.QUANT_TOKEN_MIGRATION_DATABASE_URL }}
+        run: alembic -c alembic.ini upgrade head
+      - name: Refresh intelligence archive
+        working-directory: backend
+        run: python scripts/refresh_intelligence_archive.py

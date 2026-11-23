@@ -1,20 +1,38 @@
-"""Authenticated analytical event-discovery API for the AI Intelligence Centre."""
+"""Authenticated intelligence discovery and durable archive endpoints."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from rovexquant.intelligence.analysis import analyze_articles
+from rovexquant.market_data.intelligence_archive import (
+    IntelligenceProviderError, discover_and_archive, get_intelligence_archive,
+    latest_intelligence_runs,
+)
+from rovexquant.market_data.eod_store import EodStoreError
 from rovexquant.market_data import gdelt_service
-from rovexquant.market_data.gdelt import GdeltProviderError
+from rovexquant.market_data.instruments import get_nse_equity_instruments
 from rovexquant.market_data.official_feeds import fetch_official_updates
 from rovexquant.security.dependencies import require_app_session
 from rovexquant.security.request_controls import rate_limit
 
 router = APIRouter()
 intelligence_rate_limit = rate_limit("intelligence-events", limit=8, window_seconds=60)
+intelligence_refresh_rate_limit = rate_limit("intelligence-refresh", limit=3, window_seconds=60)
+
+
+async def _refresh(query: str, timespan: Literal["1d", "3d", "7d"], limit: int):
+    try:
+        return await discover_and_archive(
+            query, timespan=timespan, limit=limit,
+            gdelt_fetcher=gdelt_service.discover_articles,
+            official_fetcher=fetch_official_updates,
+            instrument_fetcher=get_nse_equity_instruments,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except IntelligenceProviderError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
 
 
 @router.get(
@@ -26,57 +44,43 @@ async def app_intelligence_events(
     timespan: Literal["1d", "3d", "7d"] = "7d",
     limit: int = Query(default=30, ge=1, le=50),
 ):
-    """Discover recent news and return transparent event-to-sector hypotheses.
+    """On-demand discovery plus durable event/source provenance where DB is configured."""
+    return await _refresh(query, timespan, limit)
 
-    This is an on-demand discovery endpoint. It does not claim continuous monitoring,
-    verified factual adjudication, company-level exposure, or stock recommendations.
-    """
-    gdelt_available = True
+
+@router.post(
+    "/api/v1/app/intelligence/refresh",
+    dependencies=[Depends(require_app_session), Depends(intelligence_refresh_rate_limit)],
+)
+async def app_intelligence_refresh(
+    query: str = Query(default="India OR RBI OR SEBI OR oil OR war OR AI", min_length=1, max_length=160),
+    timespan: Literal["1d", "3d", "7d"] = "7d",
+    limit: int = Query(default=50, ge=1, le=50),
+):
+    return await _refresh(query, timespan, limit)
+
+
+@router.get(
+    "/api/v1/app/intelligence/archive",
+    dependencies=[Depends(require_app_session), Depends(intelligence_rate_limit)],
+)
+def app_intelligence_archive(
+    days: int = Query(default=30, ge=1, le=365),
+    category: str | None = Query(default=None, max_length=64),
+    limit: int = Query(default=50, ge=1, le=100),
+):
     try:
-        gdelt_articles = await gdelt_service.discover_articles(query, timespan=timespan, limit=limit)
-    except ValueError as error:
-        raise HTTPException(status_code=422, detail=str(error)) from error
-    except GdeltProviderError:
-        gdelt_articles = []
-        gdelt_available = False
+        return get_intelligence_archive(days=days, category=category, limit=limit)
+    except EodStoreError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
-    official = await fetch_official_updates(query=query, limit=limit)
-    articles = gdelt_articles + official["articles"]
-    if not articles and not any(
-        item["status"] == "AVAILABLE" for item in official["feed_status"]
-    ):
-        raise HTTPException(status_code=502, detail="Global news and official announcement feeds are temporarily unavailable.")
 
-    events = analyze_articles(articles)
-    retrieved_at = datetime.now(timezone.utc).isoformat()
-    latest_seen_at = max(
-        (str(article.get("seen_at") or "") for article in articles),
-        default=None,
-    )
-    return {
-        "source": "GDELT_DOC_API_PLUS_OFFICIAL_RSS",
-        "gdelt_status": "AVAILABLE" if gdelt_available else "UNAVAILABLE",
-        "retrieved_at": retrieved_at,
-        "latest_source_seen_at": latest_seen_at,
-        "timestamp_semantics": "GDELT indexed/seen timestamp; not publisher publication time",
-        "data_delay": "NEWS_DISCOVERY_INDEX_DELAY_UNSPECIFIED",
-        "query": query,
-        "timespan": timespan,
-        "coverage": "GLOBAL_NEWS_DISCOVERY",
-        "article_count": len(articles),
-        "gdelt_article_count": len(gdelt_articles),
-        "official_article_count": len(official["articles"]),
-        "official_feed_status": official["feed_status"],
-        "official_feed_cache_hit": official["cache_hit"],
-        "event_count": len(events),
-        "events": events,
-        "limitations": [
-            "GDELT is a global news-discovery index, not an exchange filing or primary-source verification service.",
-            "Article seen time is not necessarily the publisher's original publication time.",
-            "Headline classification and sector exposure are deterministic hypotheses, not calibrated forecasts.",
-            "Company-level and instrument-level mapping is not yet enabled; no stock recommendation is generated by this endpoint.",
-            "Verify material claims against the original publisher, company disclosure or regulator before acting.",
-            "Official RBI, SEBI and PIB RSS headlines are primary-source links; article summaries are not independently adjudicated.",
-            "This endpoint performs on-demand retrieval; durable event history and scheduled monitoring are not yet enabled.",
-        ],
-    }
+@router.get(
+    "/api/v1/app/intelligence/archive/status",
+    dependencies=[Depends(require_app_session), Depends(intelligence_rate_limit)],
+)
+def app_intelligence_archive_status(limit: int = Query(default=20, ge=1, le=100)):
+    try:
+        return {"runs": latest_intelligence_runs(limit=limit)}
+    except EodStoreError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error

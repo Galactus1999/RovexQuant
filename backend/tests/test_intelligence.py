@@ -81,13 +81,19 @@ def test_mobile_intelligence_endpoint_requires_app_session(monkeypatch):
         "rovexquant.api.routers.intelligence.fetch_official_updates",
         fake_official,
     )
+    async def fake_instruments():
+        return []
+    monkeypatch.setattr(
+        "rovexquant.api.routers.intelligence.get_nse_equity_instruments",
+        fake_instruments,
+    )
     response = client.get(
         "/api/v1/app/intelligence/events?query=India&timespan=3d&limit=10",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["source"] == "GDELT_DOC_API_PLUS_OFFICIAL_RSS"
+    assert body["source"] == "GDELT_DOC_API_PLUS_OFFICIAL_RSS_AND_ARCHIVE"
     assert body["gdelt_article_count"] == 1
     assert body["official_article_count"] == 0
     assert body["events"][0]["event_category"] == "MONETARY_POLICY"
