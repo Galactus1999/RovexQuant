@@ -21,10 +21,35 @@ NSE_MCP_ENDPOINTS = {
     "dalalos": "https://mcp.dalalos.in/mcp",
 }
 _DALALOS_CAPABILITIES_PATH = Path(__file__).with_name("data") / "dalalos_capabilities.json"
+_DALALOS_DISABLED_TOOLS = {"add_to_watchlist", "remove_from_watchlist"}
 _PROTOCOL_VERSION = "2025-03-26"
 _TOOL_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
 _BLOCKED_TOOL_PARTS = ("trade", "order", "execute", "cancel", "modify", "place", "submit", "write", "delete")
-_DALALOS_DISABLED_TOOLS = {"add_to_watchlist", "remove_from_watchlist"}
+# NSE's live MCP catalogue omits readOnlyHint annotations. These exact data-query
+# tools were inspected in the live catalogue and correspond to the read-only
+# capabilities published on NSE's official MCP page. Unknown tools remain denied.
+_NSE_READ_ONLY_TOOL_ALLOWLIST = frozenset({
+    "get_top_by_volume", "get_top_movers", "nse_lookup_symbol", "get_market_mood",
+    "get_index_valuation", "get_market_breadth", "get_corporate_actions",
+    "compare_indices", "get_index_movers", "get_ltp_by_date", "get_bulk_quote",
+    "get_volume_analysis", "get_stock_history", "get_index_snapshot", "search_symbols",
+    "get_stock_vs_index", "compare_stocks", "get_index_history", "moving_average",
+    "get_52_week_high_low", "get_index_performance",
+    "cm_get_live_market_data", "cm_get_equity_stocks", "nse_get_losers",
+    "cm_get_call_auction_stocks", "nse_get_gainers", "cm_get_data_status",
+    "cm_get_stock_quote", "cm_get_index_quote", "cm_get_sme_stocks",
+    "cm_get_live_gainers", "cm_get_bond_stocks", "cm_get_live_losers",
+    "cm_get_live_indices", "nse_get_market_movers", "cm_get_allstocks_status",
+})
+_READ_ONLY_DESCRIPTION_VERBS = {
+    "get", "search", "compare", "calculate", "calculates", "find",
+    "list", "lookup", "look", "retrieve", "fetch", "returns",
+    "check", "analyse", "analyze",
+}
+_MUTATING_DESCRIPTION_PARTS = (
+    "place order", "submit order", "modify order", "cancel order",
+    "delete", "create order", "write", "execute trade",
+)
 
 
 class NseMcpError(Exception):
@@ -136,9 +161,15 @@ class NseMcpClient:
                     if len(body) + len(chunk) > 10_000_000:
                         raise NseMcpError("NSE MCP response exceeded the 10 MB safety limit", 502)
                     body.extend(chunk)
+                # aiter_bytes() has already decoded content-encoding (e.g. gzip).
+                # Reusing the original encoding/length headers makes httpx attempt
+                # a second decompression when response.text is accessed.
+                response_headers = dict(streamed.headers)
+                response_headers.pop("content-encoding", None)
+                response_headers.pop("content-length", None)
                 response = httpx.Response(
                     streamed.status_code,
-                    headers=streamed.headers,
+                    headers=response_headers,
                     content=bytes(body),
                     request=streamed.request,
                 )
@@ -237,7 +268,6 @@ class NseMcpClient:
         tool = next((item for item in tools if item["name"] == name), None)
         if tool is None:
             raise NseMcpError("Tool is not published by this MCP server", 404)
-        annotations = tool.get("annotations")
         if self.server == "dalalos":
             capability = _dalalos_capability(name)
             if capability is None or capability.get("deprecated") is True:
@@ -247,6 +277,7 @@ class NseMcpClient:
             if capability.get("destructive") is True:
                 raise NseMcpError("Destructive DalalOS tools are disabled", 403)
             read_only = capability.get("read_only") is True
+            annotations = tool.get("annotations")
             if isinstance(annotations, dict) and annotations.get("readOnlyHint") is False:
                 raise NseMcpError("DalalOS tool metadata contradicts its read-only capability", 403)
             if not read_only and not confirm_non_read_only:
@@ -254,10 +285,15 @@ class NseMcpClient:
                     "This DalalOS tool may trigger processing or consume plan credits; explicit confirmation is required",
                     403,
                 )
-        elif not isinstance(annotations, dict) or annotations.get("readOnlyHint") is not True:
-            raise NseMcpError(
-                "NSE MCP tool is not marked read-only (readOnlyHint must be true)", 403
-            )
+        else:
+            reviewed = {
+                item["name"]: item["read_only"]
+                for item in safe_tool_catalog(tools)
+            }
+            if not reviewed.get(name, False):
+                raise NseMcpError(
+                    "NSE MCP tool is not marked read-only or otherwise positively identified", 403
+                )
         schema = tool.get("inputSchema")
         if not isinstance(schema, dict) or schema.get("type") != "object":
             raise NseMcpError("NSE MCP tool has an unsupported input schema", 502)
@@ -326,13 +362,14 @@ def safe_tool_catalog(
     tools: list[dict[str, Any]],
     server: Literal["bhavcopy", "cmmkt", "dalalos"] = "bhavcopy",
 ) -> list[dict[str, Any]]:
-    """Return only imported/verified DalalOS tools or annotation-gated NSE tools."""
+    """Use the imported DalalOS allowlist or the existing strict NSE allowlist."""
     safe: list[dict[str, Any]] = []
     capabilities = _dalalos_capabilities() if server == "dalalos" else {}
     for tool in tools:
         name = tool.get("name")
         if not isinstance(name, str):
             continue
+        description = str(tool.get("description", ""))[:2000]
         annotations = tool.get("annotations")
         if server == "dalalos":
             capability = capabilities.get(name)
@@ -344,23 +381,40 @@ def safe_tool_catalog(
                 read_only = False
             safe.append({
                 "name": name,
-                "description": str(tool.get("description", ""))[:2000],
+                "description": description,
                 "input_schema": tool.get("inputSchema") if isinstance(tool.get("inputSchema"), dict) else {},
                 "read_only": read_only,
                 "requires_confirmation": not read_only and not destructive,
                 "destructive": destructive,
             })
+            continue
+
+        read_only_hint = annotations.get("readOnlyHint") if isinstance(annotations, dict) else None
+        name_is_safe = not any(part in name.lower() for part in _BLOCKED_TOOL_PARTS)
+        if read_only_hint is False:
+            read_only = False
+        elif read_only_hint is True:
+            read_only = name_is_safe
         else:
-            safe.append({
-                "name": name,
-                "description": str(tool.get("description", ""))[:2000],
-                "input_schema": tool.get("inputSchema") if isinstance(tool.get("inputSchema"), dict) else {},
-                "read_only": not any(part in name.lower() for part in _BLOCKED_TOOL_PARTS)
-                    and isinstance(annotations, dict)
-                    and annotations.get("readOnlyHint") is True,
-                "requires_confirmation": False,
-                "destructive": False,
-            })
+            description_words = description.strip().lower().split()
+            first_verb = description_words[0] if description_words else ""
+            description_is_safe = (
+                first_verb in _READ_ONLY_DESCRIPTION_VERBS
+                and not any(part in description.lower() for part in _MUTATING_DESCRIPTION_PARTS)
+            )
+            read_only = (
+                name in _NSE_READ_ONLY_TOOL_ALLOWLIST
+                and name_is_safe
+                and description_is_safe
+            )
+        safe.append({
+            "name": name,
+            "description": description,
+            "input_schema": tool.get("inputSchema") if isinstance(tool.get("inputSchema"), dict) else {},
+            "read_only": read_only,
+            "requires_confirmation": False,
+            "destructive": False,
+        })
     return safe
 
 def provider_status() -> list[dict[str, Any]]:
@@ -384,8 +438,10 @@ def provider_status() -> list[dict[str, Any]]:
 def extract_source_timestamp(result: dict[str, Any]) -> str | int | float | None:
     """Read explicit feed-level timestamps, never timestamps from individual data rows."""
     timestamp_keys = {
-        "source_timestamp", "as_of", "asof", "last_updated",
-        "lastupdated", "market_time", "exchange_timestamp",
+        "source_timestamp", "sourcetimestamp", "nsetimestamp", "updatedat",
+        "timestamp", "as_of", "asof", "last_updated", "lastupdated",
+        "last_updated_at", "lastupdatedat", "feed_timestamp", "market_time",
+        "exchange_timestamp",
     }
     metadata_keys = {"meta", "metadata", "freshness", "feed_status", "market_status"}
     roots: list[Any] = [result.get("structured_content")]
