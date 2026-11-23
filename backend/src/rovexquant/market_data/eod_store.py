@@ -331,12 +331,25 @@ def symbol_history(exchange: str, symbol: str, *, from_date: date, to_date: date
     try:
         with connect() as connection:
             rows = connection.execute("""
-                SELECT DISTINCT ON (trading_date)
-                       trading_date, open, high, low, close, previous_close, volume,
-                       turnover, provider, quality_status, source_retrieved_at, isin, trades
-                FROM market_eod_bars
-                WHERE exchange=%s AND symbol=%s AND trading_date BETWEEN %s AND %s
-                ORDER BY trading_date, source_retrieved_at DESC, provider
+                SELECT DISTINCT ON (bar.trading_date)
+                       bar.trading_date, bar.open, bar.high, bar.low,
+                       COALESCE(adjusted.adjusted_close, bar.close) AS close,
+                       bar.previous_close, bar.volume, bar.turnover, bar.provider,
+                       bar.quality_status, bar.source_retrieved_at, bar.isin, bar.trades,
+                       CASE WHEN adjusted.adjusted_close IS NULL
+                            THEN 'RAW_CLOSE' ELSE 'CORPORATE_ACTION_ADJUSTED' END AS price_basis,
+                       adjusted.adjustment_factor
+                FROM market_eod_bars AS bar
+                LEFT JOIN market_eod_adjusted_bars AS adjusted
+                  ON adjusted.exchange=bar.exchange
+                 AND adjusted.trading_date=bar.trading_date
+                 AND adjusted.symbol=bar.symbol
+                 AND adjusted.series=bar.series
+                 AND adjusted.provider='tejhq_hf_parquet'
+                WHERE bar.exchange=%s AND bar.symbol=%s
+                  AND bar.trading_date BETWEEN %s AND %s
+                ORDER BY bar.trading_date, adjusted.source_retrieved_at DESC NULLS LAST,
+                         bar.source_retrieved_at DESC, bar.provider
                 LIMIT %s
             """, (market, ticker, from_date, to_date, limit)).fetchall()
     except psycopg.Error as error:
@@ -349,4 +362,5 @@ def symbol_history(exchange: str, symbol: str, *, from_date: date, to_date: date
         "provider": row[8], "quality_status": row[9],
         "retrieved_at": row[10].isoformat(), "data_mode": "END_OF_DAY",
         "isin": row[11], "trades": int(row[12]) if row[12] is not None else None,
+        "price_basis": row[13], "adjustment_factor": float(row[14]) if row[14] is not None else None,
     } for row in rows]
