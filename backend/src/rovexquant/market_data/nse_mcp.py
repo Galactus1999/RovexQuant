@@ -221,17 +221,37 @@ class NseMcpClient:
             raise NseMcpError("NSE MCP tool catalogue exceeded pagination safety limit", 502)
         return tools
 
-    async def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    async def call_tool(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        *,
+        confirm_non_read_only: bool = False,
+    ) -> dict[str, Any]:
         if not _TOOL_NAME.fullmatch(name):
-            raise NseMcpError("Invalid NSE MCP tool name", 422)
-        if any(part in name.lower() for part in _BLOCKED_TOOL_PARTS):
+            raise NseMcpError("Invalid MCP tool name", 422)
+        if self.server != "dalalos" and any(part in name.lower() for part in _BLOCKED_TOOL_PARTS):
             raise NseMcpError("Quant permits read-only NSE research tools only", 403)
         tools = await self.list_tools()
         tool = next((item for item in tools if item["name"] == name), None)
         if tool is None:
-            raise NseMcpError("Tool is not published by this NSE MCP server", 404)
+            raise NseMcpError("Tool is not published by this MCP server", 404)
         annotations = tool.get("annotations")
-        if not isinstance(annotations, dict) or annotations.get("readOnlyHint") is not True:
+        if self.server == "dalalos":
+            capability = _dalalos_capability(name)
+            if capability is None or capability.get("deprecated") is True:
+                raise NseMcpError("DalalOS tool is not in the imported, current capability allowlist", 403)
+            if capability.get("destructive") is True:
+                raise NseMcpError("Destructive DalalOS tools are disabled", 403)
+            read_only = capability.get("read_only") is True
+            if isinstance(annotations, dict) and annotations.get("readOnlyHint") is False:
+                raise NseMcpError("DalalOS tool metadata contradicts its read-only capability", 403)
+            if not read_only and not confirm_non_read_only:
+                raise NseMcpError(
+                    "This DalalOS tool may trigger processing or consume plan credits; explicit confirmation is required",
+                    403,
+                )
+        elif not isinstance(annotations, dict) or annotations.get("readOnlyHint") is not True:
             raise NseMcpError(
                 "NSE MCP tool is not marked read-only (readOnlyHint must be true)", 403
             )
@@ -281,23 +301,64 @@ class NseMcpClient:
         }
 
 
-def safe_tool_catalog(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return tool descriptions and schemas without leaking server metadata."""
+def _dalalos_capabilities() -> dict[str, dict[str, Any]]:
+    try:
+        payload = json.loads(_DALALOS_CAPABILITIES_PATH.read_text(encoding="utf-8"))
+        records = payload.get("tools", [])
+        if not isinstance(records, list):
+            return {}
+        return {
+            item["name"]: item for item in records
+            if isinstance(item, dict) and isinstance(item.get("name"), str)
+        }
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
+def _dalalos_capability(name: str) -> dict[str, Any] | None:
+    return _dalalos_capabilities().get(name)
+
+
+def safe_tool_catalog(
+    tools: list[dict[str, Any]],
+    server: Literal["bhavcopy", "cmmkt", "dalalos"] = "bhavcopy",
+) -> list[dict[str, Any]]:
+    """Return only imported/verified DalalOS tools or annotation-gated NSE tools."""
     safe: list[dict[str, Any]] = []
+    capabilities = _dalalos_capabilities() if server == "dalalos" else {}
     for tool in tools:
         name = tool.get("name")
         if not isinstance(name, str):
             continue
-        safe.append({
-            "name": name,
-            "description": str(tool.get("description", ""))[:2000],
-            "input_schema": tool.get("inputSchema") if isinstance(tool.get("inputSchema"), dict) else {},
-            "read_only": not any(part in name.lower() for part in _BLOCKED_TOOL_PARTS)
-                and isinstance(tool.get("annotations"), dict)
-                and tool["annotations"].get("readOnlyHint") is True,
-        })
+        annotations = tool.get("annotations")
+        if server == "dalalos":
+            capability = capabilities.get(name)
+            if capability is None or capability.get("deprecated") is True:
+                continue
+            destructive = capability.get("destructive") is True
+            read_only = capability.get("read_only") is True
+            if destructive or (isinstance(annotations, dict) and annotations.get("readOnlyHint") is False):
+                read_only = False
+            safe.append({
+                "name": name,
+                "description": str(tool.get("description", ""))[:2000],
+                "input_schema": tool.get("inputSchema") if isinstance(tool.get("inputSchema"), dict) else {},
+                "read_only": read_only,
+                "requires_confirmation": not read_only and not destructive,
+                "destructive": destructive,
+            })
+        else:
+            safe.append({
+                "name": name,
+                "description": str(tool.get("description", ""))[:2000],
+                "input_schema": tool.get("inputSchema") if isinstance(tool.get("inputSchema"), dict) else {},
+                "read_only": not any(part in name.lower() for part in _BLOCKED_TOOL_PARTS)
+                    and isinstance(annotations, dict)
+                    and annotations.get("readOnlyHint") is True,
+                "requires_confirmation": False,
+                "destructive": False,
+            })
     return safe
-
 
 def provider_status() -> list[dict[str, Any]]:
     return [
