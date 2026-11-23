@@ -19,7 +19,7 @@ def upgrade() -> None:
             provider_id TEXT NOT NULL CHECK (length(provider_id) BETWEEN 1 AND 48),
             model TEXT NOT NULL CHECK (length(model) BETWEEN 1 AND 160),
             credential_id TEXT,
-            status TEXT NOT NULL CHECK (status IN ('SUCCEEDED', 'FAILED', 'VERIFICATION_PENDING', 'VERIFIED', 'PARTIALLY_VERIFIED', 'REJECTED')),
+            status TEXT NOT NULL CHECK (status IN ('RUNNING', 'SUCCEEDED', 'FAILED', 'VERIFICATION_PENDING', 'VERIFIED', 'PARTIALLY_VERIFIED', 'REJECTED')),
             request_hash CHAR(64) NOT NULL,
             request_payload JSONB NOT NULL,
             response_payload JSONB NOT NULL,
