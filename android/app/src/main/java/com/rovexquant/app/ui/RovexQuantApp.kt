@@ -66,7 +66,12 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
     Column(Modifier.fillMaxSize().background(Ink)) {
         Column(Modifier.padding(horizontal = 17.dp)) {
             TerminalHeader(
-                status = if (state.streamStatus.startsWith("Live")) "Live data" else "Backend",
+                status = when {
+                    state.streamStatus.startsWith("Live") -> "Live data"
+                    state.streamStatus.contains("stale", ignoreCase = true) -> "Stale data"
+                    state.streamStatus.startsWith("Connected") -> "Connected"
+                    else -> "Backend"
+                },
                 onSignOut = workspace::signOut
             )
         }
