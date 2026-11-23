@@ -365,8 +365,20 @@ fun MarketPulseScreen(
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MetricTile("Adv / Decl", "— / —", "Breadth unavailable", accent = Gold, modifier = Modifier.weight(1f))
-                MetricTile("Signals", "0", "No verified feed", accent = Coral, modifier = Modifier.weight(1f))
+                MetricTile(
+                    "Adv / Decl",
+                    eodSnapshot?.let { "${it.advances} / ${it.declines}" } ?: "— / —",
+                    eodSnapshot?.let { "${it.pricedSymbols} priced EQ symbols" } ?: "Awaiting EOD snapshot",
+                    accent = Gold,
+                    modifier = Modifier.weight(1f)
+                )
+                MetricTile(
+                    "Signals",
+                    "—",
+                    "Signal generation awaits verified live-feed and strategy checks",
+                    accent = Coral,
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
         item {
