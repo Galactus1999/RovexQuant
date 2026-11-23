@@ -6,7 +6,7 @@ does not claim abnormal returns or causal event impact.
 from __future__ import annotations
 
 from datetime import date
-from math import sqrt
+from math import isfinite, sqrt
 from statistics import pstdev
 from typing import Any
 
@@ -14,13 +14,20 @@ from typing import Any
 def calculate_event_window(
     bars: list[dict[str, Any]], *, event_date: date, pre_bars: int = 10, post_bars: int = 10,
     benchmark_bars: list[dict[str, Any]] | None = None,
+    benchmark_symbol: str | None = None,
 ) -> dict[str, Any]:
     if not 1 <= pre_bars <= 60 or not 1 <= post_bars <= 60:
         raise ValueError("Event windows must be between 1 and 60 trading bars")
     ordered = sorted(
-        (bar for bar in bars if isinstance(bar.get("date"), str) and isinstance(bar.get("close"), (int, float))),
+        (bar for bar in bars
+         if isinstance(bar.get("date"), str)
+         and isinstance(bar.get("close"), (int, float))
+         and not isinstance(bar.get("close"), bool)
+         and isfinite(float(bar["close"]))),
         key=lambda bar: bar["date"],
     )
+    if len({bar["date"] for bar in ordered}) != len(ordered):
+        raise ValueError("Asset history contains duplicate trading dates")
     before = [bar for bar in ordered if bar["date"] < event_date.isoformat()]
     on_or_after = [bar for bar in ordered if bar["date"] >= event_date.isoformat()]
     if not before or not on_or_after:
@@ -63,6 +70,8 @@ def calculate_event_window(
             (bar for bar in benchmark_bars
              if isinstance(bar.get("date"), str)
              and isinstance(bar.get("close"), (int, float))
+             and not isinstance(bar.get("close"), bool)
+             and isfinite(float(bar["close"]))
              and float(bar["close"]) > 0),
             key=lambda bar: bar["date"],
         )
@@ -84,7 +93,7 @@ def calculate_event_window(
                     daily_abnormal.append(asset_daily - benchmark_daily)
                     previous_asset, previous_benchmark = float(bar["close"]), benchmark_close
                 benchmark_metrics = {
-                    "benchmark_symbol": "USER_SUPPLIED",
+                    "benchmark_symbol": benchmark_symbol,
                     "market_adjusted_cumulative_return": asset_return - benchmark_return,
                     "cumulative_abnormal_return": sum(daily_abnormal),
                     "benchmark_observations_matched": len(matched),
