@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from rovexquant.research.contracts import BacktestRequest, IndicatorRequest
 from rovexquant.research.service import calculate_indicators, run_backtest
 from rovexquant.research.event_study import calculate_event_window
-from rovexquant.market_data.eod_store import EodStoreError, symbol_history
+from rovexquant.market_data.eod_store import EodStoreError, corporate_action_history, symbol_history
 from rovexquant.security.dependencies import require_app_session
 from rovexquant.security.request_controls import backtest_rate_limit, indicator_rate_limit
 
@@ -66,6 +66,12 @@ def event_study(
                 to_date=event_date + timedelta(days=180),
                 limit=2000,
             )
+        actions = corporate_action_history(
+            exchange, symbol,
+            from_date=event_date - timedelta(days=60),
+            to_date=event_date + timedelta(days=60),
+            limit=100,
+        )
         result = calculate_event_window(
             bars, event_date=event_date, pre_bars=pre_bars, post_bars=post_bars,
             benchmark_bars=benchmark_bars, benchmark_symbol=benchmark_symbol,
@@ -81,6 +87,7 @@ def event_study(
             "data_mode": "END_OF_DAY",
             "source": "PERSISTED_MARKET_EOD_BARS",
             "price_basis": price_basis,
+            "corporate_actions": actions,
             "observation_count": len(bars),
             **result,
         }
