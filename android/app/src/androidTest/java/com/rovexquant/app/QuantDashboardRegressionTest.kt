@@ -139,6 +139,9 @@ class QuantDashboardRegressionTest {
         }
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.brief.output"))
         composeRule.onNodeWithTag("ai.brief.output").assertTextContains("Deterministic AI fixture response.")
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(
+            hasText("No machine-verifiable source references returned.")
+        )
         composeRule.onNodeWithText("No machine-verifiable source references returned.", substring = true).assertIsDisplayed()
     }
 
