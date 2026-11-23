@@ -783,6 +783,8 @@ object QuantApi {
         if (!model.isNullOrBlank()) body.put("model", model)
             .put("max_tokens", 1200)
             .put("temperature", 0.2)
+        if (!providerId.isNullOrBlank()) body.put("provider_id", providerId)
+        if (!model.isNullOrBlank()) body.put("model", model)
         if (!credentialId.isNullOrBlank()) body.put("credential_id", credentialId)
         body.put("fallback_providers", JSONArray().apply { fallbackProviders.distinct().take(3).forEach { put(it) } })
         val request = Request.Builder()
@@ -799,8 +801,8 @@ object QuantApi {
 
     fun requestAiStrategyBrief(
         session: QuantSession,
-        providerId: String,
-        model: String,
+        providerId: String?,
+        model: String?,
         symbol: String,
         exchange: String,
         fromDate: String,
@@ -810,8 +812,6 @@ object QuantApi {
         fallbackProviders: List<String>
     ): AiStrategyBrief {
         val body = JSONObject()
-            .put("provider_id", providerId)
-            .put("model", model)
             .put("symbol", symbol.trim().uppercase())
             .put("exchange", exchange.uppercase())
             .put("from_date", fromDate)
