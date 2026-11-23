@@ -6,7 +6,7 @@ does not claim abnormal returns or causal event impact.
 from __future__ import annotations
 
 from datetime import date
-from math import log, sqrt
+from math import sqrt
 from statistics import pstdev
 from typing import Any
 
@@ -31,26 +31,32 @@ def calculate_event_window(
     anchor_close = float(anchor["close"])
     if anchor_close <= 0 or any(float(bar["close"]) <= 0 for bar in window):
         raise ValueError("Event window contains non-positive close values")
+    pre_window = before[-pre_bars:]
+    pre_close = float(pre_window[0]["close"])
+    pre_returns = [
+        float(pre_window[i]["close"]) / float(pre_window[i - 1]["close"]) - 1.0
+        for i in range(1, len(pre_window))
+    ]
     returns = [float(bar["close"]) / anchor_close - 1.0 for bar in window]
     daily_returns = [
         float(window[i]["close"]) / float(window[i - 1]["close"]) - 1.0
         for i in range(1, len(window))
     ]
-    peaks: list[float] = []
     peak = anchor_close
     drawdown = 0.0
     for bar in window:
         close = float(bar["close"])
         peak = max(peak, close)
         drawdown = min(drawdown, close / peak - 1.0)
-        peaks.append(peak)
     return {
         "event_date": event_date.isoformat(),
         "anchor_date": anchor["date"],
         "anchor_close": anchor_close,
         "first_post_event_date": window[0]["date"],
         "last_post_event_date": window[-1]["date"],
-        "pre_event_bars_available": min(pre_bars, len(before)),
+        "pre_event_bars_used": len(pre_window),
+        "pre_event_period_return": anchor_close / pre_close - 1.0 if pre_close > 0 else None,
+        "pre_event_realized_daily_volatility": pstdev(pre_returns) * sqrt(252) if len(pre_returns) > 1 else None,
         "post_event_bars_used": len(window),
         "cumulative_return": returns[-1],
         "best_close_return": max(returns),
