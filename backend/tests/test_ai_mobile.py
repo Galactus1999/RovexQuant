@@ -386,8 +386,8 @@ def test_research_archive_persists_bounded_reproducible_run(monkeypatch):
     )
     assert len(run_id) == 36
     assert "INSERT INTO ai_research_runs" in fake.query
-    assert fake.params[5] == "SUCCEEDED"
-    assert len(fake.params[6]) == 64
+    assert "'SUCCEEDED'" in fake.query
+    assert len(fake.params[5]) == 64
     assert "groq-server-secret" not in str(fake.params)
 
 
