@@ -17,7 +17,7 @@ class FakeResponse:
     def json(self):
         return {
             "choices": [{"message": {"content": "The EOD evidence is mixed; validate with out-of-sample tests."}}],
-            "usage": {"prompt_tokens": 50, "completion_tokens": 20, "total_tokens": 70},
+            "usage": {"prompt_tokens": 50, "completion_tokens": 20, "total_tokens": 70, "cost": 0.0004},
         }
 
 
@@ -59,6 +59,8 @@ def test_mobile_ai_provider_catalogue_requires_app_session(mobile_client):
     assert "groq-server-secret" not in response.text
     assert response.json()["archive_status"] in {"PERSISTED", "UNAVAILABLE"}
     assert response.json()["task_type"] == "chat"
+    assert response.json()["cost_usd"] == 0.0004
+    assert response.json()["cost_status"] == "PROVIDER_REPORTED"
     assert "QUANT_AI_GATEWAY_TOKEN" not in response.text
 
 
