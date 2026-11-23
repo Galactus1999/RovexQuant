@@ -255,7 +255,8 @@ class FakeQuantRepository(
         toDate: String,
         strategyContext: String,
         credentialId: String?,
-        fallbackProviders: List<String>
+        fallbackProviders: List<String>,
+        automaticTaskRouting: Boolean
     ) = AiStrategyBrief(
         provider = "tejhq_eod",
         dataMode = "END_OF_DAY",
