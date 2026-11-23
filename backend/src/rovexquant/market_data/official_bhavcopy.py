@@ -124,6 +124,7 @@ async def download_official_bhavcopy(exchange: str, trading_date: date) -> tuple
     headers = {
         "User-Agent": "Mozilla/5.0 (compatible; RovexQuant-Research/1.0)",
         "Accept": "text/csv,application/zip,application/octet-stream,*/*",
+        "Accept-Language": "en-US,en;q=0.9",
         "Referer": "https://www.nseindia.com/" if exchange.upper() == "NSE" else "https://www.bseindia.com/",
     }
     try:
@@ -139,6 +140,8 @@ async def download_official_bhavcopy(exchange: str, trading_date: date) -> tuple
         raise OfficialBhavcopyError(f"Official exchange report returned HTTP {response.status_code}")
     if not response.content or len(response.content) > 25 * 1024 * 1024:
         raise OfficialBhavcopyError("Official exchange report is empty or exceeds the 25 MB safety limit")
+    if market == "BSE" and response.content.lstrip()[:64].lower().startswith((b"<!doctype", b"<html", b"<meta")):
+        raise OfficialBhavcopyError("BSE bhavcopy is not published yet; the exchange returned its HTML page")
     return url, response.content
 
 
