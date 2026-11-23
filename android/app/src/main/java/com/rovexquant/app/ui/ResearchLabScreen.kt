@@ -1,6 +1,7 @@
 package com.rovexquant.app.ui
 
 import com.rovexquant.app.data.model.QuantSession
+import com.rovexquant.app.data.model.MacroResearchSummary
 import com.rovexquant.app.data.repository.QuantDataRepository
 
 import android.content.Context
@@ -44,6 +45,28 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
     var datasetName by remember { mutableStateOf("No dataset loaded") }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var macroSummary by remember { mutableStateOf<MacroResearchSummary?>(null) }
+    var macroLoading by remember { mutableStateOf(false) }
+    var macroError by remember { mutableStateOf<String?>(null) }
+
+    fun refreshMacroResearch() {
+        if (session == null || repository == null || macroLoading) return
+        macroLoading = true
+        macroError = null
+        scope.launch {
+            try {
+                macroSummary = repository.fetchMacroResearch(session)
+            } catch (failure: Exception) {
+                macroError = failure.message ?: "Macro research providers are unavailable."
+            } finally {
+                macroLoading = false
+            }
+        }
+    }
+
+    LaunchedEffect(session, repository) {
+        refreshMacroResearch()
+    }
 
     fun loadSelectedFile(uri: Uri) {
         loading = true
@@ -101,7 +124,44 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
 
     LazyColumn(modifier = Modifier.fillMaxSize().testTag("research.lab.list"), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { SectionHeading("Test the idea before risking capital", "Research lab.", "Use official NSE research tools on demand or import permitted historical OHLCV data for transparent local analysis.") }
-        if (session != null && repository != null) item { NseMcpResearchPanel(session, repository) }
+        if (session != null && repository != null) {
+            item { NseMcpResearchPanel(session, repository) }
+            item {
+                TerminalCard {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Eyebrow("Macro & fund research · delayed official data")
+                        TextButton(onClick = { refreshMacroResearch() }, enabled = !macroLoading) {
+                            Text(if (macroLoading) "Loading…" else "Refresh")
+                        }
+                    }
+                    if (macroLoading && macroSummary == null) {
+                        Text("Retrieving World Bank, AMFI and FRED status…", color = Muted, fontSize = 11.sp)
+                    }
+                    macroError?.let { Text(it, color = Coral, fontSize = 11.sp) }
+                    macroSummary?.let { report ->
+                        Text("World Bank · India", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        report.worldBankSeries.forEach { series ->
+                            val value = series.latestValue?.let { String.format(Locale.US, "%.2f", it) } ?: "Unavailable"
+                            IndicatorLine(series.label, "$value ${series.unit} · ${series.latestPeriod ?: "period n/a"}")
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Text("AMFI mutual-fund NAV · ${report.amfiNavCount} matches", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                        report.amfiExamples.take(3).forEach { nav ->
+                            IndicatorLine(nav.schemeName, String.format(Locale.US, "%.4f · %s", nav.nav, nav.navDate))
+                        }
+                        Text(
+                            if (report.fredConfigured) "FRED configured · ${report.fredSeriesCount} series returned"
+                            else "FRED not configured · add FRED_API_KEY as a backend secret",
+                            color = if (report.fredConfigured) Mint else Gold, fontSize = 10.sp
+                        )
+                        if (report.providerErrors.isNotEmpty()) {
+                            report.providerErrors.forEach { Text(it, color = Gold, fontSize = 9.sp) }
+                        }
+                        Text("Retrieved ${report.retrievedAt}. Annual macro observations and daily fund NAVs are not equity quotes or intraday signals.", color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
+                    }
+                }
+            }
+        }
         item {
             TerminalCard {
                 Eyebrow("Offline dataset")
