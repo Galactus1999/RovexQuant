@@ -14,6 +14,8 @@ from rovexquant.ai.gateway import GatewayError, authorize_gateway, complete_chat
 from rovexquant.ai.providers import SUPPORTED
 from rovexquant.market_data import tejhq_service
 from rovexquant.market_data.tejhq_service import TejHqError
+from rovexquant.market_data.eod_store import EodStoreError
+from rovexquant.ai.research_archive import persist_ai_research_run, list_ai_research_runs, get_ai_research_run
 from rovexquant.research.contracts import IndicatorRequest
 from rovexquant.research.service import calculate_indicators
 from rovexquant.security.dependencies import require_app_session
@@ -217,6 +219,32 @@ def app_ai_providers():
 
 
 
+
+@router.get(
+    "/api/v1/app/ai/research/runs",
+    dependencies=[Depends(require_app_session)],
+)
+def app_ai_research_runs(limit: int = 30, task_type: str | None = None):
+    try:
+        return list_ai_research_runs(limit=limit, task_type=task_type)
+    except EodStoreError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+@router.get(
+    "/api/v1/app/ai/research/runs/{run_id}",
+    dependencies=[Depends(require_app_session)],
+)
+def app_ai_research_run(run_id: str):
+    try:
+        result = get_ai_research_run(run_id)
+    except EodStoreError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+    if result is None:
+        raise HTTPException(status_code=404, detail="AI research run not found")
+    return result
+
+
 @router.get(
     "/api/v1/app/ai/task-routes",
     dependencies=[Depends(require_app_session)],
@@ -288,7 +316,7 @@ async def app_ai_chat(request: AIChatRequest):
             },
             *[message.model_dump() for message in request.messages if message.role != "system"],
         ]
-        return await complete_chat(
+        completion = await complete_chat(
             provider_id=request.provider_id,
             model=request.model,
             messages=mobile_messages,
@@ -298,6 +326,24 @@ async def app_ai_chat(request: AIChatRequest):
             fallback_providers=request.fallback_providers,
             task_type=request.task_type,
         )
+        try:
+            completion["run_id"] = persist_ai_research_run(
+                task_type=request.task_type,
+                provider_id=completion["provider_id"],
+                model=completion["model"],
+                credential_id=completion.get("credential_id"),
+                request_payload={"messages": mobile_messages},
+                response_payload={"content": completion["content"]},
+                usage=completion.get("usage"),
+                cost_usd=completion.get("cost_usd"),
+                cost_status=completion.get("cost_status", "NOT_TRACKED"),
+                fallback_used=completion.get("fallback_used", False),
+            )
+            completion["archive_status"] = "PERSISTED"
+        except EodStoreError as archive_error:
+            completion["archive_status"] = "UNAVAILABLE"
+            completion["archive_error"] = str(archive_error)
+        return completion
     except GatewayError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
