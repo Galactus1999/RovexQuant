@@ -97,15 +97,24 @@ def _credentials_for(provider_id: str) -> list[Credential]:
     return result
 
 
+# Curated pricing data copied from LiteLLM Core 1.110.2 model_prices_and_context_window.json.
+# Source: https://github.com/BerriAI/litellm/blob/v1.110.2/model_prices_and_context_window.json
+# LiteLLM is MIT-licensed; this is a pinned data record, not a runtime dependency.
+# Unknown models remain unpriced; update this map only from a pinned upstream release.
+_LITELLM_CORE_1_110_2_PRICES = {
+    ("openai", "gpt-4o-mini"): {
+        "input_cost_per_token": 0.00000015,
+        "output_cost_per_token": 0.00000060,
+    },
+}
+
+
 def estimate_completion_cost_usd(
     provider_id: str,
     model: str,
     usage: dict[str, Any],
 ) -> tuple[float | None, str]:
-    """Price provider-reported token usage using the pinned LiteLLM Core model map.
-
-    Unknown model pricing or missing provider usage stays unknown; it is never reported as zero.
-    """
+    """Estimate USD using a pinned LiteLLM Core price record; unknown remains unknown."""
     prompt_tokens = usage.get("prompt_tokens")
     completion_tokens = usage.get("completion_tokens")
     if not isinstance(prompt_tokens, (int, float)) or not isinstance(completion_tokens, (int, float)):
@@ -142,7 +151,11 @@ def estimate_completion_cost_usd(
         return round(amount, 8), "ESTIMATED_FROM_LITELLM_CORE_1_110_2"
     except (OSError, ValueError, TypeError):
         return None, "UNKNOWN_MODEL_PRICING"
-
+    amount = (
+        float(prompt_tokens) * price["input_cost_per_token"]
+        + float(completion_tokens) * price["output_cost_per_token"]
+    )
+    return round(amount, 8), "ESTIMATED_FROM_LITELLM_CORE_1_110_2"
 
 def configured_providers() -> list[dict[str, Any]]:
     """Return safe provider metadata; credential values are never exposed."""
@@ -273,7 +286,11 @@ async def complete_chat(
                 for key in ("prompt_tokens", "completion_tokens", "total_tokens")
                 if isinstance(usage, dict) and isinstance(usage.get(key), (int, float))
             }
-            cost_usd, cost_status = estimate_completion_cost_usd(candidate, selected_model, safe_usage)
+            reported_cost = usage.get("cost") if isinstance(usage, dict) else None
+            if isinstance(reported_cost, (int, float)) and not isinstance(reported_cost, bool) and math.isfinite(float(reported_cost)) and reported_cost >= 0:
+                cost_usd, cost_status = float(reported_cost), "PROVIDER_REPORTED"
+            else:
+                cost_usd, cost_status = estimate_completion_cost_usd(candidate, selected_model, safe_usage)
             return {
                 "provider_id": candidate,
                 "credential_id": credential.credential_id,
