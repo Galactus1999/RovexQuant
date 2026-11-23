@@ -7,6 +7,7 @@ import pytest
 from rovexquant.market_data.historical_backfill import (
     parquet_source_url, validate_exchange_year,
 )
+from rovexquant.market_data.derived_backfill import derived_source_url
 from rovexquant.market_data.official_bhavcopy import (
     OfficialBhavcopyError, compare_official_rows, official_bhavcopy_url, parse_udiff_csv,
 )
@@ -31,6 +32,12 @@ def test_historical_archive_urls_and_exchange_year_bounds():
         validate_exchange_year("BSE", 2023, current_year=2026)
     with pytest.raises(ValueError):
         validate_exchange_year("FOO", 2026, current_year=2026)
+
+
+def test_adjusted_prices_actions_and_symbol_history_source_paths():
+    assert derived_source_url("ADJUSTED_PRICES", "NSE", 2026).endswith("/prices_adjusted/nse_2026.parquet")
+    assert derived_source_url("CORPORATE_ACTIONS", "BSE", 2025).endswith("/actions/bse_2025.parquet")
+    assert derived_source_url("SYMBOL_HISTORY", "NSE", 2026).endswith("/symbol_history/nse.parquet")
 
 
 def test_official_download_urls_are_exchange_specific():
