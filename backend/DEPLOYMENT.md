@@ -165,3 +165,13 @@ with the old key. Do not point the old key at already-rotated ciphertext.
 
 The production Neon procedure has not been executed in this phase. Treat the
 first production restore and rotation as operator-approved change windows.
+### Official exchange reconciliation: permission gate
+
+The historical backfill / official reconciliation workflow is operator-initiated; it is not scheduled. Daily EOD collection is handled separately by the TejHQ ingestion workflow.
+
+`download_official_bhavcopy()` denies direct NSE/BSE website downloads by default. Do not set the following repository Variables unless the corresponding exchange has granted express written permission for automated retrieval:
+
+- `NSE_OFFICIAL_AUTOMATED_DATA_PERMISSION=true` and `NSE_OFFICIAL_PERMISSION_REFERENCE=<permission reference>`
+- `BSE_OFFICIAL_AUTOMATED_DATA_PERMISSION=true` and `BSE_OFFICIAL_PERMISSION_REFERENCE=<permission reference>`
+
+The permission flags are exchange-specific. A permission for NSE does not authorize BSE retrieval. The workflow and backend both enforce this default-deny check. Without permission, use TejHQ for automatic EOD collection and the official NSE MCP only for on-demand informational queries. An operator-supplied official file reconciliation path is not yet implemented; do not report official reconciliation as complete until a report exists.
