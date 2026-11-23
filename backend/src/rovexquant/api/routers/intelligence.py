@@ -38,9 +38,17 @@ async def app_intelligence_events(
         raise HTTPException(status_code=502, detail=str(error)) from error
 
     events = analyze_articles(articles)
+    retrieved_at = datetime.now(timezone.utc).isoformat()
+    latest_seen_at = max(
+        (str(article.get("seen_at") or "") for article in articles),
+        default=None,
+    )
     return {
         "source": "GDELT_DOC_API",
-        "retrieved_at": datetime.now(timezone.utc).isoformat(),
+        "retrieved_at": retrieved_at,
+        "latest_source_seen_at": latest_seen_at,
+        "timestamp_semantics": "GDELT indexed/seen timestamp; not publisher publication time",
+        "data_delay": "NEWS_DISCOVERY_INDEX_DELAY_UNSPECIFIED",
         "query": query,
         "timespan": timespan,
         "coverage": "GLOBAL_NEWS_DISCOVERY",
