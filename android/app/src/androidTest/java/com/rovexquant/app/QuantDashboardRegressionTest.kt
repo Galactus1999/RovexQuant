@@ -54,6 +54,8 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("market.pulse.list")
             .performScrollToNode(hasTestTag("market.ingestion.status"))
         composeRule.onNodeWithTag("market.ingestion.status").assertIsDisplayed()
+        composeRule.onNodeWithTag("market.pulse.list")
+            .performScrollToNode(hasText("Persisted EOD data"))
         composeRule.onNodeWithText("Persisted EOD data", substring = true).assertIsDisplayed()
         composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasText("FIXTURE"))
         composeRule.onNodeWithText("FIXTURE").assertIsDisplayed()
