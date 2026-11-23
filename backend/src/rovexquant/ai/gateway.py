@@ -36,9 +36,9 @@ def configured_task_routes() -> dict[str, dict[str, Any]]:
             raise GatewayError("AI task routing contains an unsupported task or route", 503)
         provider, model = route.get("provider_id"), route.get("model")
         fallbacks = route.get("fallback_providers", [])
-        if provider not in SUPPORTED or not isinstance(model, str) or not model.strip() or len(model) > 160:
+        if not isinstance(provider, str) or provider not in SUPPORTED or not isinstance(model, str) or not model.strip() or len(model) > 160:
             raise GatewayError(f"Invalid provider/model in AI task route: {task}", 503)
-        if not isinstance(fallbacks, list) or len(fallbacks) > 3 or any(item not in SUPPORTED for item in fallbacks):
+        if not isinstance(fallbacks, list) or len(fallbacks) > 3 or any(not isinstance(item, str) or item not in SUPPORTED for item in fallbacks):
             raise GatewayError(f"Invalid fallback providers in AI task route: {task}", 503)
         routes[task] = {"provider_id": provider, "model": model.strip(), "fallback_providers": list(dict.fromkeys(fallbacks))}
     return routes
@@ -48,7 +48,7 @@ def resolve_task_route(task_type: str, provider_id: str | None, model: str | Non
     if task_type not in TASK_TYPES:
         raise GatewayError("Unsupported AI task type", 422)
     if provider_id is not None or model is not None:
-        if provider_id not in SUPPORTED or not isinstance(model, str) or not model.strip():
+        if not isinstance(provider_id, str) or provider_id not in SUPPORTED or not isinstance(model, str) or not model.strip():
             raise GatewayError("A supported provider and model must be selected together", 422)
         return provider_id, model.strip(), fallback_providers
     route = configured_task_routes().get(task_type)
@@ -233,7 +233,7 @@ async def complete_chat(
                 "usage": safe_usage,
                 "task_type": task_type,
                 "cost_usd": None,
-                "cost_status": "UNAVAILABLE_PENDING_LITELLM_INTEGRATION",
+                "cost_status": "NOT_TRACKED",
                 "fallback_used": index > 0,
             }
         except GatewayError as error:
