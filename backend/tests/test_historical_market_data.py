@@ -62,8 +62,11 @@ def test_parse_bse_udiff_csv():
 
 
 def test_parse_official_bhavcopy_rejects_wrong_trade_date_and_corrupt_zip():
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("bhavcopy.csv", _udiff_csv("2026-11-19"))
     with pytest.raises(OfficialBhavcopyError, match="different trading date"):
-        parse_udiff_csv(_udiff_csv("2026-11-19"), exchange="BSE", trading_date=date(2026, 11, 20))
+        parse_udiff_csv(buffer.getvalue(), exchange="NSE", trading_date=date(2026, 11, 20))
     with pytest.raises(OfficialBhavcopyError, match="corrupt"):
         parse_udiff_csv(b"not-a-zip", exchange="NSE", trading_date=date(2026, 11, 20))
 
