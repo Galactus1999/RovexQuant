@@ -204,6 +204,11 @@ fun MacroEventResearchScreen(session: QuantSession, repository: QuantDataReposit
 @Composable
 private fun MacroSummaryContent(summary: MacroResearchSummary) {
     Text("Retrieved ${summary.retrievedAt}", color = Muted, fontSize = 9.sp)
+    if (summary.persistedObservationCount > 0) {
+        Spacer(Modifier.height(6.dp))
+        Eyebrow("Durable macro archive · ${summary.persistedObservationCount} observations · RBI mirror series ${summary.rbiDbieSeriesCount}")
+    }
+    summary.providerStatuses.forEach { Text(it, color = if (it.contains("FAILED")) Coral else Muted, fontSize = 9.sp) }
     if (summary.worldBankSeries.isEmpty()) {
         Text("No World Bank observations returned.", color = Muted, fontSize = 10.sp)
     } else {

@@ -24,7 +24,10 @@ data class MacroResearchSummary(
     val amfiExamples: List<AmfiNavObservation>,
     val fredConfigured: Boolean,
     val fredSeriesCount: Int,
-    val providerErrors: List<String>
+    val providerErrors: List<String>,
+    val persistedObservationCount: Int = 0,
+    val rbiDbieSeriesCount: Int = 0,
+    val providerStatuses: List<String> = emptyList()
 )
 
 

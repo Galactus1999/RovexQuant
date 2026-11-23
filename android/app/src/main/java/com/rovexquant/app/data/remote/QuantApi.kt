@@ -415,19 +415,21 @@ object QuantApi {
         }
     }
 
+
     fun fetchMacroResearch(session: QuantSession): MacroResearchSummary {
         val errors = mutableListOf<String>()
-        fun getJson(path: String): JSONObject? {
-            val request = Request.Builder()
-                .url("${session.baseUrl}$path")
+        fun requestJson(path: String, post: Boolean = false): JSONObject? {
+            val builder = Request.Builder()
+                .url("${session.baseUrl}${path}")
                 .header("Authorization", "Bearer ${session.accessToken}")
-                .get()
-                .build()
+            val request = if (post) {
+                builder.post("{}".toRequestBody("application/json".toMediaType())).build()
+            } else builder.get().build()
             return try {
                 masterHttp.newCall(request).execute().use { response ->
                     val body = response.body?.string().orEmpty()
                     if (!response.isSuccessful) {
-                        errors += "$path: ${apiError(body, response.code)}"
+                        errors += "${path}: ${apiError(body, response.code)}"
                         null
                     } else {
                         require(body.toByteArray(Charsets.UTF_8).size <= 2 * 1024 * 1024) {
@@ -437,31 +439,43 @@ object QuantApi {
                     }
                 }
             } catch (failure: Exception) {
-                errors += "$path: ${failure.message ?: "provider unavailable"}"
+                errors += "${path}: ${failure.message ?: "provider unavailable"}"
                 null
             }
         }
 
-        val worldBank = getJson("/api/v1/app/research/macro/world-bank")
-        val worldBankRows = worldBank?.optJSONArray("series") ?: JSONArray()
-        val series = buildList {
-            for (index in 0 until worldBankRows.length()) {
-                val item = worldBankRows.optJSONObject(index) ?: continue
-                val latest = item.optJSONArray("observations")
-                val latestRow = latest?.optJSONObject((latest.length() - 1).coerceAtLeast(0))
-                val rawValue = latestRow?.optDouble("value", Double.NaN) ?: Double.NaN
-                add(MacroSeriesObservation(
-                    key = item.optString("key"),
-                    label = item.optString("label"),
-                    frequency = item.optString("frequency"),
-                    unit = item.optString("unit"),
-                    latestPeriod = latestRow?.optString("period")?.takeIf { !it.isNullOrBlank() && it != "null" },
-                    latestValue = rawValue.takeIf { it.isFinite() },
-                    source = item.optString("source")
-                ))
+        val refresh = requestJson("/api/v1/app/research/macro/refresh", post = true)
+        val history = requestJson("/api/v1/app/research/macro/history?limit=2000")
+        val historyRows = history?.optJSONArray("observations") ?: JSONArray()
+        val latestBySeries = linkedMapOf<String, JSONObject>()
+        val fredSeries = linkedSetOf<String>()
+        for (index in 0 until historyRows.length()) {
+            val item = historyRows.optJSONObject(index) ?: continue
+            val provider = item.optString("provider")
+            val key = item.optString("series_key")
+            if (provider == "FRED") fredSeries += key
+            if (provider != "WORLD_BANK" && provider != "RBIH_DBIE_MIRROR") continue
+            if (key.isBlank()) continue
+            val groupKey = "$provider:$key"
+            val prior = latestBySeries[groupKey]
+            if (prior == null || item.optString("period") >= prior.optString("period")) {
+                latestBySeries[groupKey] = item
             }
         }
-        val amfi = getJson("/api/v1/app/research/macro/amfi-nav?limit=10")
+        val macroSeries = latestBySeries.values.map { item ->
+            val metadata = item.optJSONObject("metadata")
+            MacroSeriesObservation(
+                key = item.optString("series_key"),
+                label = item.optString("label"),
+                frequency = item.optString("frequency"),
+                unit = item.optString("unit"),
+                latestPeriod = item.optString("period").takeIf { it.isNotBlank() && it != "null" },
+                latestValue = item.optDouble("value", Double.NaN).takeIf { it.isFinite() },
+                source = item.optString("provider") + (metadata?.optString("source")?.let { " · $it" } ?: "")
+            )
+        }
+
+        val amfi = requestJson("/api/v1/app/research/macro/amfi-nav?limit=10")
         val navRows = amfi?.optJSONArray("observations") ?: JSONArray()
         val navs = buildList {
             for (index in 0 until navRows.length()) {
@@ -476,16 +490,30 @@ object QuantApi {
                 ))
             }
         }
-        val fred = getJson("/api/v1/app/research/macro/fred")
-        val fredRows = fred?.optJSONArray("series")
+        val providerRows = refresh?.optJSONArray("providers") ?: JSONArray()
+        val providerStatuses = buildList {
+            for (index in 0 until providerRows.length()) {
+                val item = providerRows.optJSONObject(index) ?: continue
+                val provider = item.optString("provider")
+                val status = item.optString("status")
+                val rows = item.optInt("rows_seen")
+                add(if (rows > 0) "$provider · $status · $rows observations" else "$provider · $status")
+                if (status == "FAILED") {
+                    errors += "$provider: ${item.optString("error", "refresh failed")}"
+                }
+            }
+        }
         return MacroResearchSummary(
-            retrievedAt = worldBank?.optString("retrieved_at")?.takeIf { it != "null" }.orEmpty(),
-            worldBankSeries = series,
+            retrievedAt = refresh?.optString("retrieved_at")?.takeIf { it != "null" }.orEmpty(),
+            worldBankSeries = macroSeries,
             amfiNavCount = amfi?.optInt("result_count") ?: 0,
             amfiExamples = navs,
-            fredConfigured = fred?.optBoolean("configured", false) ?: false,
-            fredSeriesCount = fredRows?.length() ?: 0,
-            providerErrors = errors
+            fredConfigured = fredSeries.isNotEmpty(),
+            fredSeriesCount = fredSeries.size,
+            providerErrors = errors,
+            persistedObservationCount = history?.optInt("count") ?: 0,
+            rbiDbieSeriesCount = latestBySeries.keys.count { it.startsWith("RBIH_DBIE_MIRROR:") },
+            providerStatuses = providerStatuses
         )
     }
 
