@@ -1,6 +1,4 @@
 """Authenticated macroeconomic research endpoints."""
-from typing import Literal
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from rovexquant.market_data.macro_data import (
