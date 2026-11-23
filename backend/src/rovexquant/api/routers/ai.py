@@ -10,12 +10,16 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field, SecretStr, model_validator
 
-from rovexquant.ai.gateway import GatewayError, authorize_gateway, complete_chat, configured_providers, configured_task_routes
+from rovexquant.ai.gateway import GatewayError, authorize_gateway, complete_chat, configured_providers, configured_task_routes, resolve_task_route
 from rovexquant.ai.providers import SUPPORTED
 from rovexquant.market_data import tejhq_service
 from rovexquant.market_data.tejhq_service import TejHqError
 from rovexquant.market_data.eod_store import EodStoreError
-from rovexquant.ai.research_archive import persist_ai_research_run, list_ai_research_runs, get_ai_research_run
+from rovexquant.ai.research_archive import (
+    ai_token_budgets_enabled, estimate_reserved_tokens, reserve_ai_research_run,
+    finish_ai_research_run, fail_ai_research_run, persist_ai_research_run,
+    list_ai_research_runs, get_ai_research_run,
+)
 from rovexquant.research.contracts import IndicatorRequest
 from rovexquant.research.service import calculate_indicators
 from rovexquant.security.dependencies import require_app_session
@@ -300,7 +304,11 @@ def delete_app_ai_provider_credential(provider_id: str):
 )
 async def app_ai_chat(request: AIChatRequest):
     """Mobile AI access is authorized by the short-lived Quant app session."""
+    run_id = None
     try:
+        provider_id, model, fallback_providers = resolve_task_route(
+            request.task_type, request.provider_id, request.model, request.fallback_providers
+        )
         mobile_messages = [
             {
                 "role": "system",
@@ -316,37 +324,58 @@ async def app_ai_chat(request: AIChatRequest):
             },
             *[message.model_dump() for message in request.messages if message.role != "system"],
         ]
-        completion = await complete_chat(
-            provider_id=request.provider_id,
-            model=request.model,
-            messages=mobile_messages,
-            max_tokens=request.max_tokens,
-            temperature=request.temperature,
-            credential_id=request.credential_id,
-            fallback_providers=request.fallback_providers,
-            task_type=request.task_type,
-        )
+        request_payload = {
+            "messages": mobile_messages,
+            "max_tokens": request.max_tokens,
+            "temperature": request.temperature,
+        }
+        archive_error = None
         try:
-            completion["run_id"] = persist_ai_research_run(
+            run_id = reserve_ai_research_run(
                 task_type=request.task_type,
-                provider_id=completion["provider_id"],
-                model=completion["model"],
-                credential_id=completion.get("credential_id"),
-                request_payload={"messages": mobile_messages},
-                response_payload={"content": completion["content"]},
-                usage=completion.get("usage"),
-                cost_usd=completion.get("cost_usd"),
-                cost_status=completion.get("cost_status", "NOT_TRACKED"),
-                fallback_used=completion.get("fallback_used", False),
+                provider_id=provider_id,
+                model=model,
+                credential_id=request.credential_id,
+                request_payload=request_payload,
+                estimated_tokens=estimate_reserved_tokens(request_payload, request.max_tokens),
             )
-            completion["archive_status"] = "PERSISTED"
-        except EodStoreError as archive_error:
+        except EodStoreError as error:
+            if ai_token_budgets_enabled() or error.status_code == 429:
+                raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+            archive_error = str(error)
+
+        try:
+            completion = await complete_chat(
+                provider_id=provider_id,
+                model=model,
+                messages=mobile_messages,
+                max_tokens=request.max_tokens,
+                temperature=request.temperature,
+                credential_id=request.credential_id,
+                fallback_providers=fallback_providers,
+                task_type=request.task_type,
+            )
+        except GatewayError:
+            if run_id:
+                fail_ai_research_run(run_id)
+            raise
+
+        if run_id:
+            try:
+                finish_ai_research_run(run_id, completion)
+                completion["run_id"] = run_id
+                completion["archive_status"] = "PERSISTED"
+            except EodStoreError as error:
+                completion["run_id"] = run_id
+                completion["archive_status"] = "UNAVAILABLE"
+                completion["archive_error"] = str(error)
+        else:
             completion["archive_status"] = "UNAVAILABLE"
-            completion["archive_error"] = str(archive_error)
+            if archive_error:
+                completion["archive_error"] = archive_error
         return completion
     except GatewayError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
-
 
 @router.post(
     "/api/v1/app/ai/strategy-brief",
