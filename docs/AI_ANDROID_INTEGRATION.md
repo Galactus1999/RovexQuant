@@ -18,6 +18,21 @@ Provider API keys remain server-side. Configure one or more supported provider s
 - `GEMINI_API_KEY` / `GEMINI_API_KEYS_JSON`
 - `OPENAI_API_KEY` / `OPENAI_API_KEYS_JSON`
 
+### Automatic task routing and budget configuration
+
+Automatic routing is server-owned and is disabled when `QUANT_AI_TASK_ROUTES` is empty. Configure it as a JSON object in the backend environment. The only accepted task keys are `chat`, `research`, `macro_analysis`, `filing_extraction`, `claim_verification` and `summarization`; each value must contain `provider_id` and an exact `model`, with optional `fallback_providers` (maximum three). Example:
+
+```json
+{
+  "research": {"provider_id": "openrouter", "model": "<exact-provider-model-id>", "fallback_providers": ["groq"]},
+  "claim_verification": {"provider_id": "openai", "model": "<independent-verifier-model-id>"}
+}
+```
+
+Replace the placeholders with model IDs accepted by the provider. The gateway does not scrape or guess model catalogues. `<PROVIDER>_DEFAULT_MODEL` only prefills the manual model field; it does not prove the model exists. If the UI says no server route is configured, automatic routing is not enabled for that task. Manual provider/model selection remains available.
+
+`QUANT_AI_DAILY_TOKEN_BUDGET` and `QUANT_AI_MONTHLY_TOKEN_BUDGET` are hard token ceilings. Set a positive integer to enforce a limit; `0` disables that ceiling. The backend reserves tokens before execution and persists provider-reported usage when available. Unknown model pricing remains explicitly unpriced rather than estimated from a similar model.
+
 The Android AI Studio asks for the provider's model ID because model catalogues change. It exposes an explicit connection test, removal of owner-stored app credentials, and selectable cross-provider fallback. A fallback is offered only when that provider has both a configured credential and a server-side `<PROVIDER>_FALLBACK_MODEL`; only classified transient failures trigger fallback. Authentication, entitlement and invalid-request errors do not silently switch providers. Same-provider key rotation is not used to evade rate limits.
 
 Do not put provider keys or `QUANT_AI_GATEWAY_TOKEN` in Android resources, BuildConfig, assets, local preferences, or APKs. Do not send secrets in chat. The AI workspace also embeds the existing read-only NSE MCP research panel; attaching a result to a model request is an explicit user action and sends that selected response to the configured AI provider for inference. Review the exchange/provider data-use terms before doing so.
