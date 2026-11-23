@@ -232,6 +232,8 @@ async def reconcile_exchange_date(exchange: str, trading_date: date) -> dict[str
             "volume": int(row[7]), "trades": int(row[8]) if row[8] is not None else None,
             "isin": row[9], "provider": row[10],
         } for row in rows]
+        official_by_key = {(row["symbol"], row["series"]): row for row in official}
+        reference_by_key = {(row["symbol"], row["series"]): row for row in reference}
         summary = compare_official_rows(official, reference)
         status = "NO_REFERENCE_DATA" if not reference else (
             "MATCHED" if not summary["diffs"] else "MISMATCHED"
