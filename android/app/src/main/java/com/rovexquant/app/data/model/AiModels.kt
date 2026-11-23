@@ -76,3 +76,14 @@ data class AiResearchRun(
     val fallbackUsed: Boolean,
     val createdAt: String
 )
+
+
+data class AiBudgetStatus(
+    val enabled: Boolean,
+    val dailyUsedTokens: Long,
+    val dailyLimitTokens: Long?,
+    val dailyRemainingTokens: Long?,
+    val monthlyUsedTokens: Long,
+    val monthlyLimitTokens: Long?,
+    val monthlyRemainingTokens: Long?
+)
