@@ -937,6 +937,44 @@ object QuantApi {
         }
     }
 
+    /** Keyless provider fallback when the persistent EOD store is unavailable. */
+    fun fetchLatestEodMarketSnapshotDirect(
+        session: QuantSession,
+        exchange: String = "nse",
+        limit: Int = 20
+    ): EodMarketSnapshot {
+        require(exchange in setOf("nse", "bse")) { "Unsupported exchange." }
+        require(limit in 1..50) { "Snapshot limit must be between 1 and 50." }
+        val request = Request.Builder()
+            .url("\${session.baseUrl}/api/v1/app/market-data/eod/latest/\$exchange?max_lookback_days=14&limit=\$limit")
+            .header("Authorization", "Bearer \${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            val root = JSONObject(text)
+            val summary = root.getJSONObject("summary")
+            return EodMarketSnapshot(
+                provider = root.optString("provider", "tejhq_eod"),
+                dataMode = root.optString("data_mode", "END_OF_DAY"),
+                exchange = root.optString("exchange", exchange.uppercase()),
+                marketScope = root.optString("market_scope", if (exchange == "nse") "NSE_EQ" else "BSE_EQUITY"),
+                tradingDate = root.optString("trading_date"),
+                totalRows = summary.optInt("total_rows"),
+                equitySeriesRows = summary.optInt("equity_series_rows"),
+                pricedSymbols = summary.optInt("priced_symbols"),
+                advances = summary.optInt("advances"),
+                declines = summary.optInt("declines"),
+                unchanged = summary.optInt("unchanged"),
+                topGainers = parseEodStockMoves(summary.optJSONArray("top_gainers")),
+                topLosers = parseEodStockMoves(summary.optJSONArray("top_losers")),
+                mostActiveByVolume = parseEodStockMoves(summary.optJSONArray("most_active_by_volume")),
+                dataOrigin = "TEJHQ_API_DIRECT"
+            )
+        }
+    }
+
     private fun parseEodStockMoves(array: org.json.JSONArray?): List<EodStockMove> {
         if (array == null) return emptyList()
         return buildList {
