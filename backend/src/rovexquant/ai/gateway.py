@@ -97,7 +97,9 @@ def _credentials_for(provider_id: str) -> list[Credential]:
     return result
 
 
-# Curated records copied from LiteLLM Core 1.110.2's model price map.
+# Curated pricing data copied from LiteLLM Core 1.110.2 model_prices_and_context_window.json.
+# Source: https://github.com/BerriAI/litellm/blob/v1.110.2/model_prices_and_context_window.json
+# LiteLLM is MIT-licensed; this is a pinned data record, not a runtime dependency.
 # Unknown models remain unpriced; update this map only from a pinned upstream release.
 _LITELLM_CORE_1_110_2_PRICES = {
     ("openai", "gpt-4o-mini"): {
