@@ -9,6 +9,8 @@ import com.rovexquant.app.data.model.AiDailyBar
 import com.rovexquant.app.data.model.AiProvider
 import com.rovexquant.app.data.model.AiResearchRun
 import com.rovexquant.app.data.model.AiBudgetStatus
+import com.rovexquant.app.data.model.AiResearchRun
+import com.rovexquant.app.data.model.AiBudgetStatus
 import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.EodMarketSnapshot
@@ -110,6 +112,9 @@ class FakeQuantRepository(
 
     override suspend fun fetchAiTaskRoutes(session: QuantSession): Map<String, AiTaskRoute> =
         mapOf("research" to AiTaskRoute("groq", "fixture-research-model", listOf("openrouter")))
+    override suspend fun fetchAiResearchRuns(session: QuantSession, limit: Int): List<AiResearchRun> = emptyList()
+    override suspend fun fetchAiBudgetStatus(session: QuantSession): AiBudgetStatus =
+        AiBudgetStatus(false, 0, null, null, 0, null, null)
 
     override suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) = Unit
     override suspend fun deleteAiProviderCredential(session: QuantSession, providerId: String) = Unit
@@ -285,7 +290,7 @@ class FakeQuantRepository(
             trendContext = "CLOSE_ABOVE_SMA20_AND_SMA50"
         ),
         bars = listOf(AiDailyBar(toDate, 2480.0, 2520.0, 2470.0, 2500.0, 100000)),
-        ai = AiCompletion(providerId, credentialId, model, "Deterministic EOD strategy fixture response.", false),
+        ai = AiCompletion(providerId ?: "task-router", credentialId, model ?: "research", "Deterministic EOD strategy fixture response.", false),
         dataRights = "Private personal research only.",
         limitations = listOf("EOD daily bars only.")
     )
