@@ -213,7 +213,9 @@ async def app_nse_mcp_tools(server: Literal["bhavcopy", "cmmkt", "dalalos", "bot
     try:
         catalog, failures = await nse_mcp_service.discover_tools(server)
         if not catalog:
-            raise HTTPException(status_code=502, detail="NSE MCP tool discovery failed")
+            failure = next(iter(failures.values()), "Research MCP tool discovery failed")
+            status_code = 409 if "API key is not configured" in failure else 502
+            raise HTTPException(status_code=status_code, detail=failure)
         return {
             "provider": "research_mcp_registry",
             "catalog": catalog,
