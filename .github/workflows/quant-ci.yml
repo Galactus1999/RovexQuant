@@ -584,7 +584,7 @@ jobs:
   quant-production-db-migration:
     name: Quant Production PostgreSQL Migration
     needs: quant-phase1-acceptance
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.quant-phase1-acceptance.result == 'success' }}
+    if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.quant-phase1-acceptance.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
