@@ -198,6 +198,7 @@ object QuantApi {
                     val sourceRows = item.optJSONArray("sources") ?: JSONArray()
                     val impactRows = item.optJSONArray("sector_impacts") ?: JSONArray()
                     val tagRows = item.optJSONArray("event_tags") ?: JSONArray()
+                    val issuerRows = item.optJSONArray("issuer_mappings") ?: JSONArray()
                     val sources = buildList {
                         for (sourceIndex in 0 until sourceRows.length()) {
                             val source = sourceRows.optJSONObject(sourceIndex) ?: continue
@@ -206,7 +207,11 @@ object QuantApi {
                                 url = source.optString("url"),
                                 seenAt = source.optString("seen_at"),
                                 language = source.optString("language"),
-                                sourceCountry = source.optString("source_country")
+                                sourceCountry = source.optString("source_country"),
+                                title = source.optString("title"),
+                                summary = source.optString("summary"),
+                                provider = source.optString("provider"),
+                                evidenceClass = source.optString("evidence_class")
                             ))
                         }
                     }
@@ -225,6 +230,21 @@ object QuantApi {
                             tagRows.optString(tagIndex).takeIf { it.isNotBlank() }?.let(::add)
                         }
                     }
+                    val issuerMappings = buildList {
+                        for (mappingIndex in 0 until issuerRows.length()) {
+                            val mapping = issuerRows.optJSONObject(mappingIndex) ?: continue
+                            add(IssuerMapping(
+                                exchange = mapping.optString("exchange"),
+                                symbol = mapping.optString("symbol"),
+                                isin = mapping.optString("isin"),
+                                companyName = mapping.optString("company_name"),
+                                mappingMethod = mapping.optString("mapping_method"),
+                                confidence = mapping.optDouble("confidence", 0.0),
+                                evidence = mapping.optString("evidence"),
+                                mappingScope = mapping.optString("mapping_scope")
+                            ))
+                        }
+                    }
                     add(MarketEvent(
                         eventId = item.optString("event_id"),
                         headline = item.optString("headline"),
@@ -239,7 +259,8 @@ object QuantApi {
                         sectorImpacts = impacts,
                         stockMappingStatus = item.optString("stock_mapping_status"),
                         stockMappingNote = item.optString("stock_mapping_note"),
-                        impactStatus = item.optString("impact_status")
+                        impactStatus = item.optString("impact_status"),
+                        issuerMappings = issuerMappings
                     ))
                 }
             }
@@ -257,7 +278,10 @@ object QuantApi {
                 articleCount = json.optInt("article_count"),
                 eventCount = json.optInt("event_count"),
                 events = events,
-                limitations = limitations
+                limitations = limitations,
+                archiveStatus = json.optString("archive_status", "UNAVAILABLE"),
+                issuerMasterStatus = json.optString("issuer_master_status", "UNAVAILABLE"),
+                mappedEventCount = json.optInt("mapped_event_count")
             )
         }
     }

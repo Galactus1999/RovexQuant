@@ -5,13 +5,27 @@ data class IntelligenceSource(
     val url: String,
     val seenAt: String,
     val language: String,
-    val sourceCountry: String
-)
+    val sourceCountry: String,
+    val title: String = "",
+    val summary: String = "",
+    val provider: String = "",
+    val evidenceClass: String = ""
 
 data class SectorImpact(
     val sector: String,
     val direction: String,
     val mechanism: String
+)
+
+data class IssuerMapping(
+    val exchange: String,
+    val symbol: String,
+    val isin: String,
+    val companyName: String,
+    val mappingMethod: String,
+    val confidence: Double,
+    val evidence: String,
+    val mappingScope: String
 )
 
 data class MarketEvent(
@@ -28,7 +42,8 @@ data class MarketEvent(
     val sectorImpacts: List<SectorImpact>,
     val stockMappingStatus: String,
     val stockMappingNote: String,
-    val impactStatus: String
+    val impactStatus: String,
+    val issuerMappings: List<IssuerMapping> = emptyList()
 )
 
 data class IntelligenceFeed(
@@ -39,5 +54,8 @@ data class IntelligenceFeed(
     val articleCount: Int,
     val eventCount: Int,
     val events: List<MarketEvent>,
-    val limitations: List<String>
+    val limitations: List<String>,
+    val archiveStatus: String = "UNAVAILABLE",
+    val issuerMasterStatus: String = "UNAVAILABLE",
+    val mappedEventCount: Int = 0
 )

@@ -122,6 +122,7 @@ fun IntelligenceCentreScreen(session: QuantSession, repository: QuantDataReposit
                                 fontWeight = FontWeight.Bold
                             )
                             Text("${feed.articleCount} source articles · ${feed.timespan} window", color = Muted, fontSize = 10.sp)
+                            Text("Archive ${feed.archiveStatus} · NSE master ${feed.issuerMasterStatus} · ${feed.mappedEventCount} mapped candidates", color = Muted, fontSize = 9.sp)
                         }
                         StatusPill("On demand", Gold)
                     }
@@ -194,11 +195,25 @@ private fun IntelligenceEventCard(event: MarketEvent, onOpenSource: (String) -> 
         } else {
             Text("No deterministic sector mapping exists for this headline.", color = Muted, fontSize = 10.sp)
         }
+        if (event.issuerMappings.isNotEmpty()) {
+            Spacer(Modifier.height(9.dp))
+            Eyebrow("Potential NSE issuer candidates · verify manually")
+            event.issuerMappings.forEach { mapping ->
+                Column(Modifier.fillMaxWidth().padding(top = 5.dp)) {
+                    Text(
+                        "${mapping.exchange}:${mapping.symbol} · ${mapping.companyName}",
+                        color = MaterialTheme.colorScheme.onBackground, fontSize = 10.sp, fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "${(mapping.confidence * 100).toInt()}% heuristic · ${mapping.mappingMethod.replace('_', ' ')} · ${mapping.mappingScope}",
+                        color = Gold, fontSize = 9.sp
+                    )
+                    Text(mapping.evidence, color = Muted, fontSize = 9.sp, lineHeight = 13.sp)
+                }
+            }
+        }
         Spacer(Modifier.height(9.dp))
-        Text(
-            event.stockMappingNote,
-            color = Gold, fontSize = 10.sp, lineHeight = 15.sp
-        )
+        Text(event.stockMappingNote, color = Gold, fontSize = 10.sp, lineHeight = 15.sp)
         event.sources.forEach { source ->
             if (source.url.startsWith("https://") || source.url.startsWith("http://")) {
                 Text(
