@@ -104,8 +104,10 @@ fun MarketPulseScreen(
     }.getOrDefault(false)
 
     LaunchedEffect(eodSnapshotStatus) {
-        isRefreshing = eodSnapshotStatus.startsWith("Requesting") ||
-            eodSnapshotStatus.startsWith("Collecting")
+        val status = eodSnapshotStatus.lowercase()
+        isRefreshing = status.startsWith("requesting") ||
+            status.startsWith("collecting") || status.contains("queued") ||
+            status.contains("still running")
     }
 
     LaunchedEffect(activeSession, activeRepository) {
