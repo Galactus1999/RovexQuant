@@ -15,6 +15,9 @@ import com.rovexquant.app.data.model.SectorImpact
 import com.rovexquant.app.data.model.MarketIndexInstrument
 import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.MarketIngestionStatus
+import com.rovexquant.app.data.model.MacroResearchSummary
+import com.rovexquant.app.data.model.MacroSeriesObservation
+import com.rovexquant.app.data.model.AmfiNavObservation
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.NseMcpTool
@@ -250,6 +253,80 @@ object QuantApi {
                 limitations = limitations
             )
         }
+    }
+
+    fun fetchMacroResearch(session: QuantSession): MacroResearchSummary {
+        val errors = mutableListOf<String>()
+        fun getJson(path: String): JSONObject? {
+            val request = Request.Builder()
+                .url("${session.baseUrl}$path")
+                .header("Authorization", "Bearer ${session.accessToken}")
+                .get()
+                .build()
+            return try {
+                masterHttp.newCall(request).execute().use { response ->
+                    val body = response.body?.string().orEmpty()
+                    if (!response.isSuccessful) {
+                        errors += "$path: ${apiError(body, response.code)}"
+                        null
+                    } else {
+                        require(body.toByteArray(Charsets.UTF_8).size <= 2 * 1024 * 1024) {
+                            "Macro research response exceeds the 2 MB safety limit."
+                        }
+                        JSONObject(body)
+                    }
+                }
+            } catch (failure: Exception) {
+                errors += "$path: ${failure.message ?: "provider unavailable"}"
+                null
+            }
+        }
+
+        val worldBank = getJson("/api/v1/app/research/macro/world-bank")
+        val worldBankRows = worldBank?.optJSONArray("series") ?: JSONArray()
+        val series = buildList {
+            for (index in 0 until worldBankRows.length()) {
+                val item = worldBankRows.optJSONObject(index) ?: continue
+                val latest = item.optJSONArray("observations")
+                val latestRow = latest?.optJSONObject((latest.length() - 1).coerceAtLeast(0))
+                val rawValue = latestRow?.optDouble("value", Double.NaN) ?: Double.NaN
+                add(MacroSeriesObservation(
+                    key = item.optString("key"),
+                    label = item.optString("label"),
+                    frequency = item.optString("frequency"),
+                    unit = item.optString("unit"),
+                    latestPeriod = latestRow?.optString("period")?.takeIf { !it.isNullOrBlank() && it != "null" },
+                    latestValue = rawValue.takeIf { it.isFinite() },
+                    source = item.optString("source")
+                ))
+            }
+        }
+        val amfi = getJson("/api/v1/app/research/macro/amfi-nav?limit=10")
+        val navRows = amfi?.optJSONArray("observations") ?: JSONArray()
+        val navs = buildList {
+            for (index in 0 until navRows.length()) {
+                val item = navRows.optJSONObject(index) ?: continue
+                val nav = item.optDouble("nav", Double.NaN)
+                if (!nav.isFinite()) continue
+                add(AmfiNavObservation(
+                    schemeCode = item.optInt("scheme_code"),
+                    schemeName = item.optString("scheme_name"),
+                    nav = nav,
+                    navDate = item.optString("nav_date")
+                ))
+            }
+        }
+        val fred = getJson("/api/v1/app/research/macro/fred")
+        val fredRows = fred?.optJSONArray("series")
+        return MacroResearchSummary(
+            retrievedAt = worldBank?.optString("retrieved_at")?.takeIf { it != "null" }.orEmpty(),
+            worldBankSeries = series,
+            amfiNavCount = amfi?.optInt("result_count") ?: 0,
+            amfiExamples = navs,
+            fredConfigured = fred?.optBoolean("configured", false) ?: false,
+            fredSeriesCount = fredRows?.length() ?: 0,
+            providerErrors = errors
+        )
     }
 
     fun fetchAiProviders(session: QuantSession): List<AiProvider> {
