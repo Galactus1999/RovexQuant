@@ -109,7 +109,7 @@ def claim_next_ingestion_job(worker_id: str) -> dict[str, str] | None:
             WHERE (status='QUEUED' AND available_at <= NOW())
                OR (status='RUNNING' AND lease_expires_at <= NOW() AND attempt_count < %s)
             ORDER BY available_at, created_at
-            FOR UPDATE SKIP LOCKED LIMIT 1
+            LIMIT 1 FOR UPDATE SKIP LOCKED
         """, (MAX_ATTEMPTS,)).fetchone()
         if row is None:
             return None
