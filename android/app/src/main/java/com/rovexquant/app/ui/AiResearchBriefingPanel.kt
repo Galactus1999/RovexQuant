@@ -41,13 +41,16 @@ private fun auditResearchCitations(output: String, evidence: String): CitationAu
     Regex("""macroKey=([^;\s]+);[^\n]*?period=([^;\s]+)""").findAll(evidence).forEach {
         allowedRefs += "macro:${it.groupValues[1]}:${it.groupValues[2]}"
     }
+    Regex("""["']?news_id["']?\s*[:=]\s*["']?([^"'\s,}]+)""")
+        .findAll(evidence)
+        .forEach { allowedRefs += "filing:${it.groupValues[1]}" }
 
     val sourceUrls = Regex("""https?://[^\s)\]]+""").findAll(evidence)
-        .map { it.value.trimEnd('.', ',', ';') }.toSet()
-    val citedRefs = Regex("""\[(market:EOD:[^\]]+|macro:[^\]]+|event:[^\]]+)]""")
+        .map { it.value.trimEnd('.', ',', ';', '"') }.toSet()
+    val citedRefs = Regex("""\[(market:EOD:[^\]]+|macro:[^\]]+|event:[^\]]+|filing:[^\]]+)]""")
         .findAll(output).map { it.groupValues[1] }.toSet()
     val citedUrls = Regex("""https?://[^\s)\]]+""").findAll(output)
-        .map { it.value.trimEnd('.', ',', ';') }.toSet()
+        .map { it.value.trimEnd('.', ',', ';', '"') }.toSet()
 
     if (citedRefs.isEmpty() && citedUrls.isEmpty()) {
         return CitationAudit("No machine-verifiable source references returned. Treat this synthesis as unverified.", false)
@@ -74,6 +77,9 @@ fun AiResearchBriefingPanel(
     model: String,
     fallbackProviders: List<String>,
     canUseAi: Boolean,
+    automaticTaskRouting: Boolean,
+    researchRouteConfigured: Boolean,
+    maxTokens: Int,
     evidenceDraft: String
 ) {
     val scope = rememberCoroutineScope()
@@ -86,8 +92,11 @@ fun AiResearchBriefingPanel(
         evidenceDraft.contains("NSE EOD SNAPSHOT", ignoreCase = true) ||
             evidenceDraft.contains("DISCOVERY-ONLY INTELLIGENCE FEED", ignoreCase = true) ||
             evidenceDraft.contains("INDIA MACRO RESEARCH SNAPSHOT", ignoreCase = true) ||
-            evidenceDraft.contains("NSE MCP research result", ignoreCase = true)
+            evidenceDraft.contains("NSE MCP research result", ignoreCase = true) ||
+            evidenceDraft.contains("Research MCP result", ignoreCase = true)
     }
+
+    val canGenerate = if (automaticTaskRouting) researchRouteConfigured else canUseAi
 
     val systemPrompt = """
         You are RovexQuant's evidence-bounded market research analyst.
@@ -109,8 +118,10 @@ fun AiResearchBriefingPanel(
         8. Sources.
 
         Every factual paragraph must cite one or more exact supplied references using
-        [market:EOD:TRADING_DATE], [macro:SERIES_KEY:PERIOD], [event:EVENT_ID], or an exact
-        source URL copied from the evidence. Do not invent or alter a reference. If no supplied
+        [market:EOD:TRADING_DATE], [macro:SERIES_KEY:PERIOD], [event:EVENT_ID],
+        [filing:NEWS_ID], or an exact source URL copied from
+        the evidence. For filing facts preserve source_quote, source_page, filed_at, as_of and
+        stale status. Do not invent or alter a reference. If no supplied
         reference supports a statement, label it unverified or omit it. Keep the brief concise,
         structured and useful for research rather than trading instructions.
     """.trimIndent()
@@ -128,9 +139,19 @@ fun AiResearchBriefingPanel(
                 "Generate a separate evidence-led synthesis from the data you fetched above. Provider usage/billing may apply. Reference checks validate citations against the supplied bundle, not the truth of model interpretation.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, lineHeight = 15.sp
             )
+            Text(
+                if (automaticTaskRouting) {
+                    if (researchRouteConfigured) "Execution: backend-configured research specialist route and its approved fallbacks."
+                    else "Execution unavailable: configure the research task in QUANT_AI_TASK_ROUTES, or switch to manual provider selection."
+                } else {
+                    "Execution: manually selected provider/model and explicitly selected fallback providers."
+                },
+                color = if (automaticTaskRouting && !researchRouteConfigured) Gold else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 9.sp, lineHeight = 14.sp
+            )
             Button(
                 onClick = {
-                    if (loading || !canUseAi || !hasEvidence) return@Button
+                    if (loading || !canGenerate || !hasEvidence) return@Button
                     loading = true
                     error = null
                     completion = null
@@ -139,13 +160,15 @@ fun AiResearchBriefingPanel(
                         try {
                             val result = repository.sendAiMessage(
                                 session = session,
-                                providerId = providerId,
-                                model = model,
+                                providerId = if (automaticTaskRouting) null else providerId,
+                                model = if (automaticTaskRouting) null else model,
                                 messages = listOf(
                                     AiChatMessage("system", systemPrompt),
                                     AiChatMessage("user", "Create the research briefing from this evidence bundle:\n\n${evidenceDraft.take(10000)}")
                                 ),
-                                fallbackProviders = fallbackProviders
+                                fallbackProviders = if (automaticTaskRouting) emptyList() else fallbackProviders,
+                                taskType = "research",
+                                maxTokens = maxTokens
                             )
                             completion = result
                             citationAudit = auditResearchCitations(result.content, evidenceDraft)
@@ -175,6 +198,13 @@ fun AiResearchBriefingPanel(
                 if (result.fallbackUsed) {
                     Text("Cross-provider fallback was used.", color = MaterialTheme.colorScheme.tertiary, fontSize = 9.sp)
                 }
+                Text(
+                    "Task ${result.taskType} · ${result.totalTokens} tokens · " +
+                        (result.costUsd?.let { "estimated USD ${"%.6f".format(java.util.Locale.US, it)}" }
+                            ?: "cost unknown (${result.costStatus})"),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 9.sp, lineHeight = 14.sp
+                )
                 Text(
                     result.content,
                     modifier = Modifier.testTag("ai.brief.output"),
