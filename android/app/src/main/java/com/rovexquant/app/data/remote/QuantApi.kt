@@ -4,6 +4,9 @@ import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiDailyBar
 import com.rovexquant.app.data.model.AiProvider
+import com.rovexquant.app.data.model.AiResearchRun
+import com.rovexquant.app.data.model.AiBudgetStatus
+import com.rovexquant.app.data.model.AiVerifiedClaim
 import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.AiStrategyEvidence
@@ -770,6 +773,60 @@ object QuantApi {
         }
     }
 
+    fun fetchAiResearchRuns(session: QuantSession, limit: Int = 20): List<AiResearchRun> {
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/ai/research/runs?limit=${limit.coerceIn(1, 100)}")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            val rows = JSONObject(text).optJSONArray("runs") ?: JSONArray()
+            return buildList {
+                for (index in 0 until rows.length()) {
+                    val item = rows.optJSONObject(index) ?: continue
+                    val usage = item.optJSONObject("token_usage") ?: JSONObject()
+                    val cost = if (item.isNull("cost_usd")) null else item.optDouble("cost_usd")
+                    add(AiResearchRun(
+                        runId = item.optString("run_id"), taskType = item.optString("task_type"),
+                        providerId = item.optString("provider_id"), model = item.optString("model"),
+                        status = item.optString("status"), promptTokens = usage.optLong("prompt_tokens"),
+                        completionTokens = usage.optLong("completion_tokens"),
+                        totalTokens = usage.optLong("total_tokens", usage.optLong("reserved_tokens")),
+                        costUsd = cost, costStatus = item.optString("cost_status", "NOT_TRACKED"),
+                        fallbackUsed = item.optBoolean("fallback_used"), createdAt = item.optString("created_at")
+                    ))
+                }
+            }
+        }
+    }
+
+    fun fetchAiBudgetStatus(session: QuantSession): AiBudgetStatus {
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/ai/budget")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            val json = JSONObject(text)
+            val daily = json.optJSONObject("daily") ?: JSONObject()
+            val monthly = json.optJSONObject("monthly") ?: JSONObject()
+            fun nullableLong(source: JSONObject, key: String): Long? = if (source.isNull(key)) null else source.optLong(key)
+            return AiBudgetStatus(
+                enabled = json.optBoolean("enabled"),
+                dailyUsedTokens = daily.optLong("used_tokens"),
+                dailyLimitTokens = nullableLong(daily, "limit_tokens"),
+                dailyRemainingTokens = nullableLong(daily, "remaining_tokens"),
+                monthlyUsedTokens = monthly.optLong("used_tokens"),
+                monthlyLimitTokens = nullableLong(monthly, "limit_tokens"),
+                monthlyRemainingTokens = nullableLong(monthly, "remaining_tokens")
+            )
+        }
+    }
+
     fun sendAiMessage(
         session: QuantSession,
         providerId: String?,
@@ -907,6 +964,20 @@ object QuantApi {
 
     private fun parseAiCompletion(json: JSONObject): AiCompletion {
         val usage = json.optJSONObject("usage") ?: JSONObject()
+        val verification = json.optJSONObject("verification")
+        val claimRows = verification?.optJSONArray("claims") ?: JSONArray()
+        val verifiedClaims = buildList {
+            for (index in 0 until claimRows.length()) {
+                val item = claimRows.optJSONObject(index) ?: continue
+                add(AiVerifiedClaim(
+                    claim = item.optString("claim"),
+                    sourceRef = item.optString("source_ref"),
+                    evidenceQuote = item.optString("evidence_quote"),
+                    verdict = item.optString("verdict", "insufficient"),
+                    reason = item.optString("reason")
+                ))
+            }
+        }
         return AiCompletion(
             providerId = json.optString("provider_id"),
             credentialId = json.optString("credential_id").takeIf { it.isNotBlank() && it != "null" },
@@ -918,7 +989,10 @@ object QuantApi {
             completionTokens = usage.optInt("completion_tokens", 0),
             totalTokens = usage.optInt("total_tokens", 0),
             costUsd = json.optionalDouble("cost_usd"),
-            costStatus = json.optString("cost_status", "UNKNOWN_MODEL_PRICING")
+            costStatus = json.optString("cost_status", "UNKNOWN_MODEL_PRICING"),
+            verificationStatus = verification?.optString("status")?.takeIf { it.isNotBlank() && it != "null" },
+            verificationSummary = verification?.optString("summary")?.takeIf { it.isNotBlank() && it != "null" },
+            verifiedClaims = verifiedClaims
         )
     }
 
