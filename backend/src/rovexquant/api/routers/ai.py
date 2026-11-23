@@ -381,7 +381,7 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
             except GatewayError as error:
                 ai_error = f"Data was recovered, but AI commentary is unavailable: {error}"
         else:
-            ai_error = "Data was recovered. Select a provider/model or enable the configured research task route."
+            ai_error = "Data was recovered. Configure an AI provider/model or enable the configured research task route to receive AI commentary."
 
         return {
             "provider": provider_id,
