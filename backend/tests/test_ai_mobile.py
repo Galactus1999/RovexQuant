@@ -499,3 +499,62 @@ def test_ai_research_reservation_records_running_state(monkeypatch):
     insert = next(query for query, _ in fake.queries if "INSERT INTO ai_research_runs" in query)
     assert "'RUNNING'" in insert
 
+
+
+def test_research_chat_runs_independent_verifier_and_persists_claim_status(client, monkeypatch):
+    from rovexquant.api.routers import ai as ai_router
+
+    monkeypatch.setattr(ai_router, "resolve_task_route", lambda *args: ("groq", "research-model", []))
+    monkeypatch.setattr(ai_router, "reserve_ai_research_run", lambda **kwargs: "00000000-0000-0000-0000-000000000001")
+
+    async def fake_complete_chat(**kwargs):
+        return {
+            "provider_id": "groq",
+            "model": "research-model",
+            "credential_id": "app",
+            "content": "RELIANCE closed at 1,234.50. [market:EOD:2026-11-20:NSE:RELIANCE]",
+            "fallback_used": False,
+            "task_type": "research",
+            "usage": {"prompt_tokens": 100, "completion_tokens": 30, "total_tokens": 130},
+            "cost_usd": None,
+            "cost_status": "UNKNOWN_MODEL_PRICING",
+        }
+
+    async def fake_verify(**kwargs):
+        assert "market:EOD:2026-11-20:NSE:RELIANCE" in kwargs["allowed_source_refs"]
+        return {
+            "status": "VERIFIED",
+            "summary": "1 supported, 0 contradicted, 0 insufficient of 1 claims.",
+            "claims": [{
+                "claim": "RELIANCE closed at 1,234.50.",
+                "source_ref": "market:EOD:2026-11-20:NSE:RELIANCE",
+                "evidence_quote": "close 1,234.50",
+                "verdict": "supported",
+                "reason": "Exact value is present in the supplied snapshot.",
+            }],
+        }
+
+    persisted = {}
+    def fake_finish(run_id, completion, **kwargs):
+        persisted.update({"run_id": run_id, "status": kwargs.get("status"), "verification": kwargs.get("verification")})
+
+    monkeypatch.setattr(ai_router, "complete_chat", fake_complete_chat)
+    monkeypatch.setattr(ai_router, "verify_research_claims", fake_verify)
+    monkeypatch.setattr(ai_router, "finish_ai_research_run", fake_finish)
+
+    response = client.post(
+        "/api/v1/app/ai/chat",
+        headers={"Authorization": "Bearer test-app-session"},
+        json={
+            "task_type": "research",
+            "messages": [{
+                "role": "user",
+                "content": "Evidence [market:EOD:2026-11-20:NSE:RELIANCE]: close 1,234.50",
+            }],
+            "max_tokens": 1000,
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["verification"]["status"] == "VERIFIED"
+    assert persisted["status"] == "VERIFIED"
+    assert persisted["verification"]["claims"][0]["verdict"] == "supported"
