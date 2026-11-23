@@ -102,7 +102,12 @@ def reserve_ai_research_run(
 
 def finish_ai_research_run(run_id: str, completion: dict[str, Any]) -> None:
     response_doc = _bounded({"content": completion.get("content", "")}, "response")
-    usage = completion.get("usage") if isinstance(completion.get("usage"), dict) else {}
+    raw_usage = completion.get("usage") if isinstance(completion.get("usage"), dict) else {}
+    usage = {
+        key: int(value) for key, value in raw_usage.items()
+        if key in {"prompt_tokens", "completion_tokens", "total_tokens"}
+        and isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0
+    }
     prompt_tokens = usage.get("prompt_tokens")
     completion_tokens = usage.get("completion_tokens")
     total_tokens = usage.get("total_tokens")
