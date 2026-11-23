@@ -263,7 +263,7 @@ def get_ai_research_run(run_id: str) -> dict[str, Any] | None:
                 """
                 SELECT run_id, task_type, provider_id, model, status, request_hash,
                        request_payload, response_payload, token_usage, cost_usd,
-                       cost_status, fallback_used, source_refs, created_at, completed_at
+                       cost_status, fallback_used, source_refs, verification, created_at, completed_at
                 FROM ai_research_runs WHERE run_id = %s
                 """,
                 (run_id,),
