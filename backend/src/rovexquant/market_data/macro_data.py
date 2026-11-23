@@ -208,3 +208,86 @@ async def fetch_amfi_nav(search: str = "", limit: int = 50) -> dict[str, Any]:
         "source_url": "https://www.amfiindia.com/net-asset-value/nav-download",
         "observations": output,
     }
+
+
+# RBIH's DBIE endpoint is a delayed, read-only mirror, not the RBI's live API.
+RBIH_DBIE_BASE_URL = "https://dbie.rbihub.in"
+RBI_DBIE_SERIES = {
+    "forex_reserves": ("fr_exg_resv_rn", "Foreign exchange reserves", "WEEKLY", "USD_MILLION"),
+    "wholesale_price_index": ("whole_price_index_rn", "Wholesale price index", "WEEKLY", "INDEX"),
+    "industrial_production": ("inx_inds_prod_rn", "Index of industrial production", "MONTHLY", "INDEX"),
+}
+
+
+def _extract_dbie_observations(payload: Any) -> tuple[list[dict[str, Any]], str | None, str]:
+    if not isinstance(payload, dict):
+        raise MacroProviderError("DBIE mirror returned an invalid JSON object")
+    candidates = payload.get("series")
+    if not isinstance(candidates, list):
+        candidates = [payload] if isinstance(payload.get("observations"), list) else []
+    output: list[dict[str, Any]] = []
+    labels: list[str] = []
+    as_of = payload.get("as_of")
+    for series in candidates:
+        if not isinstance(series, dict):
+            continue
+        observations = series.get("observations")
+        if not isinstance(observations, list):
+            continue
+        labels.append(str(series.get("label") or series.get("name") or ""))
+        as_of = series.get("as_of") or as_of
+        for row in observations:
+            if not isinstance(row, dict):
+                continue
+            period = row.get("period") or row.get("date") or row.get("time_period")
+            raw_value = row.get("value", row.get("obs_value"))
+            if period is None or raw_value is None:
+                continue
+            try:
+                value = float(raw_value)
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(value):
+                output.append({"period": str(period)[:32], "value": value})
+    if not output:
+        raise MacroProviderError("DBIE mirror payload did not contain recognized numeric observations")
+    output.sort(key=lambda item: item["period"])
+    return output, str(as_of) if as_of else None, next((label for label in labels if label), "")
+
+
+async def fetch_rbi_dbie_mirror(series: list[str] | None = None) -> dict[str, Any]:
+    """Fetch a small allowlist from RBIH's delayed static DBIE mirror; no credentials."""
+    selected = series or list(RBI_DBIE_SERIES)
+    if not 1 <= len(selected) <= len(RBI_DBIE_SERIES):
+        raise ValueError("Select between 1 and 3 RBI DBIE mirror series")
+    unknown = sorted(set(selected) - RBI_DBIE_SERIES.keys())
+    if unknown:
+        raise ValueError(f"Unsupported RBI DBIE mirror series: {unknown[0]}")
+    base = os.getenv("RBIH_DBIE_BASE_URL", RBIH_DBIE_BASE_URL).strip().rstrip("/")
+    if not base.startswith("https://"):
+        raise ValueError("RBIH_DBIE_BASE_URL must use HTTPS")
+    retrieved = datetime.now(timezone.utc).isoformat()
+    output = []
+    for key in selected:
+        slug, label, frequency, unit = RBI_DBIE_SERIES[key]
+        payload = await _get_json(f"{base}/data/sdmx-{slug}.json", {})
+        observations, as_of, mirror_label = _extract_dbie_observations(payload)
+        output.append({
+            "key": key, "series_id": slug.upper(), "label": mirror_label or label,
+            "frequency": frequency, "unit": unit, "observations": observations,
+            "latest_period": observations[-1]["period"], "latest_value": observations[-1]["value"],
+            "as_of": as_of or observations[-1]["period"],
+            "source": "RBIH_DBIE_STATIC_MIRROR",
+            "source_url": f"{base}/data/sdmx-{slug}.json",
+            "retrieved_at": retrieved, "data_delay": "MIRROR_LAST_SCRAPE_NOT_LIVE",
+            "primary_source": "https://data.rbi.org.in/DBIE/",
+        })
+    return {
+        "provider": "RBIH_DBIE_MIRROR", "configured": True, "retrieved_at": retrieved,
+        "data_vintage": "RBIH_MIRROR_LAST_SCRAPE", "series": output,
+        "limitations": [
+            "This is RBIH's read-only static mirror of RBI DBIE, not a live RBI API.",
+            "Observation freshness is bounded by the mirror's last scrape; use each series as_of field.",
+            "Verify material observations against the RBI portal before relying on them.",
+        ],
+    }

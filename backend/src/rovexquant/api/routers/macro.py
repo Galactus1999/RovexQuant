@@ -56,3 +56,46 @@ async def amfi_nav(
         raise HTTPException(status_code=422, detail=str(error)) from error
     except MacroProviderError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+from rovexquant.market_data.eod_store import EodStoreError
+from rovexquant.market_data.macro_ingestion import refresh_macro_sources
+from rovexquant.market_data.macro_store import latest_macro_observations, latest_macro_runs
+
+
+@router.post(
+    "/api/v1/app/research/macro/refresh",
+    dependencies=[Depends(require_app_session), Depends(macro_rate_limit)],
+)
+async def refresh_macro():
+    """Fetch allowlisted free macro providers and persist versioned observations."""
+    result = await refresh_macro_sources()
+    if not any(item.get("status") == "SUCCEEDED" for item in result["providers"]):
+        raise HTTPException(status_code=503, detail="No macro provider could be refreshed and persisted.")
+    return result
+
+
+@router.get(
+    "/api/v1/app/research/macro/history",
+    dependencies=[Depends(require_app_session), Depends(macro_rate_limit)],
+)
+def macro_history(
+    provider: str | None = Query(default=None, max_length=32),
+    series_key: str | None = Query(default=None, max_length=160),
+    limit: int = Query(default=500, ge=1, le=2000),
+):
+    try:
+        return latest_macro_observations(provider=provider, series_key=series_key, limit=limit)
+    except EodStoreError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+@router.get(
+    "/api/v1/app/research/macro/status",
+    dependencies=[Depends(require_app_session), Depends(macro_rate_limit)],
+)
+def macro_status(limit: int = Query(default=20, ge=1, le=100)):
+    try:
+        return {"providers": latest_macro_runs(limit=limit)}
+    except EodStoreError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
