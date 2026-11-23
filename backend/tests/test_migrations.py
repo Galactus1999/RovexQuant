@@ -225,7 +225,7 @@ def test_postgres_market_eod_migration_creates_provenance_tables(migrated_postgr
                 """
             ).fetchall()
         }
-    assert tables == {"market_eod_bars", "market_ingestion_runs", "market_ingestion_jobs", "market_historical_backfill_runs", "market_historical_backfill_days", "market_reconciliation_reports", "market_reconciliation_diffs"}
+    assert tables == {"market_eod_bars", "market_ingestion_runs", "market_ingestion_jobs", "market_historical_backfill_runs", "market_historical_backfill_days", "market_reconciliation_reports", "market_reconciliation_diffs", "market_eod_adjusted_bars", "market_corporate_actions", "market_symbol_history", "market_derived_backfill_runs"}
     assert {
         "exchange", "trading_date", "symbol", "series", "open", "high",
         "low", "close", "volume", "isin", "trades", "provider", "data_mode",
