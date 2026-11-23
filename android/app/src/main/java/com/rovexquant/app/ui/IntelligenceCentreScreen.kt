@@ -68,68 +68,6 @@ fun IntelligenceCentreScreen(session: QuantSession, repository: QuantDataReposit
             )
         }
         item {
-            Column(Modifier.testTag("market.data-health")) {
-                TerminalCard {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Eyebrow("Market data pipeline")
-                    StatusPill(
-                        state.dataHealth?.overallStatus ?: if (state.dataHealthLoading) "CHECKING" else "UNAVAILABLE",
-                        when (state.dataHealth?.overallStatus) {
-                            "HEALTHY" -> Mint
-                            "DEGRADED" -> Coral
-                            else -> Gold
-                        }
-                    )
-                }
-                Text(
-                    "NSE · ${state.dataHealth?.marketDataMode ?: "END_OF_DAY_ONLY"}",
-                    color = Muted, fontSize = 9.sp
-                )
-                state.dataHealth?.let { health ->
-                    val eod = health.eod
-                    Text(
-                        "EOD: ${eod.status} · ${eod.records ?: 0} rows · ${eod.freshness} · ${eod.updatedAt ?: "no successful import"}",
-                        color = MaterialTheme.colorScheme.onBackground, fontSize = 10.sp, lineHeight = 15.sp
-                    )
-                    health.macroProviders.forEach { item ->
-                        Text(
-                            "Macro · ${item.name}: ${item.status} · ${item.records ?: 0} rows · ${item.freshness}",
-                            color = if (item.status == "FAILED") Coral else Muted, fontSize = 9.sp
-                        )
-                    }
-                    Text(
-                        "Intelligence: ${health.intelligence.status} · ${health.intelligence.records ?: 0} events · ${health.intelligence.freshness}",
-                        color = if (health.intelligence.status == "FAILED") Coral else Muted, fontSize = 9.sp
-                    )
-                    health.derivedBackfills.forEach { item ->
-                        Text(
-                            "History · ${item.name}: ${item.status} · ${item.records ?: 0} rows",
-                            color = if (item.status == "FAILED") Coral else Muted, fontSize = 9.sp
-                        )
-                    }
-                    Text(
-                        "Official reconciliation: ${health.reconciliation.status} · ${health.reconciliation.detail ?: "No report yet"}",
-                        color = if (health.reconciliation.status == "MISMATCHED") Coral else Muted,
-                        fontSize = 9.sp, lineHeight = 14.sp
-                    )
-                }
-                state.dataHealthError?.let { EmptyPanel("Data health unavailable", it, Coral) }
-                Button(
-                    onClick = model::refreshHealth,
-                    enabled = !state.dataHealthLoading,
-                    modifier = Modifier.fillMaxWidth().testTag("market.data-health.refresh")
-                ) {
-                    Text(if (state.dataHealthLoading) "Checking data sources…" else "Refresh data health")
-                }
-                Text(
-                    "EOD and delayed research data only. A successful fetch is not the same as official-source reconciliation.",
-                    color = Muted, fontSize = 9.sp, lineHeight = 14.sp
-                )
-                }
-            }
-        }
-
-        item {
             TerminalCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Eyebrow("Global event discovery")
@@ -189,7 +127,6 @@ fun IntelligenceCentreScreen(session: QuantSession, repository: QuantDataReposit
                                 fontWeight = FontWeight.Bold
                             )
                             Text("${feed.articleCount} source articles · ${feed.timespan} window", color = Muted, fontSize = 10.sp)
-                            Text("Archive ${feed.archiveStatus} · NSE master ${feed.issuerMasterStatus} · ${feed.mappedEventCount} mapped candidates", color = Muted, fontSize = 9.sp)
                         }
                         StatusPill("On demand", Gold)
                     }
@@ -273,33 +210,7 @@ private fun MacroResearchToolPanel(
             if (loading) CircularProgressIndicator(modifier = Modifier.size(16.dp)) else Text("Fetch macro observations")
         }
         error?.let { Text(it, color = Coral, fontSize = 10.sp) }
-        summary?.let { data ->
-            Text("Retrieved ${data.retrievedAt.ifBlank { "timestamp not supplied" }}", color = Muted, fontSize = 9.sp)
-            if (data.worldBankSeries.isEmpty()) {
-                Text("World Bank observations unavailable in this response.", color = Gold, fontSize = 10.sp)
-            }
-            data.worldBankSeries.forEach { series ->
-                Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                    Text(series.label, color = MaterialTheme.colorScheme.onBackground, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        "${series.latestValue?.let { "%.3f".format(java.util.Locale.US, it) } ?: "No observation"} ${series.unit} · ${series.latestPeriod ?: "period unavailable"} · ${series.frequency}",
-                        color = Cyan, fontSize = 10.sp
-                    )
-                    Text("Source: ${series.source}", color = Muted, fontSize = 9.sp)
-                }
-            }
-            Spacer(Modifier.height(7.dp))
-            Text(
-                "FRED: ${if (data.fredConfigured) "${data.fredSeriesCount} series returned" else "not configured on backend"} · AMFI: ${data.amfiNavCount} NAV records (mutual funds, not equity quotes)",
-                color = Muted, fontSize = 9.sp, lineHeight = 14.sp
-            )
-            data.amfiExamples.take(3).forEach { nav ->
-                Text("${nav.schemeName}: ₹${"%.4f".format(java.util.Locale.US, nav.nav)} · ${nav.navDate}", color = Muted, fontSize = 9.sp)
-            }
-            data.providerErrors.forEach { issue ->
-                Text("Partial source failure: $issue", color = Gold, fontSize = 9.sp, lineHeight = 13.sp)
-            }
-        }
+        summary?.let { MacroSummaryContent(it) }
     }
 }
 
@@ -370,31 +281,7 @@ private fun EodEventStudyToolPanel(
             if (loading) CircularProgressIndicator(modifier = Modifier.size(16.dp)) else Text("Run event-window analysis")
         }
         error?.let { Text(it, color = Coral, fontSize = 10.sp, lineHeight = 15.sp) }
-        result?.let { study ->
-            Spacer(Modifier.height(8.dp))
-            Text("${study.exchange}:${study.symbol} · event ${study.eventDate}", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-            Text("Anchor ${study.anchorDate} · post window ${study.firstPostEventDate} to ${study.lastPostEventDate} · ${study.postBarsUsed} bars", color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
-            listOf(
-                "Pre-event return" to study.preEventReturn,
-                "Post-event cumulative return" to study.cumulativeReturn,
-                "Benchmark-adjusted return" to study.marketAdjustedReturn,
-                "Cumulative abnormal return" to study.cumulativeAbnormalReturn
-            ).forEach { (label, value) ->
-                Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(label, color = Muted, fontSize = 10.sp)
-                    Text(
-                        value?.let { "%+.2f%%".format(java.util.Locale.US, it * 100.0) } ?: "Unavailable",
-                        color = value?.let { if (it >= 0) Mint else Coral } ?: Gold,
-                        fontSize = 10.sp, fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-            Text("Benchmark: ${study.benchmarkSymbol ?: "not used"} · matched observations: ${study.benchmarkMatches}", color = Muted, fontSize = 9.sp)
-            Text("Method: ${study.method}", color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
-            study.limitations.forEach { limitation ->
-                Text("• $limitation", color = Gold, fontSize = 9.sp, lineHeight = 14.sp, modifier = Modifier.padding(top = 4.dp))
-            }
-        }
+        result?.let { EventStudyContent(it) }
     }
 }
 
@@ -431,25 +318,11 @@ private fun IntelligenceEventCard(event: MarketEvent, onOpenSource: (String) -> 
         } else {
             Text("No deterministic sector mapping exists for this headline.", color = Muted, fontSize = 10.sp)
         }
-        if (event.issuerMappings.isNotEmpty()) {
-            Spacer(Modifier.height(9.dp))
-            Eyebrow("Potential NSE issuer candidates · verify manually")
-            event.issuerMappings.forEach { mapping ->
-                Column(Modifier.fillMaxWidth().padding(top = 5.dp)) {
-                    Text(
-                        "${mapping.exchange}:${mapping.symbol} · ${mapping.companyName}",
-                        color = MaterialTheme.colorScheme.onBackground, fontSize = 10.sp, fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        "${(mapping.confidence * 100).toInt()}% heuristic · ${mapping.mappingMethod.replace('_', ' ')} · ${mapping.mappingScope}",
-                        color = Gold, fontSize = 9.sp
-                    )
-                    Text(mapping.evidence, color = Muted, fontSize = 9.sp, lineHeight = 13.sp)
-                }
-            }
-        }
         Spacer(Modifier.height(9.dp))
-        Text(event.stockMappingNote, color = Gold, fontSize = 10.sp, lineHeight = 15.sp)
+        Text(
+            event.stockMappingNote,
+            color = Gold, fontSize = 10.sp, lineHeight = 15.sp
+        )
         event.sources.forEach { source ->
             if (source.url.startsWith("https://") || source.url.startsWith("http://")) {
                 Text(
