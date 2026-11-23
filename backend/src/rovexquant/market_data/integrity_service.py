@@ -28,11 +28,6 @@ def latest_data_integrity(exchange: str = "NSE") -> dict[str, Any]:
                 """,
                 (market,),
             ).fetchone()
-            if report is None:
-                return {
-                    "exchange": market, "status": "NOT_RUN", "latest_report": None,
-                    "backfills": [],
-                }
             diffs = connection.execute(
                 """
                 SELECT kind, symbol, series, field, official_value, stored_value, absolute_difference
@@ -42,7 +37,7 @@ def latest_data_integrity(exchange: str = "NSE") -> dict[str, Any]:
                 LIMIT 100
                 """,
                 (report[0],),
-            ).fetchall()
+            ).fetchall() if report is not None else []
             backfills = connection.execute(
                 """
                 SELECT year, status, rows_seen, rows_upserted, source_url, source_sha256,
@@ -60,6 +55,18 @@ def latest_data_integrity(exchange: str = "NSE") -> dict[str, Any]:
         raise EodStoreError(
             "Historical integrity tables are unavailable; apply database migrations"
         ) from error
+
+    if report is None:
+        return {
+            "exchange": market, "status": "NOT_RUN", "latest_report": None,
+            "backfills": [{
+                "year": item[0], "status": item[1], "rows_seen": item[2],
+                "rows_upserted": item[3], "source_url": item[4], "source_sha256": item[5],
+                "started_at": item[6].isoformat(),
+                "completed_at": item[7].isoformat() if item[7] else None,
+                "error_message": item[8],
+            } for item in backfills],
+        }
 
     return {
         "exchange": market,
