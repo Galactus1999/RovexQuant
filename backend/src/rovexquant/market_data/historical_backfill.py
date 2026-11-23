@@ -55,7 +55,7 @@ def validate_exchange_year(exchange: str, year: int, *, current_year: int | None
 
 def parquet_source_url(exchange: str, year: int) -> str:
     market = validate_exchange_year(exchange, year).lower()
-    return f"{HF_DATASET}/{market}/year={year}/{market}_{year}.parquet"
+    return f"{HF_DATASET}/{market}/year%3D{year}/{market}_{year}.parquet"
 
 
 def _download_parquet(url: str) -> tuple[Path, str]:
