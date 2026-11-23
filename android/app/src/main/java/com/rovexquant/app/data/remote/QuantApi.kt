@@ -24,6 +24,7 @@ import com.rovexquant.app.data.model.DerivedBackfillSummary
 import com.rovexquant.app.data.model.MacroSeriesObservation
 import com.rovexquant.app.data.model.AmfiNavObservation
 import com.rovexquant.app.data.model.EventStudyResult
+import com.rovexquant.app.data.model.CorporateActionEvidence
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.NseMcpTool
@@ -287,6 +288,21 @@ object QuantApi {
                 "Event-study response exceeds the 512 KB safety limit."
             }
             val json = JSONObject(body)
+            val actionJson = json.optJSONArray("corporate_actions") ?: JSONArray()
+            val corporateActions = buildList {
+                for (index in 0 until actionJson.length()) {
+                    val item = actionJson.optJSONObject(index) ?: continue
+                    add(CorporateActionEvidence(
+                        exDate = item.optString("ex_date"),
+                        actionType = item.optString("action_type"),
+                        rawSubject = item.optString("raw_subject"),
+                        companyName = item.optString("company_name"),
+                        ratioNum = item.optLong("ratio_num").takeIf { item.has("ratio_num") && !item.isNull("ratio_num") },
+                        ratioDen = item.optLong("ratio_den").takeIf { item.has("ratio_den") && !item.isNull("ratio_den") },
+                        cashAmount = item.optDouble("cash_amount", Double.NaN).takeIf { it.isFinite() }
+                    ))
+                }
+            }
             val limitationsJson = json.optJSONArray("limitations") ?: JSONArray()
             val limitations = buildList {
                 for (index in 0 until limitationsJson.length()) {
@@ -311,6 +327,7 @@ object QuantApi {
                 postBarsUsed = json.optInt("post_event_bars_used"),
                 method = json.optString("method"),
                 priceBasis = json.optString("price_basis", "RAW_OR_MIXED_CLOSE"),
+                corporateActions = corporateActions,
                 limitations = limitations
             )
         }
