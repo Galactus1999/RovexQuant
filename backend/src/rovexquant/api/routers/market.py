@@ -5,11 +5,13 @@ import asyncio
 from dataclasses import asdict
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field, model_validator
 
 from rovexquant.api.dependencies import require_market_gateway
 from rovexquant.auth import AppAuthError, bearer_claims
+from rovexquant.market_data.eod_store import EodStoreError
+from rovexquant.market_data.integrity_service import latest_data_integrity
 from rovexquant.market_data.instruments import (
     InstrumentMasterError,
     get_nse_equity_instruments,
@@ -181,6 +183,20 @@ async def market_quotes(request: MarketQuotesRequest):
     try:
         return await _quote_response(request)
     except MarketGatewayError as error:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+@router.get(
+    "/api/v1/app/market/data-integrity",
+    dependencies=[Depends(require_app_session)],
+)
+def app_market_data_integrity(exchange: str = Query(default="NSE", pattern="^(NSE|BSE)$")):
+    """Return the latest official-source reconciliation and historical backfill checkpoints."""
+    try:
+        return latest_data_integrity(exchange)
+    except EodStoreError as error:
         from fastapi import HTTPException
 
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
