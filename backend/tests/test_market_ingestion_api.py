@@ -72,21 +72,15 @@ def test_market_ingestion_collection_requires_app_session():
     assert client.post("/api/v1/app/market-data/ingestion/collect/nse").status_code == 401
 
 
-def test_market_ingestion_collection_claims_and_dispatches_once(monkeypatch):
+def test_market_ingestion_collection_persists_queue_request(monkeypatch):
     from rovexquant.api import market_ingestion
 
     token = _session(monkeypatch)
-    dispatched = []
-
+    queued = []
     monkeypatch.setattr(
-        market_ingestion, "claim_ingestion_run",
-        lambda exchange, force=False: ("run-123", True, "RUNNING"),
+        market_ingestion, "enqueue_ingestion_run",
+        lambda exchange, force=False: (queued.append((exchange, force)) or ("run-123", True, "QUEUED")),
     )
-
-    async def fake_collect(exchange, run_id):
-        dispatched.append((exchange, run_id))
-
-    monkeypatch.setattr(market_ingestion, "_run_claimed_collection", fake_collect)
     response = TestClient(api.app).post(
         "/api/v1/app/market-data/ingestion/collect/nse?force=true",
         headers={"Authorization": f"Bearer {token}"},
@@ -94,29 +88,23 @@ def test_market_ingestion_collection_claims_and_dispatches_once(monkeypatch):
 
     assert response.status_code == 202
     assert response.json()["started"] is True
+    assert response.json()["status"] == "QUEUED"
     assert response.json()["run_id"] == "run-123"
-    assert dispatched == [("nse", "run-123")]
+    assert queued == [("nse", True)]
 
 
-def test_market_ingestion_collection_joins_existing_run_without_dispatch(monkeypatch):
+def test_market_ingestion_collection_joins_existing_durable_job(monkeypatch):
     from rovexquant.api import market_ingestion
 
     token = _session(monkeypatch)
-    dispatched = []
     monkeypatch.setattr(
-        market_ingestion, "claim_ingestion_run",
+        market_ingestion, "enqueue_ingestion_run",
         lambda exchange, force=False: ("existing-run", False, "RUNNING"),
-    )
-    monkeypatch.setattr(
-        market_ingestion, "_run_claimed_collection",
-        lambda exchange, run_id: dispatched.append((exchange, run_id)),
     )
     response = TestClient(api.app).post(
         "/api/v1/app/market-data/ingestion/collect/nse",
         headers={"Authorization": f"Bearer {token}"},
     )
-
     assert response.status_code == 202
     assert response.json()["started"] is False
     assert response.json()["status"] == "RUNNING"
-    assert dispatched == []
