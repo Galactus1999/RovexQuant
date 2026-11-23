@@ -402,6 +402,8 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                 model = model,
                 fallbackProviders = selectedFallbacks.toList(),
                 canUseAi = canUseAi,
+                automaticTaskRouting = automaticTaskRouting,
+                researchRouteConfigured = "research" in configuredTaskRoutes,
                 evidenceDraft = chatInput
             )
         }
