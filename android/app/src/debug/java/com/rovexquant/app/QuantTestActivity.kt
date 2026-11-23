@@ -256,7 +256,8 @@ class FakeQuantRepository(
         session: QuantSession,
         server: String,
         tool: String,
-        argumentsJson: String
+        argumentsJson: String,
+        confirmNonReadOnly: Boolean
     ) = NseMcpResult("test", "TEST", null, null, JSONObject().toString())
 
     override fun createMarketStream(
