@@ -46,11 +46,11 @@ private fun auditResearchCitations(output: String, evidence: String): CitationAu
         .forEach { allowedRefs += "filing:${it.groupValues[1]}" }
 
     val sourceUrls = Regex("""https?://[^\s)\]]+""").findAll(evidence)
-        .map { it.value.trimEnd('.', ',', ';') }.toSet()
+        .map { it.value.trimEnd('.', ',', ';', '"') }.toSet()
     val citedRefs = Regex("""\[(market:EOD:[^\]]+|macro:[^\]]+|event:[^\]]+|filing:[^\]]+)]""")
         .findAll(output).map { it.groupValues[1] }.toSet()
     val citedUrls = Regex("""https?://[^\s)\]]+""").findAll(output)
-        .map { it.value.trimEnd('.', ',', ';') }.toSet()
+        .map { it.value.trimEnd('.', ',', ';', '"') }.toSet()
 
     if (citedRefs.isEmpty() && citedUrls.isEmpty()) {
         return CitationAudit("No machine-verifiable source references returned. Treat this synthesis as unverified.", false)
