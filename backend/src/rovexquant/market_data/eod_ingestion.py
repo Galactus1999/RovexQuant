@@ -1,6 +1,7 @@
 """Shared, idempotent TejHQ EOD collection entry point for API and scheduled jobs."""
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -98,7 +99,8 @@ async def collect_claimed_snapshot(exchange: str, run_id: str) -> dict[str, obje
             provider=provider_id,
             retrieved_at=datetime.now(timezone.utc),
         )
-        count = persist_snapshot(
+        count = await asyncio.to_thread(
+            persist_snapshot,
             normalized,
             run_id=run_id,
             trading_date=trading_date,
@@ -115,7 +117,9 @@ async def collect_claimed_snapshot(exchange: str, run_id: str) -> dict[str, obje
         }
     except Exception as error:
         try:
-            fail_run(run_id=run_id, code=type(error).__name__, message=str(error))
+            await asyncio.to_thread(
+                fail_run, run_id=run_id, code=type(error).__name__, message=str(error)
+            )
         except Exception:
             pass
         raise
