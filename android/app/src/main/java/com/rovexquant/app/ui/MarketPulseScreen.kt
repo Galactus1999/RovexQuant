@@ -125,6 +125,14 @@ fun MarketPulseScreen(
     val nifty = indexKeys["NIFTY 50"]?.let { ticks[it] }
     val bank = indexKeys["NIFTY BANK"]?.let { ticks[it] }
     val latestTick = listOfNotNull(nifty, bank).maxByOrNull { it.receivedAt }
+    val rankedSectors = remember(ticks, indexKeys) {
+        coreSectorIndices.sortedByDescending { sector ->
+            indexKeys[sector.benchmark]?.let { ticks[it]?.changePercent } ?: Double.NEGATIVE_INFINITY
+        }
+    }
+    val liveSectorCount = rankedSectors.count { sector ->
+        indexKeys[sector.benchmark]?.let { ticks[it] }?.let { it.quality == "VALID" && isFresh(it) } == true
+    }
     val exchangeClock = latestTick?.exchangeTimestamp?.substringAfter("T")?.take(8) ?: "unavailable"
     val receiveClock = latestTick?.receivedAt?.substringAfter("T")?.take(8) ?: "unavailable"
 
@@ -430,10 +438,13 @@ fun MarketPulseScreen(
             Column {
                 Text("Sector performance", color = MaterialTheme.colorScheme.onBackground, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("market.sector.heading"))
                 Spacer(Modifier.height(4.dp))
-                Text("NSE sector-index watchlist · live values are shown only for instruments actually subscribed and received.", color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
+                Text(
+                    "Live NSE sector-index performance · $liveSectorCount / ${coreSectorIndices.size} fresh benchmarks · strongest first",
+                    color = Muted, fontSize = 11.sp, lineHeight = 16.sp
+                )
             }
         }
-        items(coreSectorIndices, key = { it.benchmark }) { sector ->
+        items(rankedSectors, key = { it.benchmark }) { sector ->
             val instrumentKey = indexKeys[sector.benchmark]
             val quote = instrumentKey?.let { ticks[it] }
             TerminalCard {
