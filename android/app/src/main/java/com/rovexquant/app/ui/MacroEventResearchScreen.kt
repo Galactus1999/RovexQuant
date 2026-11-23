@@ -121,7 +121,7 @@ fun MacroEventResearchScreen(session: QuantSession, repository: QuantDataReposit
                     Eyebrow("Adjusted prices · corporate actions · symbol history")
                     state.integrity.derivedBackfills.forEach { derived ->
                         Text(
-                            "${derived.year} · ${derived.datasetKind} · ${derived.status} · ${derived.rowsSeen} rows scanned",
+                            "${if (derived.year == 0) "ALL" else derived.year} · ${derived.datasetKind} · ${derived.status} · ${derived.rowsSeen} rows scanned",
                             color = if (derived.status == "SUCCEEDED") Mint else Gold, fontSize = 9.sp
                         )
                     }
