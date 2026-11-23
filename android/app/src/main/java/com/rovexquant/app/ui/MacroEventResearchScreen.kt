@@ -164,7 +164,7 @@ fun MacroEventResearchScreen(session: QuantSession, repository: QuantDataReposit
                     label = { Text("Event date (YYYY-MM-DD)") }, placeholder = { Text("2026-10-15") },
                     singleLine = true, modifier = Modifier.fillMaxWidth().testTag("event.date"))
                 OutlinedTextField(value = state.benchmarkSymbol, onValueChange = model::setBenchmarkSymbol,
-                    label = { Text("Benchmark symbol (optional)") }, placeholder = { Text("NIFTY 50") },
+                    label = { Text("Benchmark symbol (optional)") }, placeholder = { Text("NIFTYBEES (ETF proxy)") },
                     singleLine = true, modifier = Modifier.fillMaxWidth().testTag("event.benchmark"))
                 Text("Uses up to 10 pre-event and 10 post-event trading bars. Benchmark matching is by trading date.",
                     color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
@@ -247,12 +247,12 @@ private fun EventStudyContent(result: EventStudyResult) {
             EventMetric("Market-adjusted", result.marketAdjustedReturn, Modifier.weight(1f))
             EventMetric("Cumulative abnormal", result.cumulativeAbnormalReturn, Modifier.weight(1f))
         }
-        Text("Benchmark ${result.benchmarkSymbol ?: "—"} · ${result.benchmarkMatches} aligned observations",
+        Text("Benchmark ${result.benchmarkSymbol ?: "—"} · ${result.benchmarkMatches} aligned observations · ETF proxy where used",
             color = Muted, fontSize = 9.sp)
     } else {
         Text("No benchmark-relative result was calculated.", color = Gold, fontSize = 10.sp)
     }
-    Text("Method: ${result.method}", color = Muted, fontSize = 9.sp)
+    Text("Method: ${result.method} · Price basis: ${result.priceBasis}", color = Muted, fontSize = 9.sp)
     result.limitations.forEach { Text("• $it", color = Muted, fontSize = 9.sp, lineHeight = 13.sp) }
 }
 
