@@ -11,6 +11,7 @@ import com.rovexquant.app.data.model.MarketIndexInstrument
 import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.MarketTick
 import com.rovexquant.app.data.model.MacroResearchSummary
+import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.model.MarketIngestionStatus
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
@@ -38,6 +39,7 @@ interface QuantDataRepository {
     suspend fun fetchMarketIngestionStatus(session: QuantSession, exchange: String = "nse"): MarketIngestionStatus
     suspend fun fetchIntelligenceEvents(session: QuantSession, query: String, timespan: String): IntelligenceFeed
     suspend fun fetchMacroResearch(session: QuantSession): MacroResearchSummary
+    suspend fun fetchEventStudy(session: QuantSession, symbol: String, eventDate: String, benchmarkSymbol: String?): EventStudyResult
     suspend fun sendAiMessage(
         session: QuantSession,
         providerId: String,
