@@ -58,10 +58,13 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
     var keyDeleting by remember { mutableStateOf(false) }
     var keyError by remember { mutableStateOf<String?>(null) }
     var confirmQuotaAction by remember { mutableStateOf(false) }
+    var enabledTools by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showToolRegistry by remember { mutableStateOf(false) }
 
     val currentCatalog = catalogs.firstOrNull { it.server == server }
-    val readOnlyTools = currentCatalog?.tools?.filter { it.readOnly && !it.destructive }.orEmpty()
-    val manualTools = currentCatalog?.tools?.filter { it.requiresConfirmation && !it.destructive }.orEmpty()
+    val discoveredTools = currentCatalog?.tools?.filter { !it.destructive }.orEmpty()
+    val readOnlyTools = discoveredTools.filter { it.readOnly && "$server:${it.name}" in enabledTools }
+    val manualTools = discoveredTools.filter { it.requiresConfirmation && "$server:${it.name}" in enabledTools }
 
     fun loadCatalog(targetServer: String = server) {
         loadingCatalog = true
@@ -73,8 +76,13 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
             try {
                 val loaded = repository.fetchNseMcpTools(session, targetServer)
                 catalogs = catalogs.filterNot { old -> loaded.any { it.server == old.server } } + loaded
+                val defaultNseTools = loaded.filter { it.server != "dalalos" }.flatMap { catalog ->
+                    catalog.tools.filter { it.readOnly && !it.destructive }.map { "${catalog.server}:${it.name}" }
+                }.toSet()
+                enabledTools = enabledTools + defaultNseTools
                 val selectedServer = if (targetServer == "both") server else targetServer
-                val selected = loaded.firstOrNull { it.server == selectedServer }?.tools?.firstOrNull { it.readOnly }
+                val selected = loaded.firstOrNull { it.server == selectedServer }?.tools
+                    ?.firstOrNull { it.readOnly && !it.destructive && "${selectedServer}:${it.name}" in enabledTools + defaultNseTools }
                 selectedTool = selected
                 arguments = "{}"
                 confirmQuotaAction = false
@@ -142,7 +150,7 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
-                    if (loadingCatalog) "Discovering approved tools…" else "${readOnlyTools.size} read-only · ${manualTools.size} manual-confirmation tools",
+                    if (loadingCatalog) "Discovering approved tools…" else "${readOnlyTools.size + manualTools.size} enabled / ${discoveredTools.size} discovered",
                     color = Muted, fontSize = 10.sp
                 )
                 TextButton(onClick = { loadCatalog("both") }, enabled = !loadingCatalog && !calling) {
@@ -150,6 +158,45 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
                 }
             }
             if (loadingCatalog) CircularProgressIndicator()
+            if (discoveredTools.isNotEmpty()) {
+                TextButton(
+                    onClick = { showToolRegistry = !showToolRegistry },
+                    enabled = !loadingCatalog && !calling
+                ) {
+                    Text(if (showToolRegistry) "Hide tool permissions" else "Manage tool permissions")
+                }
+                if (showToolRegistry) {
+                    Text(
+                        "Enable only the research capabilities you want exposed in this workspace. DalalOS tools start disabled; processing tools still require a separate confirmation for every call.",
+                        color = Muted, fontSize = 10.sp, lineHeight = 15.sp
+                    )
+                    discoveredTools.forEach { tool ->
+                        val key = "$server:${tool.name}"
+                        val checked = key in enabledTools
+                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = checked,
+                                onCheckedChange = { enabled ->
+                                    enabledTools = if (enabled) enabledTools + key else enabledTools - key
+                                    if (!enabled && selectedTool?.name == tool.name) {
+                                        selectedTool = null
+                                        result = null
+                                        confirmQuotaAction = false
+                                    }
+                                },
+                                enabled = !calling
+                            )
+                            Column(Modifier.weight(1f)) {
+                                Text(tool.name, color = MaterialTheme.colorScheme.onBackground, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    if (tool.readOnly) "Read-only research" else "May queue processing or consume provider credits",
+                                    color = if (tool.readOnly) Muted else Gold, fontSize = 9.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
             if (server == "dalalos") {
                 Spacer(Modifier.height(6.dp))
                 Text("DALALOS CONNECTOR KEY", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
