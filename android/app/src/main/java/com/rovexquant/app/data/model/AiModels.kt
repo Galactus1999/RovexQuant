@@ -18,7 +18,13 @@ data class AiCompletion(
     val credentialId: String?,
     val model: String,
     val content: String,
-    val fallbackUsed: Boolean
+    val fallbackUsed: Boolean,
+    val taskType: String = "chat",
+    val promptTokens: Int = 0,
+    val completionTokens: Int = 0,
+    val totalTokens: Int = 0,
+    val costUsd: Double? = null,
+    val costStatus: String = "UNKNOWN_MODEL_PRICING"
 )
 
 data class AiDailyBar(
