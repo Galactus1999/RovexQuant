@@ -127,9 +127,11 @@ fun MarketPulseScreen(
     val nifty = indexKeys["NIFTY 50"]?.let { ticks[it] }
     val bank = indexKeys["NIFTY BANK"]?.let { ticks[it] }
     val latestTick = listOfNotNull(nifty, bank).maxByOrNull { it.receivedAt }
-    val rankedSectors = remember(ticks, indexKeys) {
+    val rankedSectors = remember(ticks, indexKeys, freshnessClock) {
         coreSectorIndices.sortedByDescending { sector ->
-            indexKeys[sector.benchmark]?.let { ticks[it]?.changePercent } ?: Double.NEGATIVE_INFINITY
+            indexKeys[sector.benchmark]?.let { ticks[it] }?.let { quote ->
+                quote.changePercent.takeIf { quote.quality == "VALID" && isFresh(quote) }
+            } ?: Double.NEGATIVE_INFINITY
         }
     }
     val liveSectorCount = rankedSectors.count { sector ->
