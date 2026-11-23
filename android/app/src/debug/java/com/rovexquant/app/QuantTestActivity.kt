@@ -19,6 +19,9 @@ import com.rovexquant.app.data.model.MarketEvent
 import com.rovexquant.app.data.model.SectorImpact
 import com.rovexquant.app.data.model.MarketTick
 import com.rovexquant.app.data.model.MarketIngestionStatus
+import com.rovexquant.app.data.model.MacroResearchSummary
+import com.rovexquant.app.data.model.MacroSeriesObservation
+import com.rovexquant.app.data.model.AmfiNavObservation
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.QuantSession
@@ -169,6 +172,19 @@ class FakeQuantRepository(
             impactStatus = "HYPOTHESIS_REQUIRES_COMPANY_LEVEL_VERIFICATION"
         )),
         limitations = listOf("Global news discovery is not primary-source verification.")
+    )
+
+    override suspend fun fetchMacroResearch(session: QuantSession) = MacroResearchSummary(
+        retrievedAt = "2026-11-23T00:00:00Z",
+        worldBankSeries = listOf(
+            MacroSeriesObservation("gdp_growth", "GDP growth (annual %)", "ANNUAL", "PERCENT", "2024", 6.5, "WORLD_BANK_INDICATORS_V2"),
+            MacroSeriesObservation("inflation", "Consumer price inflation (annual %)", "ANNUAL", "PERCENT", "2024", 4.9, "WORLD_BANK_INDICATORS_V2")
+        ),
+        amfiNavCount = 1,
+        amfiExamples = listOf(AmfiNavObservation(119551, "Fixture Equity Fund", 123.45, "21-Nov-2026")),
+        fredConfigured = false,
+        fredSeriesCount = 0,
+        providerErrors = emptyList()
     )
 
     override suspend fun sendAiMessage(
