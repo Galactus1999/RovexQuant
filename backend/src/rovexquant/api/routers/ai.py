@@ -437,44 +437,25 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
         }
         completion = None
         ai_error = None
-        if request.automatic_task_routing or (request.provider_id and request.model):
-            try:
-                completion = await complete_chat(
-                    provider_id=request.provider_id,
-                    model=request.model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": json.dumps(user_evidence, separators=(",", ":"), sort_keys=True)},
-                    ],
-                    max_tokens=1400,
-                    temperature=0.1,
-                    credential_id=request.credential_id,
-                    fallback_providers=request.fallback_providers,
-                    task_type="research",
-                )
-            except GatewayError as error:
-                ai_error = f"Data was recovered, but AI commentary is unavailable: {error}"
-        else:
-            ai_error = "Data was recovered. Select a provider/model or enable the configured research task route."
-
         research_run = {"archive_status": "NOT_CREATED"}
-        if completion is not None:
+        if request.automatic_task_routing or (request.provider_id and request.model):
+            run_id = None
+            request_payload = {
+                "system_prompt": system_prompt,
+                "evidence": user_evidence,
+            }
             try:
-                research_run = {
-                    "run_id": persist_ai_research_run(
+                route_provider, route_model, route_fallbacks = resolve_task_route(
+                    "research", request.provider_id, request.model, request.fallback_providers
+                )
+                try:
+                    run_id = reserve_ai_research_run(
                         task_type="research",
-                        provider_id=completion["provider_id"],
-                        model=completion["model"],
-                        credential_id=completion.get("credential_id"),
-                        request_payload={
-                            "system_prompt": system_prompt,
-                            "evidence": user_evidence,
-                        },
-                        response_payload={"content": completion["content"]},
-                        usage=completion.get("usage"),
-                        cost_usd=completion.get("cost_usd"),
-                        cost_status=completion.get("cost_status", "NOT_TRACKED"),
-                        fallback_used=completion.get("fallback_used", False),
+                        provider_id=route_provider,
+                        model=route_model,
+                        credential_id=request.credential_id,
+                        request_payload=request_payload,
+                        estimated_tokens=estimate_reserved_tokens(request_payload, 1400),
                         source_refs=[{
                             "provider": provider_id,
                             "data_mode": "END_OF_DAY_ADJUSTED",
@@ -483,11 +464,38 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
                             "from": request.from_date.isoformat(),
                             "to": request.to_date.isoformat(),
                         }],
-                    ),
-                    "archive_status": "PERSISTED",
-                }
-            except EodStoreError as archive_error:
-                research_run = {"archive_status": "UNAVAILABLE", "error": str(archive_error)}
+                    )
+                except EodStoreError as archive_error:
+                    if ai_token_budgets_enabled() or archive_error.status_code == 429:
+                        raise
+                    research_run = {"archive_status": "UNAVAILABLE", "error": str(archive_error)}
+                completion = await complete_chat(
+                    provider_id=route_provider,
+                    model=route_model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": json.dumps(user_evidence, separators=(",", ":"), sort_keys=True)},
+                    ],
+                    max_tokens=1400,
+                    temperature=0.1,
+                    credential_id=request.credential_id,
+                    fallback_providers=route_fallbacks,
+                    task_type="research",
+                )
+                if run_id:
+                    try:
+                        finish_ai_research_run(run_id, completion)
+                        research_run = {"run_id": run_id, "archive_status": "PERSISTED"}
+                    except EodStoreError as archive_error:
+                        research_run = {"run_id": run_id, "archive_status": "UNAVAILABLE", "error": str(archive_error)}
+            except EodStoreError as error:
+                ai_error = f"Data was recovered, but the AI token budget or research archive is unavailable: {error}"
+            except GatewayError as error:
+                if run_id:
+                    fail_ai_research_run(run_id)
+                ai_error = f"Data was recovered, but AI commentary is unavailable: {error}"
+        else:
+            ai_error = "Data was recovered. Select a provider/model or enable the configured research task route."
 
         return {
             "provider": provider_id,
