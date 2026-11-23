@@ -200,3 +200,20 @@ def app_market_data_integrity(exchange: str = Query(default="NSE", pattern="^(NS
         from fastapi import HTTPException
 
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+from rovexquant.market_data.data_health import get_market_data_health
+
+
+@router.get(
+    "/api/v1/app/market/data-health",
+    dependencies=[Depends(require_app_session)],
+)
+def app_market_data_health(exchange: str = Query(default="NSE", pattern="^(NSE|BSE)$")):
+    """Return source freshness, ingestion outcomes, historical coverage and reconciliation status."""
+    try:
+        return get_market_data_health(exchange)
+    except EodStoreError as error:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
