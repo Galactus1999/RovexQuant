@@ -6,6 +6,8 @@ import logging
 import os
 from uuid import uuid4
 
+from rovexquant.market_data.eod_store import EodStoreError
+
 from rovexquant.market_data.eod_ingestion import (
     LEASE_SECONDS, claim_next_ingestion_job, collect_claimed_snapshot,
     finish_ingestion_job, renew_ingestion_lease, retry_or_fail_ingestion_job,
@@ -43,7 +45,9 @@ async def _execute(job: dict[str, str], worker_id: str) -> None:
     except asyncio.CancelledError:
         raise
     except Exception as error:
-        retryable = bool(getattr(error, "retryable", False))
+        retryable = bool(getattr(error, "retryable", False)) or (
+            isinstance(error, EodStoreError) and error.status_code >= 500
+        )
         try:
             result = await asyncio.to_thread(
                 retry_or_fail_ingestion_job, run_id, worker_id, error, retryable=retryable
