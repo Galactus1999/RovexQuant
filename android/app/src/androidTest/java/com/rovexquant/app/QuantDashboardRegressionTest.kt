@@ -87,6 +87,8 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("ai.model").performTextInput("test-model")
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.chat.input"))
         composeRule.onNodeWithTag("ai.chat.input").performTextInput("Explain the RSI indicator.")
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.chat.send"))
+        composeRule.onNodeWithTag("ai.chat.send").assertIsDisplayed()
         composeRule.onNodeWithTag("ai.chat.send").performClick()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithText("Deterministic AI fixture response.").fetchSemanticsNodes().isNotEmpty()
