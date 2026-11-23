@@ -77,6 +77,8 @@ fun AiResearchBriefingPanel(
     model: String,
     fallbackProviders: List<String>,
     canUseAi: Boolean,
+    automaticTaskRouting: Boolean,
+    researchRouteConfigured: Boolean,
     evidenceDraft: String
 ) {
     val scope = rememberCoroutineScope()
@@ -92,6 +94,8 @@ fun AiResearchBriefingPanel(
             evidenceDraft.contains("NSE MCP research result", ignoreCase = true) ||
             evidenceDraft.contains("Research MCP result", ignoreCase = true)
     }
+
+    val canGenerate = if (automaticTaskRouting) researchRouteConfigured else canUseAi
 
     val systemPrompt = """
         You are RovexQuant's evidence-bounded market research analyst.
@@ -136,7 +140,7 @@ fun AiResearchBriefingPanel(
             )
             Button(
                 onClick = {
-                    if (loading || !canUseAi || !hasEvidence) return@Button
+                    if (loading || !canGenerate || !hasEvidence) return@Button
                     loading = true
                     error = null
                     completion = null
@@ -145,13 +149,14 @@ fun AiResearchBriefingPanel(
                         try {
                             val result = repository.sendAiMessage(
                                 session = session,
-                                providerId = providerId,
-                                model = model,
+                                providerId = if (automaticTaskRouting) null else providerId,
+                                model = if (automaticTaskRouting) null else model,
                                 messages = listOf(
                                     AiChatMessage("system", systemPrompt),
                                     AiChatMessage("user", "Create the research briefing from this evidence bundle:\n\n${evidenceDraft.take(10000)}")
                                 ),
-                                fallbackProviders = fallbackProviders
+                                fallbackProviders = if (automaticTaskRouting) emptyList() else fallbackProviders,
+                                taskType = "research"
                             )
                             completion = result
                             citationAudit = auditResearchCitations(result.content, evidenceDraft)
