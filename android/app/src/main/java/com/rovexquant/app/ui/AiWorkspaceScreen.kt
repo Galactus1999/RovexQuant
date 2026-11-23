@@ -57,6 +57,10 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
     var automaticTaskRouting by rememberSaveable { mutableStateOf(false) }
     var configuredTaskRoutes by remember { mutableStateOf<Map<String, AiTaskRoute>>(emptyMap()) }
     var taskRoutesError by remember { mutableStateOf<String?>(null) }
+    var researchRuns by remember { mutableStateOf(emptyList<com.rovexquant.app.data.model.AiResearchRun>()) }
+    var historyLoading by remember { mutableStateOf(false) }
+    var historyError by remember { mutableStateOf<String?>(null) }
+    var aiBudgetStatus by remember { mutableStateOf<com.rovexquant.app.data.model.AiBudgetStatus?>(null) }
     var model by rememberSaveable { mutableStateOf("") }
     var maxTokens by rememberSaveable { mutableIntStateOf(1200) }
     var messages by remember { mutableStateOf(emptyList<AiChatMessage>()) }
@@ -88,6 +92,13 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
             try {
                 configuredTaskRoutes = repository.fetchAiTaskRoutes(session)
                 taskRoutesError = null
+                try {
+                    researchRuns = repository.fetchAiResearchRuns(session)
+                    aiBudgetStatus = repository.fetchAiBudgetStatus(session)
+                    historyError = null
+                } catch (historyFailure: Exception) {
+                    historyError = historyFailure.message ?: "Research history is unavailable."
+                }
             } catch (failure: Exception) {
                 taskRoutesError = failure.message ?: "Task-route discovery failed."
             }
@@ -441,6 +452,51 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
         item {
             TerminalCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Eyebrow("Persistent research history")
+                    TextButton(
+                        onClick = {
+                            if (!historyLoading) {
+                                historyLoading = true
+                                historyError = null
+                                scope.launch {
+                                    try {
+                                        researchRuns = repository.fetchAiResearchRuns(session)
+                                        aiBudgetStatus = repository.fetchAiBudgetStatus(session)
+                                    } catch (cancelled: CancellationException) {
+                                        throw cancelled
+                                    } catch (failure: Exception) {
+                                        historyError = failure.message ?: "Research history refresh failed."
+                                    } finally { historyLoading = false }
+                                }
+                            }
+                        },
+                        enabled = !historyLoading
+                    ) { Text(if (historyLoading) "Loading…" else "Refresh") }
+                }
+                Text("Completed AI runs are saved with task, model, source references and token counts. Prompt and response content is retained for reproducibility when the backend database is available.", color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
+                historyError?.let { Text("History unavailable: " + it, color = Gold, fontSize = 9.sp, lineHeight = 14.sp) }
+                aiBudgetStatus?.let { budget ->
+                    val daily = if (budget.dailyLimitTokens != null) budget.dailyUsedTokens.toString() + " / " + budget.dailyLimitTokens + " tokens" else budget.dailyUsedTokens.toString() + " tokens · no daily cap"
+                    val monthly = if (budget.monthlyLimitTokens != null) budget.monthlyUsedTokens.toString() + " / " + budget.monthlyLimitTokens + " tokens" else budget.monthlyUsedTokens.toString() + " tokens · no monthly cap"
+                    Text("HARD TOKEN BUDGETS · " + (if (budget.enabled) "ENABLED" else "DISABLED"), color = if (budget.enabled) Mint else Gold, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Text("Daily: " + daily + "    Monthly: " + monthly, color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
+                }
+                if (historyLoading && researchRuns.isEmpty()) CircularProgressIndicator()
+                if (researchRuns.isEmpty() && historyError == null && !historyLoading) Text("No archived research runs yet.", color = Muted, fontSize = 10.sp)
+                researchRuns.take(12).forEach { run ->
+                    Spacer(Modifier.height(7.dp))
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(PanelRaised).padding(10.dp)) {
+                        Text(run.taskType.replace('_', ' ').uppercase() + " · " + run.providerId + "/" + run.model, color = MaterialTheme.colorScheme.onBackground, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                        Text(run.createdAt.take(19).replace('T', ' ') + " · " + run.status + " · " + run.totalTokens + " tokens", color = Muted, fontSize = 9.sp)
+                        val runCost = if (run.costUsd == null) "cost unknown (" + run.costStatus + ")" else "USD " + String.format(Locale.US, "%.6f", run.costUsd) + " (" + run.costStatus + ")"
+                        Text(runCost, color = Gold, fontSize = 9.sp)
+                    }
+                }
+            }
+        }
+        item {
+            TerminalCard {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Eyebrow("AI conversation")
                     StatusPill(if (chatLoading) "Thinking" else "Ready", if (chatLoading) Gold else Mint)
                 }
@@ -472,7 +528,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                 lastChatCompletion?.let { usage ->
                     Text(
                         "Last call · ${usage.taskType} · ${usage.providerId}/${usage.model} · ${usage.totalTokens} tokens · " +
-                            (usage.costUsd?.let { "estimated USD ${"%.6f".format(java.util.Locale.US, it)}" }
+                            (usage.costUsd?.let { "USD ${"%.6f".format(java.util.Locale.US, it)} (${usage.costStatus})" }
                                 ?: "cost unknown (${usage.costStatus})"),
                         color = Muted, fontSize = 9.sp, lineHeight = 14.sp
                     )
