@@ -243,7 +243,8 @@ class FakeQuantRepository(
         messages: List<AiChatMessage>,
         credentialId: String?,
         fallbackProviders: List<String>,
-        taskType: String
+        taskType: String,
+        maxTokens: Int
     ) = AiCompletion(providerId ?: "task-router", credentialId, model ?: taskType, "Deterministic AI fixture response.", false)
 
     override suspend fun requestAiStrategyBrief(
@@ -257,7 +258,8 @@ class FakeQuantRepository(
         strategyContext: String,
         credentialId: String?,
         fallbackProviders: List<String>,
-        automaticTaskRouting: Boolean
+        automaticTaskRouting: Boolean,
+        maxTokens: Int
     ) = AiStrategyBrief(
         provider = "tejhq_eod",
         dataMode = "END_OF_DAY",
