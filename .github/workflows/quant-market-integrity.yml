@@ -63,7 +63,7 @@ jobs:
           python -m pip install --disable-pip-version-check "uv==0.12.9"
           uv pip install --system --no-deps -r requirements.lock
           uv pip install --system --no-deps -e .
-          python -m pip install --disable-pip-version-check "duckdb==1.4.3"
+          python -m pip install --disable-pip-version-check "duckdb==1.5.6"
       - name: Validate database configuration and apply reviewed migrations
         working-directory: backend
         shell: bash
