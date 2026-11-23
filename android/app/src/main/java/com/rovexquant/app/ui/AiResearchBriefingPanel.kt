@@ -79,6 +79,7 @@ fun AiResearchBriefingPanel(
     canUseAi: Boolean,
     automaticTaskRouting: Boolean,
     researchRouteConfigured: Boolean,
+    maxTokens: Int,
     evidenceDraft: String
 ) {
     val scope = rememberCoroutineScope()
@@ -166,7 +167,8 @@ fun AiResearchBriefingPanel(
                                     AiChatMessage("user", "Create the research briefing from this evidence bundle:\n\n${evidenceDraft.take(10000)}")
                                 ),
                                 fallbackProviders = if (automaticTaskRouting) emptyList() else fallbackProviders,
-                                taskType = "research"
+                                taskType = "research",
+                                maxTokens = maxTokens
                             )
                             completion = result
                             citationAudit = auditResearchCitations(result.content, evidenceDraft)
