@@ -2,6 +2,7 @@ package com.rovexquant.app.ui
 
 import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.data.model.MacroResearchSummary
+import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.repository.QuantDataRepository
 
 import android.content.Context
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -48,6 +50,30 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
     var macroSummary by remember { mutableStateOf<MacroResearchSummary?>(null) }
     var macroLoading by remember { mutableStateOf(false) }
     var macroError by remember { mutableStateOf<String?>(null) }
+    var eventSymbol by rememberSaveable { mutableStateOf("RELIANCE") }
+    var eventDate by rememberSaveable { mutableStateOf("") }
+    var benchmarkSymbol by rememberSaveable { mutableStateOf("") }
+    var eventResult by remember { mutableStateOf<EventStudyResult?>(null) }
+    var eventLoading by remember { mutableStateOf(false) }
+    var eventError by remember { mutableStateOf<String?>(null) }
+
+    fun runEventStudy() {
+        if (session == null || repository == null || eventLoading) return
+        eventLoading = true
+        eventError = null
+        scope.launch {
+            try {
+                eventResult = repository.fetchEventStudy(
+                    session, eventSymbol.trim(), eventDate.trim(),
+                    benchmarkSymbol.trim().takeIf { it.isNotEmpty() }
+                )
+            } catch (failure: Exception) {
+                eventError = failure.message ?: "Event study could not be calculated."
+            } finally {
+                eventLoading = false
+            }
+        }
+    }
 
     fun refreshMacroResearch() {
         if (session == null || repository == null || macroLoading) return
@@ -126,6 +152,45 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
         item { SectionHeading("Test the idea before risking capital", "Research lab.", "Use official NSE research tools on demand or import permitted historical OHLCV data for transparent local analysis.") }
         if (session != null && repository != null) {
             item { NseMcpResearchPanel(session, repository) }
+            item {
+                TerminalCard {
+                    Eyebrow("EOD event study · historical only")
+                    OutlinedTextField(
+                        value = eventSymbol,
+                        onValueChange = { eventSymbol = it.take(40).uppercase() },
+                        label = { Text("NSE symbol") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = eventDate,
+                        onValueChange = { eventDate = it.take(10) },
+                        label = { Text("Event date · YYYY-MM-DD") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = benchmarkSymbol,
+                        onValueChange = { benchmarkSymbol = it.take(40).uppercase() },
+                        label = { Text("Optional benchmark symbol in EOD database") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Button(
+                        onClick = { runEventStudy() },
+                        enabled = !eventLoading && eventDate.matches(Regex("\\d{4}-\\d{2}-\\d{2}")) && eventSymbol.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(if (eventLoading) "Calculating…" else "Calculate event window") }
+                    eventError?.let { Text(it, color = Coral, fontSize = 10.sp) }
+                    eventResult?.let { result ->
+                        IndicatorLine("Pre-event return", result.preEventReturn?.let { String.format(Locale.US, "%.2f%%", it * 100) } ?: "Unavailable")
+                        IndicatorLine("Post-event return", result.cumulativeReturn?.let { String.format(Locale.US, "%.2f%%", it * 100) } ?: "Unavailable")
+                        IndicatorLine("Market-adjusted", result.marketAdjustedReturn?.let { String.format(Locale.US, "%.2f%%", it * 100) } ?: "No benchmark match")
+                        Text("${result.symbol} · ${result.anchorDate} → ${result.lastPostEventDate} · ${result.postBarsUsed} bars", color = Muted, fontSize = 9.sp)
+                        result.limitations.forEach { Text("• $it", color = Muted, fontSize = 9.sp) }
+                    }
+                }
+            }
             item {
                 TerminalCard {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
