@@ -12,6 +12,7 @@ import com.rovexquant.app.data.model.MarketIndexInstrument
 import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.MarketTick
 import com.rovexquant.app.data.model.MarketIngestionStatus
+import com.rovexquant.app.data.model.MacroResearchSummary
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.QuantSession
@@ -83,6 +84,9 @@ class QuantRepository(context: Context) : QuantDataRepository {
     ): IntelligenceFeed = withContext(Dispatchers.IO) {
         QuantApi.fetchIntelligenceEvents(session, query, timespan)
     }
+
+    override suspend fun fetchMacroResearch(session: QuantSession): MacroResearchSummary =
+        withContext(Dispatchers.IO) { QuantApi.fetchMacroResearch(session) }
 
     override suspend fun sendAiMessage(
         session: QuantSession,
