@@ -24,8 +24,8 @@ def _udiff_csv(day="2026-11-20"):
 
 
 def test_historical_archive_urls_and_exchange_year_bounds():
-    assert parquet_source_url("nse", 2010).endswith("/nse/year=2010/nse_2010.parquet")
-    assert parquet_source_url("bse", 2024).endswith("/bse/year=2024/bse_2024.parquet")
+    assert parquet_source_url("nse", 2010).endswith("/nse/year%3D2010/nse_2010.parquet")
+    assert parquet_source_url("bse", 2024).endswith("/bse/year%3D2024/bse_2024.parquet")
     assert validate_exchange_year("NSE", 2026, current_year=2026) == "NSE"
     with pytest.raises(ValueError):
         validate_exchange_year("BSE", 2023, current_year=2026)
