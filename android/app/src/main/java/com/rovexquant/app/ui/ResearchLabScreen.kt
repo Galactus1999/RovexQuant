@@ -67,6 +67,8 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
                     session, eventSymbol.trim(), eventDate.trim(),
                     benchmarkSymbol.trim().takeIf { it.isNotEmpty() }
                 )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (failure: Exception) {
                 eventError = failure.message ?: "Event study could not be calculated."
             } finally {
@@ -82,6 +84,8 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
         scope.launch {
             try {
                 macroSummary = repository.fetchMacroResearch(session)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (failure: Exception) {
                 macroError = failure.message ?: "Macro research providers are unavailable."
             } finally {
