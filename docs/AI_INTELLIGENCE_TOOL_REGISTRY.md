@@ -9,6 +9,7 @@ RovexQuant imports these exact upstream files from the public MIT-licensed Dalal
 - Upstream MIT license notice → `third_party/licenses/DalalOS-MIT-LICENSE.txt`
 
 Upstream project: https://github.com/BeyondNoww/DalalOS-Indian-Stock-Research  
+Imported upstream revision: `f0a4a39614b1a9ac05a181bc34401a8e6d387976` (23 November 2026)  
 MCP endpoint: https://mcp.dalalos.in/mcp  
 PyPI helper: https://pypi.org/project/dalalos-mcp/
 
