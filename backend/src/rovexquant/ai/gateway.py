@@ -151,11 +151,6 @@ def estimate_completion_cost_usd(
         return round(amount, 8), "ESTIMATED_FROM_LITELLM_CORE_1_110_2"
     except (OSError, ValueError, TypeError):
         return None, "UNKNOWN_MODEL_PRICING"
-    amount = (
-        float(prompt_tokens) * price["input_cost_per_token"]
-        + float(completion_tokens) * price["output_cost_per_token"]
-    )
-    return round(amount, 8), "ESTIMATED_FROM_LITELLM_CORE_1_110_2"
 
 def configured_providers() -> list[dict[str, Any]]:
     """Return safe provider metadata; credential values are never exposed."""
