@@ -34,7 +34,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: quant-market-integrity-\${{ github.event_name == 'schedule' && github.event.schedule || inputs.operation }}
+  group: quant-market-integrity-${{ github.event_name == 'schedule' && github.event.schedule || inputs.operation }}
   cancel-in-progress: false
 
 jobs:
@@ -44,10 +44,10 @@ jobs:
     timeout-minutes: 45
     env:
       QUANT_ENV: production
-      QUANT_TOKEN_DATABASE_URL: \${{ secrets.QUANT_TOKEN_DATABASE_URL }}
-      QUANT_MARKET_DATABASE_URL: \${{ secrets.QUANT_MARKET_DATABASE_URL }}
-      QUANT_TOKEN_MIGRATION_DATABASE_URL: \${{ secrets.QUANT_TOKEN_MIGRATION_DATABASE_URL }}
-      QUANT_MARKET_MIGRATION_DATABASE_URL: \${{ secrets.QUANT_MARKET_MIGRATION_DATABASE_URL }}
+      QUANT_TOKEN_DATABASE_URL: ${{ secrets.QUANT_TOKEN_DATABASE_URL }}
+      QUANT_MARKET_DATABASE_URL: ${{ secrets.QUANT_MARKET_DATABASE_URL }}
+      QUANT_TOKEN_MIGRATION_DATABASE_URL: ${{ secrets.QUANT_TOKEN_MIGRATION_DATABASE_URL }}
+      QUANT_MARKET_MIGRATION_DATABASE_URL: ${{ secrets.QUANT_MARKET_MIGRATION_DATABASE_URL }}
     steps:
       - name: Checkout Quant
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -69,11 +69,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -z "\${QUANT_MARKET_DATABASE_URL:-}" && -z "\${QUANT_TOKEN_DATABASE_URL:-}" ]]; then
+          if [[ -z "${QUANT_MARKET_DATABASE_URL:-}" && -z "${QUANT_TOKEN_DATABASE_URL:-}" ]]; then
             echo "::error::Configure QUANT_MARKET_DATABASE_URL or QUANT_TOKEN_DATABASE_URL."
             exit 1
           fi
-          MIGRATION_URL="\${QUANT_MARKET_MIGRATION_DATABASE_URL:-\${QUANT_TOKEN_MIGRATION_DATABASE_URL:-}}"
+          MIGRATION_URL="${QUANT_MARKET_MIGRATION_DATABASE_URL:-${QUANT_TOKEN_MIGRATION_DATABASE_URL:-}}"
           if [[ -z "$MIGRATION_URL" ]]; then
             echo "::error::Configure QUANT_MARKET_MIGRATION_DATABASE_URL (or QUANT_TOKEN_MIGRATION_DATABASE_URL for a shared DB)."
             exit 1
@@ -83,7 +83,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.operation == 'backfill'
         working-directory: backend
         run: |
-          python scripts/backfill_hf_parquet.py --exchange "\${{ inputs.exchange }}" --year "\${{ inputs.year }}"
+          python scripts/backfill_hf_parquet.py --exchange "${{ inputs.exchange }}" --year "${{ inputs.year }}"
       - name: Import adjusted prices, corporate actions and symbol history
         if: github.event_name == 'workflow_dispatch' && inputs.operation == 'backfill_derived'
         working-directory: backend
@@ -95,15 +95,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "\${{ github.event_name }}" == "schedule" ]]; then
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
             TRADING_DATE="$(TZ=Asia/Kolkata date +%F)"
             EXCHANGES=(nse bse)
           else
-            TRADING_DATE="\${{ inputs.trading_date }}"
+            TRADING_DATE="${{ inputs.trading_date }}"
             if [[ -z "$TRADING_DATE" ]]; then TRADING_DATE="$(TZ=Asia/Kolkata date +%F)"; fi
-            EXCHANGES=("\${{ inputs.exchange }}")
+            EXCHANGES=("${{ inputs.exchange }}")
           fi
           python -c 'from datetime import date; import sys; date.fromisoformat(sys.argv[1])' "$TRADING_DATE"
-          for EXCHANGE in "\${EXCHANGES[@]}"; do
+          for EXCHANGE in "${EXCHANGES[@]}"; do
             python scripts/reconcile_official_bhavcopy.py --exchange "$EXCHANGE" --date "$TRADING_DATE"
           done
