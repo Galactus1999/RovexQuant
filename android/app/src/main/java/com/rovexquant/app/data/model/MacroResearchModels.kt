@@ -26,3 +26,41 @@ data class MacroResearchSummary(
     val fredSeriesCount: Int,
     val providerErrors: List<String>
 )
+
+
+data class MarketIntegrityDifference(
+    val kind: String,
+    val symbol: String,
+    val series: String,
+    val field: String?,
+    val officialValue: String?,
+    val storedValue: String?
+)
+
+data class MarketReconciliationReport(
+    val tradingDate: String,
+    val status: String,
+    val officialRows: Int,
+    val referenceRows: Int,
+    val matchedRows: Int,
+    val mismatchRows: Int,
+    val missingReferenceRows: Int,
+    val missingOfficialRows: Int,
+    val sourceUrl: String,
+    val differences: List<MarketIntegrityDifference>
+)
+
+data class HistoricalBackfillSummary(
+    val year: Int,
+    val status: String,
+    val rowsSeen: Long,
+    val rowsUpserted: Long,
+    val completedAt: String?
+)
+
+data class MarketIntegrityStatus(
+    val exchange: String,
+    val status: String,
+    val latestReport: MarketReconciliationReport?,
+    val backfills: List<HistoricalBackfillSummary>
+)
