@@ -4,6 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from rovexquant.market_data.macro_data import (
     MacroProviderError, fetch_amfi_nav, fetch_fred, fetch_world_bank,
 )
+from rovexquant.market_data.eod_store import EodStoreError
+from rovexquant.market_data.macro_ingestion import refresh_macro_sources
+from rovexquant.market_data.macro_store import latest_macro_observations, latest_macro_runs
 from rovexquant.security.dependencies import require_app_session
 from rovexquant.security.request_controls import rate_limit
 
@@ -56,11 +59,6 @@ async def amfi_nav(
         raise HTTPException(status_code=422, detail=str(error)) from error
     except MacroProviderError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
-
-
-from rovexquant.market_data.eod_store import EodStoreError
-from rovexquant.market_data.macro_ingestion import refresh_macro_sources
-from rovexquant.market_data.macro_store import latest_macro_observations, latest_macro_runs
 
 
 @router.post(
