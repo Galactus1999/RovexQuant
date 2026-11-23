@@ -83,7 +83,17 @@ async def run_ingestion_worker() -> None:
 
 
 def worker_enabled() -> bool:
-    mode = os.getenv("QUANT_TOKEN_STORAGE_MODE", "").strip().lower()
-    return mode == "postgresql" or (
-        not mode and bool(os.getenv("QUANT_TOKEN_DATABASE_URL", "").strip())
-    )
+    """Enable the durable worker whenever its PostgreSQL queue database is configured.
+
+    Market data may intentionally live in a separate PostgreSQL database while
+    encrypted provider tokens remain in local SQLite. In that supported split
+    configuration, checking only QUANT_TOKEN_STORAGE_MODE leaves every queued
+    EOD job stranded because the API starts without its worker.
+    """
+    market_database_url = os.getenv("QUANT_MARKET_DATABASE_URL", "").strip()
+    if market_database_url:
+        return True
+
+    token_mode = os.getenv("QUANT_TOKEN_STORAGE_MODE", "").strip().lower()
+    token_database_url = os.getenv("QUANT_TOKEN_DATABASE_URL", "").strip()
+    return token_mode == "postgresql" or (not token_mode and bool(token_database_url))
