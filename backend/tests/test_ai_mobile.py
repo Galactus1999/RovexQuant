@@ -418,3 +418,79 @@ def test_ai_research_history_endpoints_require_app_session(mobile_client, monkey
     monkeypatch.setattr(ai_router, "get_ai_research_run", lambda run_id: None)
     missing = client.get("/api/v1/app/ai/research/runs/not-a-run", headers=headers)
     assert missing.status_code == 404
+
+
+def test_ai_daily_token_budget_reservation_is_atomic_and_fails_closed(monkeypatch):
+    from rovexquant.ai import research_archive
+
+    monkeypatch.setenv("QUANT_AI_DAILY_TOKEN_BUDGET", "100")
+    monkeypatch.setenv("QUANT_AI_MONTHLY_TOKEN_BUDGET", "0")
+
+    class Cursor:
+        rowcount = 1
+        def fetchone(self):
+            return (20,)
+
+    class FakeConnection:
+        def __init__(self):
+            self.queries = []
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return False
+        def execute(self, query, params=()):
+            self.queries.append((query, params))
+            return Cursor()
+
+    fake = FakeConnection()
+    monkeypatch.setattr(research_archive, "connect", lambda: fake)
+    assert research_archive.ai_token_budgets_enabled() is True
+    with pytest.raises(EodStoreError, match="daily token budget exhausted"):
+        research_archive.reserve_ai_research_run(
+            task_type="research",
+            provider_id="groq",
+            model="research-model",
+            credential_id=None,
+            request_payload={"messages": [{"role": "user", "content": "test"}]},
+            estimated_tokens=90,
+        )
+    assert any("pg_advisory_xact_lock" in query for query, _ in fake.queries)
+    assert not any("INSERT INTO ai_research_runs" in query for query, _ in fake.queries)
+
+
+def test_ai_research_reservation_records_running_state(monkeypatch):
+    from rovexquant.ai import research_archive
+
+    monkeypatch.setenv("QUANT_AI_DAILY_TOKEN_BUDGET", "1000")
+    monkeypatch.setenv("QUANT_AI_MONTHLY_TOKEN_BUDGET", "10000")
+
+    class Cursor:
+        rowcount = 1
+        def fetchone(self):
+            return (0,)
+
+    class FakeConnection:
+        def __init__(self):
+            self.queries = []
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return False
+        def execute(self, query, params=()):
+            self.queries.append((query, params))
+            return Cursor()
+
+    fake = FakeConnection()
+    monkeypatch.setattr(research_archive, "connect", lambda: fake)
+    run_id = research_archive.reserve_ai_research_run(
+        task_type="research",
+        provider_id="groq",
+        model="research-model",
+        credential_id="app",
+        request_payload={"messages": [{"role": "user", "content": "test"}]},
+        estimated_tokens=100,
+        source_refs=[{"provider": "tejhq_eod", "symbol": "RELIANCE"}],
+    )
+    assert len(run_id) == 36
+    insert = next(query for query, _ in fake.queries if "INSERT INTO ai_research_runs" in query)
+    assert "'RUNNING'" in insert
