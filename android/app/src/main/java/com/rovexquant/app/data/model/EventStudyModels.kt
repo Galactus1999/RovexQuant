@@ -15,5 +15,6 @@ data class EventStudyResult(
     val benchmarkMatches: Int,
     val postBarsUsed: Int,
     val method: String,
+    val priceBasis: String,
     val limitations: List<String>
 )
