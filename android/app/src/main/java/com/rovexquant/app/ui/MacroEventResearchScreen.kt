@@ -263,6 +263,18 @@ private fun EventStudyContent(result: EventStudyResult) {
         Text("No benchmark-relative result was calculated.", color = Gold, fontSize = 10.sp)
     }
     Text("Method: ${result.method} · Price basis: ${result.priceBasis}", color = Muted, fontSize = 9.sp)
+    if (result.corporateActions.isNotEmpty()) {
+        Spacer(Modifier.height(8.dp))
+        Eyebrow("Corporate actions within ±60 days")
+        result.corporateActions.forEach { action ->
+            Text(
+                "${action.exDate} · ${action.actionType.uppercase()} · ${action.rawSubject.ifBlank { action.companyName }}",
+                color = Gold, fontSize = 9.sp, lineHeight = 13.sp
+            )
+        }
+    } else {
+        Text("No corporate actions found in the stored ±60-day window.", color = Muted, fontSize = 9.sp)
+    }
     result.limitations.forEach { Text("• $it", color = Muted, fontSize = 9.sp, lineHeight = 13.sp) }
 }
 
