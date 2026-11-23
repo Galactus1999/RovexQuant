@@ -26,7 +26,7 @@ def test_nse_mcp_catalog_is_authenticated_and_labels_both_sources(monkeypatch):
     token = _session(monkeypatch)
 
     class FakeClient:
-        def __init__(self, server):
+        def __init__(self, server, **kwargs):
             self.server = server
         async def __aenter__(self):
             return self
@@ -57,7 +57,7 @@ def test_nse_mcp_call_labels_delayed_mode_and_does_not_claim_source_timestamp(mo
             return self
         async def __aexit__(self, *_):
             return None
-        async def call_tool(self, name, arguments):
+        async def call_tool(self, name, arguments, **kwargs):
             assert name == "get_quote"
             assert arguments == {"symbol": "RELIANCE"}
             return {"tool": name, "content": [{"type": "text", "text": "quote"}],
@@ -90,13 +90,13 @@ def test_nse_mcp_remote_schema_failure_uses_safe_structured_error(monkeypatch):
     token = _session(monkeypatch)
 
     class FakeClient:
-        def __init__(self, _server):
+        def __init__(self, _server, **kwargs):
             pass
         async def __aenter__(self):
             return self
         async def __aexit__(self, *_):
             return None
-        async def call_tool(self, _name, _arguments):
+        async def call_tool(self, _name, _arguments, **kwargs):
             raise NseMcpError("NSE MCP tool schema references are not supported", 502)
 
     monkeypatch.setattr(nse_mcp_service, "NseMcpClient", FakeClient)
