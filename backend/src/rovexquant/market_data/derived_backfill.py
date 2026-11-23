@@ -108,6 +108,12 @@ def _import_rows(connection, *, market: str, kind: str, year: int, digest: str, 
                             payload,
                         )
                         rows_upserted += len(payload)
+                connection.execute(
+                    """DELETE FROM market_eod_adjusted_bars
+                       WHERE exchange=%s AND trading_date >= %s AND trading_date < %s
+                         AND provider=%s AND source_sha256<>%s""",
+                    (market, date(year, 1, 1), date(year + 1, 1), PROVIDER, digest),
+                )
             return rows_seen, rows_upserted
 
         if kind == "CORPORATE_ACTIONS":
@@ -161,6 +167,12 @@ def _import_rows(connection, *, market: str, kind: str, year: int, digest: str, 
                             payload,
                         )
                         rows_upserted += len(payload)
+                connection.execute(
+                    """DELETE FROM market_corporate_actions
+                       WHERE exchange=%s AND ex_date >= %s AND ex_date < %s
+                         AND provider=%s AND source_sha256<>%s""",
+                    (market, date(year, 1, 1), date(year + 1, 1), PROVIDER, digest),
+                )
             return rows_seen, rows_upserted
 
         if kind == "SYMBOL_HISTORY":
@@ -201,6 +213,11 @@ def _import_rows(connection, *, market: str, kind: str, year: int, digest: str, 
                             payload,
                         )
                         rows_upserted += len(payload)
+                connection.execute(
+                    """DELETE FROM market_symbol_history
+                       WHERE exchange=%s AND provider=%s AND source_sha256<>%s""",
+                    (market, PROVIDER, digest),
+                )
             return rows_seen, rows_upserted
     finally:
         db.close()
