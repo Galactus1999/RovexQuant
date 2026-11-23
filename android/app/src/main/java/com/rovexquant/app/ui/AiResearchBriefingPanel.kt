@@ -181,7 +181,7 @@ fun AiResearchBriefingPanel(
                         }
                     }
                 },
-                enabled = canUseAi && hasEvidence && !loading,
+                enabled = canGenerate && hasEvidence && !loading,
                 modifier = Modifier.fillMaxWidth().testTag("ai.brief.generate")
             ) {
                 if (loading) CircularProgressIndicator() else Text("Generate evidence-based research brief")
@@ -200,7 +200,7 @@ fun AiResearchBriefingPanel(
                 }
                 Text(
                     "Task ${result.taskType} · ${result.totalTokens} tokens · " +
-                        (result.costUsd?.let { "estimated USD ${"%.6f".format(java.util.Locale.US, it)}" }
+                        (result.costUsd?.let { "USD ${"%.6f".format(java.util.Locale.US, it)} (${result.costStatus})" }
                             ?: "cost unknown (${result.costStatus})"),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 9.sp, lineHeight = 14.sp
@@ -217,6 +217,55 @@ fun AiResearchBriefingPanel(
                         fontSize = 9.sp,
                         lineHeight = 14.sp
                     )
+                }
+                result.verificationStatus?.let { status ->
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "INDEPENDENT CLAIM VERIFIER · " + status,
+                        color = when (status) {
+                            "VERIFIED" -> MaterialTheme.colorScheme.primary
+                            "REJECTED" -> MaterialTheme.colorScheme.error
+                            else -> MaterialTheme.colorScheme.tertiary
+                        },
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    result.verificationSummary?.let {
+                        Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp, lineHeight = 14.sp)
+                    }
+                    Text(
+                        "Second-model assessment with deterministic source-ID and exact-quote checks; this is not a guarantee of truth.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp, lineHeight = 14.sp
+                    )
+                    result.verifiedClaims.take(12).forEach { claim ->
+                        Column(
+                            Modifier.fillMaxWidth().padding(top = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                claim.verdict.uppercase() + " · " + claim.claim,
+                                color = when (claim.verdict) {
+                                    "supported" -> MaterialTheme.colorScheme.primary
+                                    "contradicted" -> MaterialTheme.colorScheme.error
+                                    else -> MaterialTheme.colorScheme.tertiary
+                                },
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            if (claim.sourceRef.isNotBlank()) Text(
+                                "Source: " + claim.sourceRef,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 8.sp
+                            )
+                            if (claim.evidenceQuote.isNotBlank()) Text(
+                                "Evidence: " + claim.evidenceQuote,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 8.sp, lineHeight = 12.sp
+                            )
+                            if (claim.reason.isNotBlank()) Text(
+                                claim.reason,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 8.sp, lineHeight = 12.sp
+                            )
+                        }
+                    }
                 }
             }
         }
