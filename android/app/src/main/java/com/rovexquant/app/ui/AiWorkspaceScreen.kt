@@ -53,6 +53,9 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
     var automaticTaskRouting by rememberSaveable { mutableStateOf(false) }
     var configuredTaskRoutes by remember { mutableStateOf<Set<String>>(emptySet()) }
     var taskRoutesError by remember { mutableStateOf<String?>(null) }
+    var researchRuns by remember { mutableStateOf(emptyList<com.rovexquant.app.data.model.AiResearchRun>()) }
+    var historyLoading by remember { mutableStateOf(false) }
+    var historyError by remember { mutableStateOf<String?>(null) }
     var model by rememberSaveable { mutableStateOf("") }
     var messages by remember { mutableStateOf(emptyList<AiChatMessage>()) }
     var chatInput by rememberSaveable { mutableStateOf("") }
@@ -84,6 +87,12 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                 taskRoutesError = null
             } catch (failure: Exception) {
                 taskRoutesError = failure.message ?: "Task-route discovery failed."
+            }
+            try {
+                researchRuns = repository.fetchAiResearchRuns(session)
+                historyError = null
+            } catch (failure: Exception) {
+                historyError = failure.message ?: "Research history is unavailable."
             }
             val configured = providers.filter { it.configured }
             if (selectedProvider.isBlank() && providers.isNotEmpty()) {
@@ -406,6 +415,45 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                 researchRouteConfigured = "research" in configuredTaskRoutes,
                 evidenceDraft = chatInput
             )
+        }
+        item {
+            TerminalCard {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Eyebrow("Persistent research history")
+                    TextButton(
+                        onClick = {
+                            if (!historyLoading) {
+                                historyLoading = true
+                                historyError = null
+                                scope.launch {
+                                    try {
+                                        researchRuns = repository.fetchAiResearchRuns(session)
+                                    } catch (cancelled: CancellationException) {
+                                        throw cancelled
+                                    } catch (failure: Exception) {
+                                        historyError = failure.message ?: "Research history refresh failed."
+                                    } finally { historyLoading = false }
+                                }
+                            }
+                        },
+                        enabled = !historyLoading
+                    ) { Text(if (historyLoading) "Loading…" else "Refresh") }
+                }
+                Text("Completed AI runs are saved with their task, model, source references and token counts. Prompt and response content is retained for reproducibility when the backend database is available.", color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
+                historyError?.let { Text("History unavailable: " + it, color = Gold, fontSize = 9.sp, lineHeight = 14.sp) }
+                if (historyLoading && researchRuns.isEmpty()) CircularProgressIndicator()
+                if (researchRuns.isEmpty() && historyError == null && !historyLoading) {
+                    Text("No archived research runs yet.", color = Muted, fontSize = 10.sp)
+                }
+                researchRuns.take(12).forEach { run ->
+                    Spacer(Modifier.height(7.dp))
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(PanelRaised).padding(10.dp)) {
+                        Text(run.taskType.replace('_', ' ').uppercase() + " · " + run.providerId + "/" + run.model, color = MaterialTheme.colorScheme.onBackground, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                        Text(run.createdAt.take(19).replace('T', ' ') + " · " + run.status + " · " + run.totalTokens + " tokens", color = Muted, fontSize = 9.sp)
+                        Text(if (run.costUsd != null) "Cost: $" + String.format(Locale.US, "%.6f", run.costUsd) else "Cost: not tracked (" + run.costStatus + ")", color = Gold, fontSize = 9.sp)
+                    }
+                }
+            }
         }
         item {
             TerminalCard {
