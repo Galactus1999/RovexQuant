@@ -213,7 +213,7 @@ def test_postgres_market_eod_migration_creates_provenance_tables(migrated_postgr
                 """
                 SELECT table_name FROM information_schema.tables
                 WHERE table_schema = current_schema()
-                  AND table_name IN ('market_eod_bars', 'market_ingestion_runs', 'market_ingestion_jobs')
+                  AND table_name IN ('market_eod_bars', 'market_ingestion_runs', 'market_ingestion_jobs', 'market_historical_backfill_runs', 'market_historical_backfill_days', 'market_reconciliation_reports', 'market_reconciliation_diffs')
                 """
             ).fetchall()
         }
@@ -225,7 +225,7 @@ def test_postgres_market_eod_migration_creates_provenance_tables(migrated_postgr
                 """
             ).fetchall()
         }
-    assert tables == {"market_eod_bars", "market_ingestion_runs", "market_ingestion_jobs"}
+    assert tables == {"market_eod_bars", "market_ingestion_runs", "market_ingestion_jobs", "market_historical_backfill_runs", "market_historical_backfill_days", "market_reconciliation_reports", "market_reconciliation_diffs"}
     assert {
         "exchange", "trading_date", "symbol", "series", "open", "high",
         "low", "close", "volume", "isin", "trades", "provider", "data_mode",
