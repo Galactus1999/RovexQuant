@@ -20,3 +20,6 @@ markers = ["integration: requires a disposable PostgreSQL database"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.setuptools.package-data]
+rovexquant = ["market_data/data/*.json"]
