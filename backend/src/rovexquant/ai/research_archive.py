@@ -137,16 +137,17 @@ def finish_ai_research_run(
                 }
             result = connection.execute(
                 """
-                UPDATE ai_research_runs SET status = 'SUCCEEDED', provider_id = %s, model = %s,
+                UPDATE ai_research_runs SET status = %s, provider_id = %s, model = %s,
                     credential_id = %s, response_payload = %s, token_usage = %s,
-                    cost_usd = %s, cost_status = %s,
-                    fallback_used = %s, completed_at = %s
+                    cost_usd = %s, cost_status = %s, fallback_used = %s,
+                    verification = %s, completed_at = %s
                 WHERE run_id = %s AND status = 'RUNNING'
                 """,
-                (completion.get("provider_id"), completion.get("model"), completion.get("credential_id"),
+                (status, completion.get("provider_id"), completion.get("model"), completion.get("credential_id"),
                  Jsonb(response_doc), Jsonb(usage), completion.get("cost_usd"),
                  str(completion.get("cost_status", "NOT_TRACKED"))[:32],
-                 bool(completion.get("fallback_used")), datetime.now(timezone.utc), run_id),
+                 bool(completion.get("fallback_used")), Jsonb(verification_doc),
+                 datetime.now(timezone.utc), run_id),
             )
             if result.rowcount != 1:
                 raise EodStoreError("AI research run reservation was not active", 409)
