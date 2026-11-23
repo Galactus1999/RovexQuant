@@ -120,12 +120,13 @@ def parse_udiff_csv(payload: bytes, *, exchange: str, trading_date: date) -> lis
 
 
 async def download_official_bhavcopy(exchange: str, trading_date: date) -> tuple[str, bytes]:
-    url = official_bhavcopy_url(exchange, trading_date)
+    market = exchange.strip().upper()
+    url = official_bhavcopy_url(market, trading_date)
     headers = {
         "User-Agent": "Mozilla/5.0 (compatible; RovexQuant-Research/1.0)",
         "Accept": "text/csv,application/zip,application/octet-stream,*/*",
         "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://www.nseindia.com/" if exchange.upper() == "NSE" else "https://www.bseindia.com/",
+        "Referer": "https://www.nseindia.com/" if market == "NSE" else "https://www.bseindia.com/",
     }
     try:
         async with httpx.AsyncClient(
