@@ -11,6 +11,7 @@ from rovexquant.api.routers.health import router as health_router
 from rovexquant.api.routers.intelligence import router as intelligence_router
 from rovexquant.api.routers.integrations import router as integrations_router
 from rovexquant.api.routers.market import router as market_router
+from rovexquant.api.routers.macro import router as macro_router
 from rovexquant.api.routers.strategies import router as strategies_router
 from rovexquant.api.research_data import router as research_data_router
 from rovexquant.api.market_ingestion import router as market_ingestion_router
@@ -39,6 +40,7 @@ app.add_exception_handler(Exception, unhandled_exception_handler)
 for feature_router in (
     auth_router,
     market_router,
+    macro_router,
     integrations_router,
     health_router,
     intelligence_router,
