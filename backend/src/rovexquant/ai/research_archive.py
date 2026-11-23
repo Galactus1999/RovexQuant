@@ -248,8 +248,10 @@ def get_ai_research_run(run_id: str) -> dict[str, Any] | None:
 
 def get_ai_token_budget_status() -> dict[str, Any]:
     try:
-        daily_limit = max(0, int(os.getenv("QUANT_AI_DAILY_TOKEN_BUDGET", "0") or "0"))
-        monthly_limit = max(0, int(os.getenv("QUANT_AI_MONTHLY_TOKEN_BUDGET", "0") or "0"))
+        daily_limit = int(os.getenv("QUANT_AI_DAILY_TOKEN_BUDGET", "0") or "0")
+        monthly_limit = int(os.getenv("QUANT_AI_MONTHLY_TOKEN_BUDGET", "0") or "0")
+        if daily_limit < 0 or monthly_limit < 0:
+            raise ValueError("negative budget")
     except ValueError as error:
         raise EodStoreError("AI token budget configuration must use non-negative integers", 503) from error
     try:
