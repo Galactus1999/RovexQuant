@@ -30,6 +30,7 @@ jobs:
       QUANT_TOKEN_DATABASE_URL: ${{ secrets.QUANT_TOKEN_DATABASE_URL }}
       QUANT_MARKET_DATABASE_URL: ${{ secrets.QUANT_MARKET_DATABASE_URL }}
       QUANT_TOKEN_MIGRATION_DATABASE_URL: ${{ secrets.QUANT_TOKEN_MIGRATION_DATABASE_URL }}
+      QUANT_MARKET_MIGRATION_DATABASE_URL: ${{ secrets.QUANT_MARKET_MIGRATION_DATABASE_URL }}
       TEJHQ_API_KEY: ${{ secrets.TEJHQ_API_KEY }}
     steps:
       - name: Checkout Quant
@@ -58,10 +59,22 @@ jobs:
             echo "::error::EOD collection is blocked: configure QUANT_TOKEN_MIGRATION_DATABASE_URL with the direct PostgreSQL endpoint."
             exit 1
           fi
+          if [[ -n "${QUANT_MARKET_DATABASE_URL}" ]]; then
+            TOKEN_DB="$(python -c 'import os; from urllib.parse import urlsplit; u=urlsplit(os.environ["QUANT_TOKEN_DATABASE_URL"] or os.environ["QUANT_TOKEN_MIGRATION_DATABASE_URL"]); print((u.hostname,u.port,u.path))')"
+            MARKET_DB="$(python -c 'import os; from urllib.parse import urlsplit; u=urlsplit(os.environ["QUANT_MARKET_DATABASE_URL"]); print((u.hostname,u.port,u.path))')"
+            if [[ "$TOKEN_DB" != "$MARKET_DB" && -z "${QUANT_MARKET_MIGRATION_DATABASE_URL}" ]]; then
+              echo "::error::Separate QUANT_MARKET_DATABASE_URL requires QUANT_MARKET_MIGRATION_DATABASE_URL."
+              exit 1
+            fi
+          fi
           echo "Database configuration present; migration and ingestion will be required."
       - name: Apply reviewed PostgreSQL migrations
         working-directory: backend
-        run: alembic -c alembic.ini upgrade head
+        run: |
+          alembic -c alembic.ini upgrade head
+          if [[ -n "${QUANT_MARKET_MIGRATION_DATABASE_URL}" ]]; then
+            QUANT_TOKEN_MIGRATION_DATABASE_URL="$QUANT_MARKET_MIGRATION_DATABASE_URL" alembic -c alembic.ini upgrade head
+          fi
       - name: Collect and persist EOD snapshot
         working-directory: backend
         env:
