@@ -4,6 +4,7 @@ import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiDailyBar
 import com.rovexquant.app.data.model.AiProvider
+import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.AiStrategyEvidence
 import com.rovexquant.app.data.model.EodMarketSnapshot
@@ -738,7 +739,7 @@ object QuantApi {
     }
 
 
-    fun fetchAiTaskRoutes(session: QuantSession): Set<String> {
+    fun fetchAiTaskRoutes(session: QuantSession): Map<String, AiTaskRoute> {
         val request = Request.Builder()
             .url("${session.baseUrl}/api/v1/app/ai/task-routes")
             .header("Authorization", "Bearer ${session.accessToken}")
@@ -748,7 +749,24 @@ object QuantApi {
             val text = response.body?.string().orEmpty()
             if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
             val routes = JSONObject(text).optJSONObject("routes") ?: JSONObject()
-            return routes.keys().asSequence().toSet()
+            return buildMap {
+                val keys = routes.keys()
+                while (keys.hasNext()) {
+                    val task = keys.next()
+                    val route = routes.optJSONObject(task) ?: continue
+                    val provider = route.optString("provider_id")
+                    val model = route.optString("model")
+                    if (provider.isBlank() || model.isBlank()) continue
+                    val fallbackJson = route.optJSONArray("fallback_providers") ?: JSONArray()
+                    val fallbacks = buildList {
+                        for (index in 0 until fallbackJson.length()) {
+                            val item = fallbackJson.optString(index)
+                            if (item.isNotBlank()) add(item)
+                        }
+                    }
+                    put(task, AiTaskRoute(provider, model, fallbacks))
+                }
+            }
         }
     }
 
