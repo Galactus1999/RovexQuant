@@ -6,6 +6,8 @@ import until a stable supported machine interface is verified.
 """
 from __future__ import annotations
 
+import asyncio
+import math
 import os
 from datetime import datetime, timezone
 from typing import Any
@@ -170,7 +172,7 @@ async def fetch_amfi_nav(search: str = "", limit: int = 50) -> dict[str, Any]:
             continue
         try:
             nav = float(fields[4])
-            if not nav >= 0 or not fields[5]:
+            if not math.isfinite(nav) or nav < 0 or not fields[5]:
                 continue
         except ValueError:
             continue
