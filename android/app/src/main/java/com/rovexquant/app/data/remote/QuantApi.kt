@@ -777,7 +777,8 @@ object QuantApi {
         messages: List<AiChatMessage>,
         credentialId: String?,
         fallbackProviders: List<String>,
-        taskType: String
+        taskType: String,
+        maxTokens: Int
     ): AiCompletion {
         require(messages.isNotEmpty() && messages.size <= 12) { "Keep AI conversations to the latest 12 messages." }
         val boundedMessages = mutableListOf<AiChatMessage>()
