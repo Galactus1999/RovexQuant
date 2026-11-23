@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -22,6 +23,122 @@ def _bounded(value: Any, label: str) -> dict[str, Any] | list[Any]:
     if len(encoded.encode("utf-8")) > _MAX_DOCUMENT_BYTES:
         raise EodStoreError(f"AI research {label} exceeds the 128 KB archive limit", 413)
     return value
+
+
+
+def ai_token_budgets_enabled() -> bool:
+    return any(os.getenv(name, "").strip() not in ("", "0") for name in (
+        "QUANT_AI_DAILY_TOKEN_BUDGET", "QUANT_AI_MONTHLY_TOKEN_BUDGET"
+    ))
+
+
+def estimate_reserved_tokens(request_payload: dict[str, Any] | list[Any], max_output_tokens: int) -> int:
+    encoded = json.dumps(request_payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    # UTF-8 bytes are a conservative upper bound for ordinary BPE token counts.
+    return len(encoded) + max(1, int(max_output_tokens))
+
+
+def reserve_ai_research_run(
+    *, task_type: str, provider_id: str, model: str, credential_id: str | None,
+    request_payload: dict[str, Any] | list[Any], estimated_tokens: int,
+    source_refs: list[dict[str, Any]] | None = None,
+) -> str:
+    """Atomically reserve a run against configured daily/monthly token ceilings."""
+    if estimated_tokens < 1 or estimated_tokens > 1_000_000:
+        raise EodStoreError("AI request exceeds the per-run token reservation limit", 413)
+    request_doc = _bounded(request_payload, "request")
+    refs_doc = _bounded(source_refs or [], "source references")
+    request_hash = hashlib.sha256(
+        json.dumps(request_doc, ensure_ascii=True, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    try:
+        daily_limit = int(os.getenv("QUANT_AI_DAILY_TOKEN_BUDGET", "0") or "0")
+        monthly_limit = int(os.getenv("QUANT_AI_MONTHLY_TOKEN_BUDGET", "0") or "0")
+        if daily_limit < 0 or monthly_limit < 0:
+            raise ValueError("negative budget")
+    except ValueError as error:
+        raise EodStoreError("AI token budget configuration must use non-negative integers", 503) from error
+    run_id = uuid4()
+    now = datetime.now(timezone.utc)
+    try:
+        with connect() as connection:
+            connection.execute("SELECT pg_advisory_xact_lock(18763, 8021)")
+            for period, limit in (("day", daily_limit), ("month", monthly_limit)):
+                if limit == 0:
+                    continue
+                used = connection.execute(
+                    """
+                    SELECT COALESCE(SUM(
+                        CASE WHEN status = 'RUNNING'
+                        THEN COALESCE(NULLIF(token_usage->>'reserved_tokens', '')::BIGINT, 0)
+                        ELSE COALESCE(NULLIF(token_usage->>'total_tokens', '')::BIGINT, 0)
+                        END
+                    ), 0)
+                    FROM ai_research_runs WHERE created_at >= date_trunc(%s, NOW())
+                    """,
+                    (period,),
+                ).fetchone()[0]
+                if int(used or 0) + estimated_tokens > limit:
+                    raise EodStoreError(f"AI {period} token budget exhausted", 429)
+            connection.execute(
+                """
+                INSERT INTO ai_research_runs (
+                    run_id, task_type, provider_id, model, credential_id, status,
+                    request_hash, request_payload, response_payload, token_usage,
+                    cost_usd, cost_status, fallback_used, source_refs, created_at
+                ) VALUES (%s, %s, %s, %s, %s, 'RUNNING', %s, %s, '{}'::jsonb,
+                          %s, NULL, 'PENDING', FALSE, %s, %s)
+                """,
+                (run_id, task_type, provider_id, model, credential_id, request_hash,
+                 Jsonb(request_doc), Jsonb({"reserved_tokens": estimated_tokens}),
+                 Jsonb(refs_doc), now),
+            )
+    except EodStoreError:
+        raise
+    except psycopg.Error as error:
+        raise EodStoreError("AI research run could not reserve history/budget capacity") from error
+    return str(run_id)
+
+
+def finish_ai_research_run(run_id: str, completion: dict[str, Any]) -> None:
+    response_doc = _bounded({"content": completion.get("content", "")}, "response")
+    usage = completion.get("usage") if isinstance(completion.get("usage"), dict) else {}
+    try:
+        with connect() as connection:
+            result = connection.execute(
+                """
+                UPDATE ai_research_runs SET status = 'SUCCEEDED', response_payload = %s,
+                    token_usage = %s, cost_usd = %s, cost_status = %s,
+                    fallback_used = %s, completed_at = %s
+                WHERE run_id = %s AND status = 'RUNNING'
+                """,
+                (Jsonb(response_doc), Jsonb(usage), completion.get("cost_usd"),
+                 str(completion.get("cost_status", "NOT_TRACKED"))[:32],
+                 bool(completion.get("fallback_used")), datetime.now(timezone.utc), run_id),
+            )
+            if result.rowcount != 1:
+                raise EodStoreError("AI research run reservation was not active", 409)
+    except EodStoreError:
+        raise
+    except psycopg.Error as error:
+        raise EodStoreError("AI research run result could not be persisted") from error
+
+
+def fail_ai_research_run(run_id: str, error_code: str = "PROVIDER_FAILURE") -> None:
+    try:
+        with connect() as connection:
+            connection.execute(
+                """
+                UPDATE ai_research_runs SET status = 'FAILED',
+                    response_payload = %s, token_usage = %s, cost_status = 'UNKNOWN',
+                    completed_at = %s WHERE run_id = %s AND status = 'RUNNING'
+                """,
+                (Jsonb({"error_code": error_code[:48]}), Jsonb({"reserved_tokens": 0, "total_tokens": 0}),
+                 datetime.now(timezone.utc), run_id),
+            )
+    except (EodStoreError, psycopg.Error):
+        # A failed archive update must not mask the original provider error.
+        return
 
 
 def persist_ai_research_run(
