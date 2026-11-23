@@ -13,6 +13,8 @@ import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.MarketTick
 import com.rovexquant.app.data.model.MarketIngestionStatus
 import com.rovexquant.app.data.model.MacroResearchSummary
+import com.rovexquant.app.data.model.MarketIntegrityStatus
+import com.rovexquant.app.data.model.MarketDataHealth
 import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
@@ -59,6 +61,9 @@ class QuantRepository(context: Context) : QuantDataRepository {
     override suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) =
         withContext(Dispatchers.IO) { QuantApi.saveAiProviderCredential(session, providerId, apiKey) }
 
+    override suspend fun deleteAiProviderCredential(session: QuantSession, providerId: String) =
+        withContext(Dispatchers.IO) { QuantApi.deleteAiProviderCredential(session, providerId) }
+
     override suspend fun saveDalalOsApiKey(session: QuantSession, apiKey: String) =
         withContext(Dispatchers.IO) { QuantApi.saveDalalOsApiKey(session, apiKey) }
 
@@ -67,9 +72,6 @@ class QuantRepository(context: Context) : QuantDataRepository {
 
     override suspend fun fetchDalalOsConfigured(session: QuantSession): Boolean =
         withContext(Dispatchers.IO) { QuantApi.fetchDalalOsConfigured(session) }
-
-    override suspend fun deleteAiProviderCredential(session: QuantSession, providerId: String) =
-        withContext(Dispatchers.IO) { QuantApi.deleteAiProviderCredential(session, providerId) }
 
     override suspend fun saveUpstoxAnalyticsToken(session: QuantSession, token: String) =
         withContext(Dispatchers.IO) { QuantApi.saveUpstoxAnalyticsToken(session, token) }
@@ -106,6 +108,12 @@ class QuantRepository(context: Context) : QuantDataRepository {
 
     override suspend fun fetchMacroResearch(session: QuantSession): MacroResearchSummary =
         withContext(Dispatchers.IO) { QuantApi.fetchMacroResearch(session) }
+
+    override suspend fun fetchMarketIntegrityStatus(session: QuantSession, exchange: String): MarketIntegrityStatus =
+        withContext(Dispatchers.IO) { QuantApi.fetchMarketIntegrityStatus(session, exchange) }
+
+    override suspend fun fetchMarketDataHealth(session: QuantSession, exchange: String): MarketDataHealth =
+        withContext(Dispatchers.IO) { QuantApi.fetchMarketDataHealth(session, exchange) }
 
     override suspend fun sendAiMessage(
         session: QuantSession,
