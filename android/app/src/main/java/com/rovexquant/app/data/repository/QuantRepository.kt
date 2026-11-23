@@ -129,7 +129,7 @@ class QuantRepository(context: Context) : QuantDataRepository {
         taskType: String,
         maxTokens: Int
     ): AiCompletion = withContext(Dispatchers.IO) {
-        QuantApi.sendAiMessage(session, providerId, model, messages, credentialId, fallbackProviders, taskType)
+        QuantApi.sendAiMessage(session, providerId, model, messages, credentialId, fallbackProviders, taskType, maxTokens)
     }
 
     override suspend fun requestAiStrategyBrief(
