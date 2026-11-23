@@ -123,6 +123,10 @@ def _persist_day(connection, *, run_id: str, exchange: str, year: int, source_sh
         provider=PROVIDER, retrieved_at=datetime.now(timezone.utc),
     )
     with connection.transaction():
+        connection.execute(
+            "DELETE FROM market_eod_bars WHERE exchange=%s AND trading_date=%s AND provider=%s",
+            (exchange, trading_date, PROVIDER),
+        )
         with connection.cursor() as cursor:
             cursor.executemany(_INSERT_HISTORY, normalized)
             cursor.execute(
