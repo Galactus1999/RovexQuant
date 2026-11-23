@@ -48,6 +48,7 @@ def event_study(
     event_date: date = Query(...),
     pre_bars: int = Query(10, ge=1, le=60),
     post_bars: int = Query(10, ge=1, le=60),
+    benchmark_symbol: str | None = Query(default=None, min_length=1, max_length=40),
 ):
     """Calculate an explicitly non-causal EOD event window from persisted history."""
     try:
@@ -57,8 +58,17 @@ def event_study(
             to_date=event_date + timedelta(days=180),
             limit=2000,
         )
+        benchmark_bars = None
+        if benchmark_symbol:
+            benchmark_bars = symbol_history(
+                exchange, benchmark_symbol,
+                from_date=event_date - timedelta(days=180),
+                to_date=event_date + timedelta(days=180),
+                limit=2000,
+            )
         result = calculate_event_window(
-            bars, event_date=event_date, pre_bars=pre_bars, post_bars=post_bars
+            bars, event_date=event_date, pre_bars=pre_bars, post_bars=post_bars,
+            benchmark_bars=benchmark_bars, benchmark_symbol=benchmark_symbol,
         )
         return {
             "exchange": exchange.upper(),
