@@ -65,3 +65,58 @@ def test_market_ingestion_snapshot_returns_postgres_data_only(monkeypatch):
     assert response.json()["data_origin"] == "POSTGRESQL"
     assert response.json()["data_mode"] == "END_OF_DAY"
     assert response.json()["trading_date"] == "2026-11-20"
+
+
+def test_market_ingestion_collection_requires_app_session():
+    client = TestClient(api.app)
+    assert client.post("/api/v1/app/market-data/ingestion/collect/nse").status_code == 401
+
+
+def test_market_ingestion_collection_claims_and_dispatches_once(monkeypatch):
+    from rovexquant.api import market_ingestion
+
+    token = _session(monkeypatch)
+    dispatched = []
+
+    monkeypatch.setattr(
+        market_ingestion, "claim_ingestion_run",
+        lambda exchange, force=False: ("run-123", True, "RUNNING"),
+    )
+
+    async def fake_collect(exchange, run_id):
+        dispatched.append((exchange, run_id))
+
+    monkeypatch.setattr(market_ingestion, "_run_claimed_collection", fake_collect)
+    response = TestClient(api.app).post(
+        "/api/v1/app/market-data/ingestion/collect/nse?force=true",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 202
+    assert response.json()["started"] is True
+    assert response.json()["run_id"] == "run-123"
+    assert dispatched == [("nse", "run-123")]
+
+
+def test_market_ingestion_collection_joins_existing_run_without_dispatch(monkeypatch):
+    from rovexquant.api import market_ingestion
+
+    token = _session(monkeypatch)
+    dispatched = []
+    monkeypatch.setattr(
+        market_ingestion, "claim_ingestion_run",
+        lambda exchange, force=False: ("existing-run", False, "RUNNING"),
+    )
+    monkeypatch.setattr(
+        market_ingestion, "_run_claimed_collection",
+        lambda exchange, run_id: dispatched.append((exchange, run_id)),
+    )
+    response = TestClient(api.app).post(
+        "/api/v1/app/market-data/ingestion/collect/nse",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 202
+    assert response.json()["started"] is False
+    assert response.json()["status"] == "RUNNING"
+    assert dispatched == []
