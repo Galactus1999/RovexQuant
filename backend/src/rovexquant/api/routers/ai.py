@@ -60,6 +60,7 @@ class AIStrategyBriefRequest(BaseModel):
     credential_id: str | None = Field(default=None, min_length=1, max_length=80)
     fallback_providers: list[str] = Field(default_factory=list, max_length=3)
     automatic_task_routing: bool = False
+    max_tokens: int = Field(default=1400, ge=1, le=4096)
 
     @model_validator(mode="after")
     def validate_date_range(self):
@@ -371,7 +372,7 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": json.dumps(user_evidence, separators=(",", ":"), sort_keys=True)},
                     ],
-                    max_tokens=1400,
+                    max_tokens=request.max_tokens,
                     temperature=0.1,
                     credential_id=request.credential_id,
                     fallback_providers=request.fallback_providers,
