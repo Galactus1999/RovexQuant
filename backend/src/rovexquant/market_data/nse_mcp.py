@@ -18,7 +18,9 @@ from jsonschema.validators import validator_for
 NSE_MCP_ENDPOINTS = {
     "bhavcopy": "https://mcp.nseindia.in/bhavcopy/cm/mcp",
     "cmmkt": "https://mcp.nseindia.in/cmmkt/mcp",
+    "dalalos": "https://mcp.dalalos.in/mcp",
 }
+_DALALOS_CAPABILITIES_PATH = Path(__file__).with_name("data") / "dalalos_capabilities.json"
 _PROTOCOL_VERSION = "2025-03-26"
 _TOOL_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
 _BLOCKED_TOOL_PARTS = ("trade", "order", "execute", "cancel", "modify", "place", "submit", "write", "delete")
@@ -69,15 +71,19 @@ class NseMcpClient:
 
     def __init__(
         self,
-        server: Literal["bhavcopy", "cmmkt"],
+        server: Literal["bhavcopy", "cmmkt", "dalalos"],
         *,
         transport: httpx.AsyncBaseTransport | None = None,
         timeout: float = 20.0,
+        api_key: str | None = None,
     ):
         if server not in NSE_MCP_ENDPOINTS:
             raise NseMcpError("Unknown NSE MCP server", 422)
         self.server = server
         self.endpoint = NSE_MCP_ENDPOINTS[server]
+        self._api_key = api_key.strip() if isinstance(api_key, str) else None
+        if server == "dalalos" and not self._api_key:
+            raise NseMcpError("DalalOS API key is not configured", 409)
         self._transport = transport
         self._timeout = timeout
         self._session_id: str | None = None
@@ -114,6 +120,8 @@ class NseMcpClient:
         if self._client is None:
             raise NseMcpError("NSE MCP client is not initialized", 500)
         headers: dict[str, str] = {}
+        if self.server == "dalalos" and self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
         if message.get("method") != "initialize":
             headers["MCP-Protocol-Version"] = self._protocol_version
         if self._session_id:
@@ -143,6 +151,8 @@ class NseMcpClient:
         if response.status_code == 429 or response.status_code >= 500:
             raise NseMcpError(f"NSE MCP temporarily unavailable (HTTP {response.status_code})", 503, retryable=True)
         if response.status_code in (401, 403):
+            if self.server == "dalalos":
+                raise NseMcpError("DalalOS authentication failed; check the API key and plan quota", 401)
             raise NseMcpError("NSE MCP refused the connection", 502)
         if response.status_code >= 400:
             raise NseMcpError(f"NSE MCP rejected the request (HTTP {response.status_code})", 502)
