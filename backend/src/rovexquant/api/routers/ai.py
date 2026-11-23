@@ -18,7 +18,7 @@ from rovexquant.market_data.eod_store import EodStoreError
 from rovexquant.ai.research_archive import (
     ai_token_budgets_enabled, estimate_reserved_tokens, reserve_ai_research_run,
     finish_ai_research_run, fail_ai_research_run,
-    list_ai_research_runs, get_ai_research_run,
+    list_ai_research_runs, get_ai_research_run, get_ai_token_budget_status,
 )
 from rovexquant.research.contracts import IndicatorRequest
 from rovexquant.research.service import calculate_indicators
@@ -222,6 +222,17 @@ def app_ai_providers():
     }
 
 
+
+
+@router.get(
+    "/api/v1/app/ai/budget",
+    dependencies=[Depends(require_app_session)],
+)
+def app_ai_budget_status():
+    try:
+        return get_ai_token_budget_status()
+    except EodStoreError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
 
 @router.get(
