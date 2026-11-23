@@ -60,3 +60,9 @@ data class AiStrategyBrief(
     val dataRights: String,
     val limitations: List<String>
 )
+
+data class AiTaskRoute(
+    val providerId: String,
+    val model: String,
+    val fallbackProviders: List<String>
+)
