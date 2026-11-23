@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiStrategyBrief
+import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.data.repository.QuantDataRepository
 import kotlinx.coroutines.CancellationException
@@ -51,7 +52,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
     var selectedProvider by rememberSaveable { mutableStateOf("") }
     var selectedTaskType by rememberSaveable { mutableStateOf("research") }
     var automaticTaskRouting by rememberSaveable { mutableStateOf(false) }
-    var configuredTaskRoutes by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var configuredTaskRoutes by remember { mutableStateOf<Map<String, AiTaskRoute>>(emptyMap()) }
     var taskRoutesError by remember { mutableStateOf<String?>(null) }
     var model by rememberSaveable { mutableStateOf("") }
     var messages by remember { mutableStateOf(emptyList<AiChatMessage>()) }
@@ -194,6 +195,13 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                     }
                 }
                 taskRoutesError?.let { Text("Task routes unavailable: $it", color = Gold, fontSize = 9.sp) }
+                configuredTaskRoutes[selectedTaskType]?.let { route ->
+                    Text(
+                        "Configured route: ${route.providerId} / ${route.model}" +
+                            if (route.fallbackProviders.isEmpty()) " · no fallback" else " · fallback: ${route.fallbackProviders.joinToString()}",
+                        color = Mint, fontSize = 9.sp, lineHeight = 14.sp
+                    )
+                }
                 if (automaticTaskRouting && selectedTaskType !in configuredTaskRoutes) {
                     Text("Set QUANT_AI_TASK_ROUTES on the backend to enable this task. Manual provider selection remains available.", color = Gold, fontSize = 9.sp, lineHeight = 14.sp)
                 }
@@ -404,7 +412,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                 fallbackProviders = selectedFallbacks.toList(),
                 canUseAi = canUseAi,
                 automaticTaskRouting = automaticTaskRouting,
-                researchRouteConfigured = "research" in configuredTaskRoutes,
+                researchRouteConfigured = configuredTaskRoutes.containsKey("research"),
                 evidenceDraft = chatInput
             )
         }
