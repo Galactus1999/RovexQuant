@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import math
 import os
 from dataclasses import dataclass
 from typing import Any
@@ -94,6 +95,48 @@ def _credentials_for(provider_id: str) -> list[Credential]:
     if primary and not any(item.credential_id == "default" for item in result):
         result.insert(0, Credential(provider_id, "default", primary))
     return result
+
+
+def estimate_completion_cost_usd(
+    provider_id: str,
+    model: str,
+    usage: dict[str, Any],
+) -> tuple[float | None, str]:
+    """Price provider-reported token usage using the pinned LiteLLM Core model map.
+
+    Unknown model pricing or missing provider usage stays unknown; it is never reported as zero.
+    """
+    prompt_tokens = usage.get("prompt_tokens")
+    completion_tokens = usage.get("completion_tokens")
+    if not isinstance(prompt_tokens, (int, float)) or not isinstance(completion_tokens, (int, float)):
+        return None, "PROVIDER_USAGE_NOT_REPORTED"
+    if (
+        prompt_tokens < 0 or completion_tokens < 0
+        or not math.isfinite(float(prompt_tokens))
+        or not math.isfinite(float(completion_tokens))
+    ):
+        return None, "INVALID_PROVIDER_USAGE"
+    try:
+        from litellm import completion_cost
+
+        response = {
+            "model": model,
+            "usage": {
+                "prompt_tokens": int(prompt_tokens),
+                "completion_tokens": int(completion_tokens),
+                "total_tokens": int(usage.get("total_tokens", prompt_tokens + completion_tokens)),
+            },
+        }
+        amount = completion_cost(
+            completion_response=response,
+            model=model,
+            custom_llm_provider=provider_id,
+        )
+        if not isinstance(amount, (int, float)) or not math.isfinite(float(amount)) or amount < 0:
+            return None, "UNKNOWN_MODEL_PRICING"
+        return round(float(amount), 8), "ESTIMATED_FROM_LITELLM_CORE_1_110_2"
+    except Exception:
+        return None, "UNKNOWN_MODEL_PRICING"
 
 
 def configured_providers() -> list[dict[str, Any]]:
@@ -225,6 +268,7 @@ async def complete_chat(
                 for key in ("prompt_tokens", "completion_tokens", "total_tokens")
                 if isinstance(usage, dict) and isinstance(usage.get(key), (int, float))
             }
+            cost_usd, cost_status = estimate_completion_cost_usd(candidate, selected_model, safe_usage)
             return {
                 "provider_id": candidate,
                 "credential_id": credential.credential_id,
@@ -232,8 +276,8 @@ async def complete_chat(
                 "content": content,
                 "usage": safe_usage,
                 "task_type": task_type,
-                "cost_usd": None,
-                "cost_status": "NOT_TRACKED",
+                "cost_usd": cost_usd,
+                "cost_status": cost_status,
                 "fallback_used": index > 0,
             }
         except GatewayError as error:
