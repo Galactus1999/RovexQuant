@@ -1,4 +1,4 @@
-from rovexquant.intelligence.archive import _canonical_url, map_issuer_candidates
+from rovexquant.market_data.intelligence_archive import _canonical_url, map_issuer_candidates
 from rovexquant.intelligence.analysis import analyze_articles
 
 

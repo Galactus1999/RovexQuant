@@ -5,7 +5,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from rovexquant.intelligence.archive import (
+from rovexquant.market_data.intelligence_archive import (
     IntelligenceProviderError, discover_and_archive, get_intelligence_archive,
     latest_intelligence_runs,
 )

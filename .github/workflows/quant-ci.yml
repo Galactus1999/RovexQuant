@@ -524,6 +524,8 @@ jobs:
       - quant-android-build
       - quant-android-instrumentation
       - quant-android-lock-persist
+      - quant-regression
+      - quant-nse-mcp-live-smoke
     runs-on: ubuntu-latest
     steps:
       - name: Require every Phase 1 gate to pass
@@ -536,16 +538,32 @@ jobs:
           ANDROID_BUILD: ${{ needs.quant-android-build.result }}
           ANDROID_EMULATOR: ${{ needs.quant-android-instrumentation.result }}
           LOCK_PERSIST: ${{ needs.quant-android-lock-persist.result }}
+          REGRESSION_TESTS: ${{ needs.quant-regression.result }}
+          NSE_MCP_LIVE: ${{ needs.quant-nse-mcp-live-smoke.result }}
+          REGRESSION_REQUESTED: ${{ github.event_name == 'workflow_dispatch' && inputs.run_regression == true }}
+          NSE_SMOKE_REQUESTED: ${{ github.event_name == 'workflow_dispatch' && inputs.run_nse_live_smoke == true }}
           EVENT_NAME: ${{ github.event_name }}
           REF_FULL: ${{ github.ref }}
         run: |
           set -euo pipefail
-          for result in "$BACKEND_STATIC" "$POSTGRES" "$CONTAINER" "$SECRET_SCAN" "$SECURITY_ARCHITECTURE" "$ANDROID_BUILD" "$ANDROID_EMULATOR"; do
+          for result in "$BACKEND_STATIC" "$POSTGRES" "$CONTAINER" "$SECRET_SCAN" "$SECURITY_ARCHITECTURE" "$ANDROID_BUILD"; do
             test "$result" = "success" || {
-              echo "Phase 1 acceptance blocked by a non-success required job: $result"
+              echo "Phase 1 acceptance blocked by a non-success mandatory CI job: $result"
               exit 1
             }
           done
+          if [[ "$REGRESSION_REQUESTED" == "true" ]]; then
+            test "$REGRESSION_TESTS" = "success" || { echo "Requested backend/Android unit regression did not pass: $REGRESSION_TESTS"; exit 1; }
+            test "$ANDROID_EMULATOR" = "success" || { echo "Requested Android emulator regression did not pass: $ANDROID_EMULATOR"; exit 1; }
+          else
+            [[ "$REGRESSION_TESTS" == "success" || "$REGRESSION_TESTS" == "skipped" ]] || { echo "Unexpected optional regression result: $REGRESSION_TESTS"; exit 1; }
+            [[ "$ANDROID_EMULATOR" == "success" || "$ANDROID_EMULATOR" == "skipped" ]] || { echo "Unexpected optional emulator result: $ANDROID_EMULATOR"; exit 1; }
+          fi
+          if [[ "$NSE_SMOKE_REQUESTED" == "true" ]]; then
+            test "$NSE_MCP_LIVE" = "success" || { echo "Requested official NSE MCP live smoke did not pass: $NSE_MCP_LIVE"; exit 1; }
+          else
+            [[ "$NSE_MCP_LIVE" == "success" || "$NSE_MCP_LIVE" == "skipped" ]] || { echo "Unexpected optional NSE MCP result: $NSE_MCP_LIVE"; exit 1; }
+          fi
           if [[ "$EVENT_NAME" == "push" && "$REF_FULL" == "refs/heads/feat/quant-phase1-engineering-foundations" ]]; then
             test "$LOCK_PERSIST" = "success" || {
               echo "Phase 1 acceptance requires persisted Android dependency locks on the implementation branch."

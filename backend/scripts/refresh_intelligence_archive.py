@@ -3,7 +3,7 @@
 from __future__ import annotations
 import asyncio
 import json
-from rovexquant.intelligence.archive import run_scheduled_intelligence_refresh
+from rovexquant.market_data.intelligence_archive import run_scheduled_intelligence_refresh
 
 
 def main() -> int:

@@ -10,6 +10,7 @@ data class IntelligenceSource(
     val summary: String = "",
     val provider: String = "",
     val evidenceClass: String = ""
+)
 
 data class SectorImpact(
     val sector: String,
