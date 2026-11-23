@@ -17,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -35,6 +36,7 @@ import java.util.Locale
 @Composable
 fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
     val scope = rememberCoroutineScope()
+    val uriHandler = LocalUriHandler.current
     var providersLoading by remember { mutableStateOf(true) }
     var providers by remember { mutableStateOf(emptyList<com.rovexquant.app.data.model.AiProvider>()) }
     var providerError by remember { mutableStateOf<String?>(null) }
@@ -154,9 +156,9 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
     ) {
         item {
             SectionHeading(
-                "AI Studio · model and tool integrations",
+                "AI Studio · providers and research tools",
                 "Quant Intelligence.",
-                "Connect model providers, test credentials, configure failover and run approved research tools. Verified market evidence remains authoritative."
+                "Connect supported model APIs, select failover providers and fetch real market, macro and event evidence into research requests. Model output remains subordinate to verified data."
             )
         }
         item {
@@ -189,6 +191,8 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                                         model = provider.defaultModel.orEmpty()
                                         credentialInput = ""
                                         credentialError = null
+                                        providerTestStatus = null
+                                        selectedFallbacks = selectedFallbacks - provider.providerId
                                     },
                                     label = {
                                         Text(
@@ -200,6 +204,19 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                             }
                         }
                         val selected = providers.firstOrNull { it.providerId == selectedProvider }
+                        val providerConsoleUrl = when (selectedProvider) {
+                            "openai" -> "https://platform.openai.com/api-keys"
+                            "gemini" -> "https://aistudio.google.com/app/apikey"
+                            "groq" -> "https://console.groq.com/keys"
+                            "deepseek" -> "https://platform.deepseek.com/api_keys"
+                            "openrouter" -> "https://openrouter.ai/settings/keys"
+                            else -> null
+                        }
+                        TextButton(
+                            onClick = { providerConsoleUrl?.let(uriHandler::openUri) },
+                            enabled = providerConsoleUrl != null,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Open ${selectedProvider.replaceFirstChar { it.uppercase() }} API console / manage key") }
                         Spacer(Modifier.height(9.dp))
                         StatusPill(
                             if (selected?.configured == true) "Provider configured" else "Credential required",
@@ -243,9 +260,6 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                         ) {
                             Text(if (credentialSaving) "Encrypting on backend…" else "Save encrypted provider key")
                         }
-                        credentialError?.let {
-                            Text(it, color = Coral, fontSize = 10.sp, lineHeight = 15.sp)
-                        }
                     }
                 }
                 Spacer(Modifier.height(8.dp))
@@ -258,7 +272,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                     modifier = Modifier.fillMaxWidth().testTag("ai.model")
                 )
                 Text(
-                    "API keys are encrypted in the server-side vault. They are not stored in this APK or sent in prompts. Provider connectivity is verified only by the explicit test below.",
+                    "Keys are encrypted in the server-side vault and never stored in this APK or sent in prompts. Connection testing sends one short model request; provider usage/billing may apply.",
                     color = Muted, fontSize = 10.sp, lineHeight = 15.sp
                 )
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -334,6 +348,12 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
             }
         }
         item {
+            AiResearchToolsPanel(session, repository) { context ->
+                chatInput = (context + "\n\n" + chatInput).take(10000)
+                chatError = null
+            }
+        }
+        item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionHeading("Connected research tools", "NSE MCP.", "Discover permitted read-only exchange research tools and explicitly attach a selected result to an AI request.")
                 NseMcpResearchPanel(session, repository) { context ->
@@ -341,6 +361,17 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                     chatError = null
                 }
             }
+        }
+        item {
+            AiResearchBriefingPanel(
+                session = session,
+                repository = repository,
+                providerId = selectedProvider,
+                model = model,
+                fallbackProviders = selectedFallbacks.toList(),
+                canUseAi = canUseAi,
+                evidenceDraft = chatInput
+            )
         }
         item {
             TerminalCard {
