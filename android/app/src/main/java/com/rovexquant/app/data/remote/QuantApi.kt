@@ -989,8 +989,8 @@ object QuantApi {
             totalTokens = usage.optInt("total_tokens", 0),
             costUsd = json.optionalDouble("cost_usd"),
             costStatus = json.optString("cost_status", "UNKNOWN_MODEL_PRICING"),
-            verificationStatus = verification?.optString("status")?.takeIf { it.isNotBlank() },
-            verificationSummary = verification?.optString("summary")?.takeIf { it.isNotBlank() },
+            verificationStatus = verification?.optString("status")?.takeIf { it.isNotBlank() && it != "null" },
+            verificationSummary = verification?.optString("summary")?.takeIf { it.isNotBlank() && it != "null" },
             verifiedClaims = verifiedClaims
         )
     }
