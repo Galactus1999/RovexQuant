@@ -25,6 +25,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rovexquant.app.data.model.AiChatMessage
+import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.QuantSession
@@ -56,6 +57,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
     var taskRoutesError by remember { mutableStateOf<String?>(null) }
     var model by rememberSaveable { mutableStateOf("") }
     var messages by remember { mutableStateOf(emptyList<AiChatMessage>()) }
+    var lastChatCompletion by remember { mutableStateOf<AiCompletion?>(null) }
     var chatInput by rememberSaveable { mutableStateOf("") }
     var chatLoading by remember { mutableStateOf(false) }
     var chatError by remember { mutableStateOf<String?>(null) }
@@ -113,6 +115,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
         messages = updated
         chatInput = ""
         chatError = null
+        lastChatCompletion = null
         chatLoading = true
         scope.launch {
             try {
@@ -124,6 +127,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                     fallbackProviders = if (automaticTaskRouting) emptyList() else selectedFallbacks.toList(),
                     taskType = selectedTaskType
                 )
+                lastChatCompletion = response
                 messages = (updated + AiChatMessage("assistant", response.content)).takeLast(10)
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -446,6 +450,14 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                         }
                         Spacer(Modifier.height(7.dp))
                     }
+                }
+                lastChatCompletion?.let { usage ->
+                    Text(
+                        "Last call · ${usage.taskType} · ${usage.providerId}/${usage.model} · ${usage.totalTokens} tokens · " +
+                            (usage.costUsd?.let { "estimated USD ${"%.6f".format(java.util.Locale.US, it)}" }
+                                ?: "cost unknown (${usage.costStatus})"),
+                        color = Muted, fontSize = 9.sp, lineHeight = 14.sp
+                    )
                 }
                 OutlinedTextField(
                     value = chatInput,
