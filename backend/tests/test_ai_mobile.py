@@ -415,6 +415,10 @@ def test_ai_research_history_endpoints_require_app_session(mobile_client, monkey
     response = client.get("/api/v1/app/ai/research/runs", headers=headers)
     assert response.status_code == 200
     assert response.json() == {"runs": [], "count": 0}
+    monkeypatch.setattr(ai_router, "get_ai_token_budget_status", lambda: {"enabled": True, "daily": {"used_tokens": 10, "limit_tokens": 100, "remaining_tokens": 90}, "monthly": {"used_tokens": 10, "limit_tokens": 1000, "remaining_tokens": 990}})
+    budget = client.get("/api/v1/app/ai/budget", headers=headers)
+    assert budget.status_code == 200
+    assert budget.json()["daily"]["remaining_tokens"] == 90
     monkeypatch.setattr(ai_router, "get_ai_research_run", lambda run_id: None)
     missing = client.get("/api/v1/app/ai/research/runs/not-a-run", headers=headers)
     assert missing.status_code == 404
