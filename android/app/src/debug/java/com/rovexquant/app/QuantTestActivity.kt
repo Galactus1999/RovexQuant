@@ -7,6 +7,7 @@ import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiDailyBar
 import com.rovexquant.app.data.model.AiProvider
+import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.EodMarketSnapshot
 import com.rovexquant.app.data.model.EodStockMove
@@ -105,8 +106,8 @@ class FakeQuantRepository(
     override suspend fun fetchAiProviders(session: QuantSession) =
         listOf(AiProvider("groq", true, listOf("default")))
 
-    override suspend fun fetchAiTaskRoutes(session: QuantSession): Set<String> =
-        setOf("research", "macro_analysis", "claim_verification", "summarization")
+    override suspend fun fetchAiTaskRoutes(session: QuantSession): Map<String, AiTaskRoute> =
+        mapOf("research" to AiTaskRoute("groq", "fixture-research-model", listOf("openrouter")))
 
     override suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) = Unit
     override suspend fun deleteAiProviderCredential(session: QuantSession, providerId: String) = Unit
