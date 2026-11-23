@@ -1,5 +1,23 @@
 import com.jaredsburrows.license.LicenseReportExtension
 import org.gradle.api.artifacts.dsl.LockMode
+import java.io.File
+
+// CI APKs use one persistent development certificate so Android can install
+// successive builds as updates. Local builds retain the normal local debug key.
+val ciKeystorePath = System.getenv("ROVEX_ANDROID_KEYSTORE_PATH")
+val ciKeystorePassword = System.getenv("ROVEX_ANDROID_KEYSTORE_PASSWORD")
+val ciKeyAlias = System.getenv("ROVEX_ANDROID_KEY_ALIAS")
+val ciKeyPassword = System.getenv("ROVEX_ANDROID_KEY_PASSWORD")
+val ciSigningValues = listOf(ciKeystorePath, ciKeystorePassword, ciKeyAlias, ciKeyPassword)
+val ciSigningRequested = ciSigningValues.any { !it.isNullOrBlank() }
+require(!ciSigningRequested || ciSigningValues.all { !it.isNullOrBlank() }) {
+    "Incomplete persistent Android signing configuration; provide all ROVEX_ANDROID_KEYSTORE_* and ROVEX_ANDROID_KEY_* values."
+}
+if (ciSigningRequested) {
+    require(File(ciKeystorePath!!).isFile) { "Persistent Android keystore file does not exist." }
+}
+val quantVersionCode = providers.gradleProperty("quantVersionCode").orNull?.toIntOrNull() ?: 1
+require(quantVersionCode in 1..2_100_000_000) { "quantVersionCode must be a valid positive Android version code." }
 
 buildscript {
     repositories {
@@ -43,9 +61,24 @@ android {
         applicationId = "com.rovexquant.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
+        versionCode = quantVersionCode
         versionName = "0.1.0-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+    signingConfigs {
+        if (ciSigningRequested) {
+            create("ciStable") {
+                storeFile = file(ciKeystorePath!!)
+                storePassword = ciKeystorePassword
+                keyAlias = ciKeyAlias
+                keyPassword = ciKeyPassword
+            }
+        }
+    }
+    buildTypes {
+        getByName("debug") {
+            if (ciSigningRequested) signingConfig = signingConfigs.getByName("ciStable")
+        }
     }
     buildFeatures { compose = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
