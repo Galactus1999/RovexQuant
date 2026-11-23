@@ -60,8 +60,8 @@ interface QuantDataRepository {
     ): AiCompletion
     suspend fun requestAiStrategyBrief(
         session: QuantSession,
-        providerId: String,
-        model: String,
+        providerId: String?,
+        model: String?,
         symbol: String,
         exchange: String,
         fromDate: String,
