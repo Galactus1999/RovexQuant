@@ -364,3 +364,47 @@ def symbol_history(exchange: str, symbol: str, *, from_date: date, to_date: date
         "isin": row[11], "trades": int(row[12]) if row[12] is not None else None,
         "price_basis": row[13], "adjustment_factor": float(row[14]) if row[14] is not None else None,
     } for row in rows]
+
+
+def corporate_action_history(
+    exchange: str, symbol: str, *, from_date: date, to_date: date, limit: int = 100
+) -> list[dict[str, Any]]:
+    """Return source-attributed corporate actions around a symbol's research window."""
+    market, ticker = exchange.strip().upper(), symbol.strip().upper()
+    if market not in _SERIES or not _SYMBOL.fullmatch(ticker):
+        raise EodStoreError("Invalid exchange or symbol", 422)
+    if from_date > to_date or (to_date - from_date).days > 6200:
+        raise EodStoreError("Corporate-action date range must be ordered and at most 17 years", 422)
+    if not 1 <= limit <= 500:
+        raise EodStoreError("Corporate-action limit must be between 1 and 500", 422)
+    try:
+        with connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT ex_date, record_date, action_type, ratio_num, ratio_den,
+                       cash_amount, face_value_from, face_value_to, raw_subject,
+                       company_name, isin, provider, source_sha256
+                FROM market_corporate_actions
+                WHERE exchange=%s AND symbol=%s AND ex_date BETWEEN %s AND %s
+                ORDER BY ex_date, action_type, raw_subject
+                LIMIT %s
+                """,
+                (market, ticker, from_date, to_date, limit),
+            ).fetchall()
+    except psycopg.Error as error:
+        raise EodStoreError("Corporate-action history is unavailable; import derived market history") from error
+    return [{
+        "ex_date": row[0].isoformat(),
+        "record_date": row[1].isoformat() if row[1] else None,
+        "action_type": row[2],
+        "ratio_num": int(row[3]) if row[3] is not None else None,
+        "ratio_den": int(row[4]) if row[4] is not None else None,
+        "cash_amount": float(row[5]) if row[5] is not None else None,
+        "face_value_from": float(row[6]) if row[6] is not None else None,
+        "face_value_to": float(row[7]) if row[7] is not None else None,
+        "raw_subject": row[8],
+        "company_name": row[9],
+        "isin": row[10],
+        "provider": row[11],
+        "source_sha256": row[12],
+    } for row in rows]
