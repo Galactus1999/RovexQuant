@@ -16,6 +16,10 @@ import com.rovexquant.app.data.model.MarketIndexInstrument
 import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.MarketIngestionStatus
 import com.rovexquant.app.data.model.MacroResearchSummary
+import com.rovexquant.app.data.model.MarketIntegrityDifference
+import com.rovexquant.app.data.model.MarketIntegrityStatus
+import com.rovexquant.app.data.model.MarketReconciliationReport
+import com.rovexquant.app.data.model.HistoricalBackfillSummary
 import com.rovexquant.app.data.model.MacroSeriesObservation
 import com.rovexquant.app.data.model.AmfiNavObservation
 import com.rovexquant.app.data.model.EventStudyResult
@@ -306,6 +310,72 @@ object QuantApi {
                 postBarsUsed = json.optInt("post_event_bars_used"),
                 method = json.optString("method"),
                 limitations = limitations
+            )
+        }
+    }
+
+
+    fun fetchMarketIntegrityStatus(session: QuantSession, exchange: String = "NSE"): MarketIntegrityStatus {
+        require(exchange.uppercase() in setOf("NSE", "BSE")) { "Exchange must be NSE or BSE." }
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/market/data-integrity?exchange=${exchange.uppercase()}")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(body, response.code))
+            require(body.toByteArray(Charsets.UTF_8).size <= 512 * 1024) {
+                "Market integrity response exceeds the 512 KB safety limit."
+            }
+            val json = JSONObject(body)
+            val reportJson = json.optJSONObject("latest_report")
+            val differencesJson = reportJson?.optJSONArray("differences") ?: JSONArray()
+            val differences = buildList {
+                for (index in 0 until differencesJson.length()) {
+                    val item = differencesJson.optJSONObject(index) ?: continue
+                    add(MarketIntegrityDifference(
+                        kind = item.optString("kind"),
+                        symbol = item.optString("symbol"),
+                        series = item.optString("series"),
+                        field = item.optString("field").takeIf { it.isNotBlank() && it != "null" },
+                        officialValue = item.optString("official_value").takeIf { it.isNotBlank() && it != "null" },
+                        storedValue = item.optString("stored_value").takeIf { it.isNotBlank() && it != "null" }
+                    ))
+                }
+            }
+            val report = reportJson?.let {
+                MarketReconciliationReport(
+                    tradingDate = it.optString("trading_date"),
+                    status = it.optString("status"),
+                    officialRows = it.optInt("official_rows"),
+                    referenceRows = it.optInt("reference_rows"),
+                    matchedRows = it.optInt("matched_rows"),
+                    mismatchRows = it.optInt("mismatch_rows"),
+                    missingReferenceRows = it.optInt("missing_reference_rows"),
+                    missingOfficialRows = it.optInt("missing_official_rows"),
+                    sourceUrl = it.optString("source_url"),
+                    differences = differences
+                )
+            }
+            val backfillJson = json.optJSONArray("backfills") ?: JSONArray()
+            val backfills = buildList {
+                for (index in 0 until backfillJson.length()) {
+                    val item = backfillJson.optJSONObject(index) ?: continue
+                    add(HistoricalBackfillSummary(
+                        year = item.optInt("year"),
+                        status = item.optString("status"),
+                        rowsSeen = item.optLong("rows_seen"),
+                        rowsUpserted = item.optLong("rows_upserted"),
+                        completedAt = item.optString("completed_at").takeIf { it.isNotBlank() && it != "null" }
+                    ))
+                }
+            }
+            return MarketIntegrityStatus(
+                exchange = json.optString("exchange", exchange.uppercase()),
+                status = json.optString("status", "UNKNOWN"),
+                latestReport = report,
+                backfills = backfills
             )
         }
     }
