@@ -71,7 +71,18 @@ class QuantRepository(context: Context) : QuantDataRepository {
         withContext(Dispatchers.IO) { QuantApi.fetchUpstoxConfigured(session) }
 
     override suspend fun fetchLatestEodMarketSnapshot(session: QuantSession, exchange: String): EodMarketSnapshot =
-        withContext(Dispatchers.IO) { QuantApi.fetchLatestEodMarketSnapshot(session, exchange) }
+        withContext(Dispatchers.IO) {
+            try {
+                QuantApi.fetchLatestEodMarketSnapshot(session, exchange)
+            } catch (persistedFailure: Exception) {
+                try {
+                    QuantApi.fetchLatestEodMarketSnapshotDirect(session, exchange)
+                } catch (directFailure: Exception) {
+                    directFailure.addSuppressed(persistedFailure)
+                    throw directFailure
+                }
+            }
+        }
 
     override suspend fun requestMarketIngestion(
         session: QuantSession, exchange: String, force: Boolean
