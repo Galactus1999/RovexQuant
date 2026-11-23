@@ -31,12 +31,14 @@ async def app_intelligence_events(
     This is an on-demand discovery endpoint. It does not claim continuous monitoring,
     verified factual adjudication, company-level exposure, or stock recommendations.
     """
+    gdelt_available = True
     try:
         gdelt_articles = await gdelt_service.discover_articles(query, timespan=timespan, limit=limit)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except GdeltProviderError:
         gdelt_articles = []
+        gdelt_available = False
 
     official = await fetch_official_updates(query=query, limit=limit)
     articles = gdelt_articles + official["articles"]
@@ -52,7 +54,8 @@ async def app_intelligence_events(
         default=None,
     )
     return {
-        "source": "GDELT_DOC_API",
+        "source": "GDELT_DOC_API_PLUS_OFFICIAL_RSS",
+        "gdelt_status": "AVAILABLE" if gdelt_available else "UNAVAILABLE",
         "retrieved_at": retrieved_at,
         "latest_source_seen_at": latest_seen_at,
         "timestamp_semantics": "GDELT indexed/seen timestamp; not publisher publication time",
