@@ -44,16 +44,16 @@ class QuantDashboardRegressionTest {
         }
         composeRule.onNodeWithTag("market.eod.snapshot").assertIsDisplayed()
         composeRule.onNodeWithText("END OF DAY").assertIsDisplayed()
-        composeRule.onNodeWithTag("market.ingestion.status").performScrollTo()
+        composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("market.ingestion.status"))
         composeRule.onNodeWithTag("market.ingestion.status").assertIsDisplayed()
         composeRule.onNodeWithText("Persisted EOD data", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithText("FIXTURE").performScrollTo()
+        composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasText("FIXTURE"))
         composeRule.onNodeWithText("FIXTURE").assertIsDisplayed()
-        composeRule.onNodeWithTag("market.feed.status").performScrollTo()
+        composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("market.feed.status"))
         composeRule.onNodeWithTag("market.feed.status").assertIsDisplayed()
-        composeRule.onNodeWithTag("market.sector.heading").performScrollTo()
+        composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("market.sector.heading"))
         composeRule.onNodeWithTag("market.sector.heading").assertIsDisplayed()
-        composeRule.onNodeWithTag("sector.index.NIFTY BANK").performScrollTo()
+        composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("sector.index.NIFTY BANK"))
         composeRule.onNodeWithTag("sector.index.NIFTY BANK").assertIsDisplayed()
     }
 
