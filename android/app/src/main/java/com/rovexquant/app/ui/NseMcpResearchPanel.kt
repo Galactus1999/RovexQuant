@@ -28,6 +28,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -39,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import org.json.JSONArray
 
 @Composable
 fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, onAttachToAi: ((String) -> Unit)? = null) {
@@ -58,7 +60,16 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
     var keyDeleting by remember { mutableStateOf(false) }
     var keyError by remember { mutableStateOf<String?>(null) }
     var confirmQuotaAction by remember { mutableStateOf(false) }
-    var enabledTools by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var enabledToolsJson by rememberSaveable { mutableStateOf("[]") }
+    val enabledTools = remember(enabledToolsJson) {
+        runCatching {
+            val array = JSONArray(enabledToolsJson)
+            buildSet { for (index in 0 until array.length()) add(array.getString(index)) }
+        }.getOrDefault(emptySet())
+    }
+    fun setEnabledTools(next: Set<String>) {
+        enabledToolsJson = JSONArray().apply { next.sorted().forEach(::put) }.toString()
+    }
     var showToolRegistry by remember { mutableStateOf(false) }
 
     val currentCatalog = catalogs.firstOrNull { it.server == server }
@@ -79,7 +90,7 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
                 val defaultNseTools = loaded.filter { it.server != "dalalos" }.flatMap { catalog ->
                     catalog.tools.filter { it.readOnly && !it.destructive }.map { "${catalog.server}:${it.name}" }
                 }.toSet()
-                enabledTools = enabledTools + defaultNseTools
+                setEnabledTools(enabledTools + defaultNseTools)
                 val selectedServer = if (targetServer == "both") server else targetServer
                 val selected = loaded.firstOrNull { it.server == selectedServer }?.tools
                     ?.firstOrNull { it.readOnly && !it.destructive && "${selectedServer}:${it.name}" in enabledTools + defaultNseTools }
@@ -177,7 +188,7 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
                             Checkbox(
                                 checked = checked,
                                 onCheckedChange = { enabled ->
-                                    enabledTools = if (enabled) enabledTools + key else enabledTools - key
+                                    setEnabledTools(if (enabled) enabledTools + key else enabledTools - key)
                                     if (!enabled && selectedTool?.name == tool.name) {
                                         selectedTool = null
                                         result = null
