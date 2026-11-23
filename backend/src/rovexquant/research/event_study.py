@@ -59,30 +59,26 @@ def calculate_event_window(
         close = float(bar["close"])
         peak = max(peak, close)
         drawdown = min(drawdown, close / peak - 1.0)
-    adjusted_asset_count = sum(bar.get("price_basis") == "CORPORATE_ACTION_ADJUSTED" for bar in ordered)
-    asset_price_basis = (
-        "CORPORATE_ACTION_ADJUSTED" if ordered and adjusted_asset_count == len(ordered)
-        else "RAW_CLOSE" if adjusted_asset_count == 0 else "MIXED_RAW_AND_ADJUSTED"
-    )
+    def _price_basis(observations: list[dict[str, Any]]) -> str:
+        adjusted_count = sum(
+            item.get("price_basis") == "CORPORATE_ACTION_ADJUSTED" for item in observations
+        )
+        return (
+            "CORPORATE_ACTION_ADJUSTED" if observations and adjusted_count == len(observations)
+            else "RAW_CLOSE" if adjusted_count == 0 else "MIXED_RAW_AND_ADJUSTED"
+        )
+
+    # Only prices that actually enter the requested calculations determine the basis.
+    used_asset_bars = [*pre_window, *window]
+    asset_price_basis = _price_basis(used_asset_bars)
     benchmark_metrics: dict[str, Any] = {
-        "benchmark_symbol": None,
+        "benchmark_symbol": benchmark_symbol if benchmark_bars else None,
         "market_adjusted_cumulative_return": None,
         "cumulative_abnormal_return": None,
         "benchmark_observations_matched": 0,
         "benchmark_price_basis": None,
     }
-    adjusted_benchmark_count = sum(
-        bar.get("price_basis") == "CORPORATE_ACTION_ADJUSTED" for bar in (benchmark_bars or [])
-    )
-    benchmark_price_basis = (
-        "CORPORATE_ACTION_ADJUSTED"
-        if benchmark_bars and adjusted_benchmark_count == len(benchmark_bars)
-        else "RAW_CLOSE" if adjusted_benchmark_count == 0 else "MIXED_RAW_AND_ADJUSTED"
-    )
-    benchmark_basis_compatible = bool(benchmark_bars) and (
-        asset_price_basis == benchmark_price_basis and asset_price_basis != "MIXED_RAW_AND_ADJUSTED"
-    )
-    if benchmark_basis_compatible:
+    if benchmark_bars:
         benchmark_ordered = sorted(
             (bar for bar in benchmark_bars
              if isinstance(bar.get("date"), str)
@@ -93,18 +89,27 @@ def calculate_event_window(
             key=lambda bar: bar["date"],
         )
         benchmark_before = [bar for bar in benchmark_ordered if bar["date"] < event_date.isoformat()]
-        benchmark_after = {bar["date"]: float(bar["close"]) for bar in benchmark_ordered
+        benchmark_after = {bar["date"]: bar for bar in benchmark_ordered
                            if bar["date"] >= event_date.isoformat()}
         if benchmark_before:
-            benchmark_anchor = float(benchmark_before[-1]["close"])
+            benchmark_anchor_bar = benchmark_before[-1]
             matched = [(bar, benchmark_after.get(bar["date"])) for bar in window]
-            matched = [(bar, close) for bar, close in matched if close is not None]
-            if benchmark_anchor > 0 and matched:
-                benchmark_return = matched[-1][1] / benchmark_anchor - 1.0
+            matched = [(bar, other) for bar, other in matched if other is not None]
+            benchmark_used_bars = [benchmark_anchor_bar, *[other for _, other in matched]]
+            benchmark_price_basis = _price_basis(benchmark_used_bars)
+            benchmark_metrics["benchmark_price_basis"] = benchmark_price_basis
+            benchmark_basis_compatible = (
+                asset_price_basis == benchmark_price_basis
+                and asset_price_basis != "MIXED_RAW_AND_ADJUSTED"
+            )
+            benchmark_anchor = float(benchmark_anchor_bar["close"])
+            if benchmark_basis_compatible and benchmark_anchor > 0 and matched:
+                benchmark_return = float(matched[-1][1]["close"]) / benchmark_anchor - 1.0
                 asset_return = float(matched[-1][0]["close"]) / anchor_close - 1.0
                 daily_abnormal = []
                 previous_asset, previous_benchmark = anchor_close, benchmark_anchor
-                for bar, benchmark_close in matched:
+                for bar, benchmark_bar in matched:
+                    benchmark_close = float(benchmark_bar["close"])
                     asset_daily = float(bar["close"]) / previous_asset - 1.0
                     benchmark_daily = benchmark_close / previous_benchmark - 1.0
                     daily_abnormal.append(asset_daily - benchmark_daily)
@@ -145,9 +150,9 @@ def calculate_event_window(
         "limitations": [
             "Market-adjusted return is descriptive and does not establish causation.",
             "Benchmark observations must match the asset's trading dates; unmatched dates are excluded.",
-            "Asset and benchmark must use the same adjustment basis; mismatched bases disable benchmark-relative output.",
+            "Price basis is computed from the exact anchor, pre-window and post-window observations used by this study; mismatched bases disable benchmark-relative output.",
             "Corporate-action adjustment follows the source dataset methodology; demergers, rights, buybacks and mergers are not scaled.",
-            "If adjusted bars are unavailable for any asset observation, raw close fallback is used.",
+            "If adjusted bars are unavailable for any asset observation in the selected window, raw close fallback is used; mixed selected-window bases are explicitly labelled.",
             "Corporate actions and market-wide confounders can affect the observed move.",
             "The event date is supplied by the researcher and is not independently verified.",
             "Only persisted EOD bars available to this account are included.",
