@@ -6,7 +6,6 @@ The backend runtime does not gain a heavyweight Parquet dependency.
 from __future__ import annotations
 
 import hashlib
-import os
 import tempfile
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -15,7 +14,7 @@ from uuid import uuid4
 
 import httpx
 
-from rovexquant.market_data.eod_store import EodStoreError, connect, normalize_snapshot_rows
+from rovexquant.market_data.eod_store import connect, normalize_snapshot_rows
 
 HF_DATASET = "https://huggingface.co/datasets/tejhq/indian-markets/resolve/main"
 MAX_PARQUET_BYTES = 512 * 1024 * 1024
@@ -156,12 +155,13 @@ def backfill_parquet_year(exchange: str, year: int) -> dict[str, Any]:
     run_id = ""
     try:
         with connect() as connection:
+            connection.autocommit = True
             run_id = _record_run(connection, market, year, source_url, source_sha256)
             db = duckdb.connect(":memory:")
             try:
                 cursor = db.execute(
                     """
-                    SELECT CAST(date AS VARCHAR), symbol, series, isin, name,
+                    SELECT CAST(date AS VARCHAR) AS trading_date, symbol, series, isin, name,
                            open, high, low, close, prev_close, volume, turnover, trades
                     FROM read_parquet(?)
                     ORDER BY date, symbol, series
@@ -194,7 +194,7 @@ def backfill_parquet_year(exchange: str, year: int) -> dict[str, Any]:
                         break
                     for values in batch:
                         row = dict(zip(columns, values, strict=True))
-                        trading_date = date.fromisoformat(str(row.pop("CAST(date AS VARCHAR)")))
+                        trading_date = date.fromisoformat(str(row.pop("trading_date")))
                         rows_seen += 1
                         if pending_date is not None and trading_date != pending_date:
                             flush_day()
