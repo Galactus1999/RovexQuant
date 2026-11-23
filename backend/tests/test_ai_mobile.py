@@ -11,26 +11,33 @@ from rovexquant.auth import issue_app_session
 from rovexquant.market_data.tejhq import TejHqDailyBar
 
 
+class FakeMessage:
+    content = "The EOD evidence is mixed; validate with out-of-sample tests."
+
+
+class FakeChoice:
+    message = FakeMessage()
+
+
+class FakeUsage:
+    prompt_tokens = 50
+    completion_tokens = 20
+    total_tokens = 70
+
+
 class FakeResponse:
-    status_code = 200
-    def json(self):
-        return {
-            "choices": [{"message": {"content": "The EOD evidence is mixed; validate with out-of-sample tests."}}],
-            "usage": {"prompt_tokens": 50, "completion_tokens": 20, "total_tokens": 70},
-        }
+    choices = [FakeChoice()]
+    usage = FakeUsage()
+    _hidden_params = {"response_cost": 0.0001}
 
 
-class FakeAsyncClient:
-    requests = []
-    def __init__(self, *args, **kwargs):
-        pass
-    async def __aenter__(self):
-        return self
-    async def __aexit__(self, *args):
-        return False
-    async def post(self, url, headers, json):
-        self.requests.append({"url": url, "headers": headers, "json": json})
+class FakeLiteLLM:
+    calls = []
+
+    async def acompletion(self, **kwargs):
+        self.calls.append(kwargs)
         return FakeResponse()
+
 
 
 @pytest.fixture
@@ -40,8 +47,9 @@ def mobile_client(monkeypatch):
     monkeypatch.setenv("QUANT_APP_SESSION_SIGNING_KEY", "x" * 48)
     monkeypatch.setenv("GROQ_API_KEY", "groq-server-secret")
     monkeypatch.setenv("GROQ_FALLBACK_MODEL", "groq-fallback-test-model")
-    monkeypatch.setattr(gateway.httpx, "AsyncClient", FakeAsyncClient)
-    FakeAsyncClient.requests = []
+    fake_litellm = FakeLiteLLM()
+    monkeypatch.setattr(gateway.litellm, "acompletion", fake_litellm.acompletion)
+    FakeLiteLLM.calls = []
     token, _ = issue_app_session("quant-test", "correct-password")
     return TestClient(app), {"Authorization": f"Bearer {token}"}
 
@@ -68,8 +76,11 @@ def test_mobile_chat_uses_app_session_and_server_provider_secret(mobile_client):
     })
     assert response.status_code == 200
     assert response.json()["content"].startswith("The EOD evidence")
-    assert FakeAsyncClient.requests[0]["headers"]["Authorization"] == "Bearer groq-server-secret"
-    assert FakeAsyncClient.requests[0]["json"]["messages"][0]["role"] == "system"
+    assert FakeLiteLLM.calls[0]["api_key"] == "groq-server-secret"
+    assert FakeLiteLLM.calls[0]["model"] == "groq/test-model"
+    assert FakeLiteLLM.calls[0]["messages"][0]["role"] == "system"
+    assert response.json()["cost_status"] == "LITELLM_PRICED"
+    assert response.json()["cost_usd"] == 0.0001
     assert "groq-server-secret" not in response.text
 
 
@@ -333,3 +344,21 @@ def test_short_provider_secrets_are_not_reflected_in_validation_errors(mobile_cl
     )
     assert upstox_response.status_code == 422
     assert upstox_secret not in upstox_response.text
+
+
+def test_task_specific_routes_are_validated_and_do_not_expose_credentials(monkeypatch):
+    monkeypatch.setenv("QUANT_AI_TASK_ROUTES", '{"research":{"provider_id":"groq","model":"research-model","fallback_providers":["openrouter"]},"claim_verification":{"provider_id":"openai","model":"verifier-model"}}')
+    routes = gateway.configured_task_routes()
+    assert routes["research"]["provider_id"] == "groq"
+    assert routes["research"]["model"] == "research-model"
+    assert "api_key" not in str(routes)
+    provider, model, fallbacks = gateway.resolve_task_route("research", None, None, None)
+    assert (provider, model, fallbacks) == ("groq", "research-model", ["openrouter"])
+
+
+def test_task_route_rejects_unknown_task_and_malformed_provider(monkeypatch):
+    with pytest.raises(gateway.GatewayError):
+        gateway.resolve_task_route("unknown", None, None, None)
+    monkeypatch.setenv("QUANT_AI_TASK_ROUTES", '{"research":{"provider_id":"unknown","model":"x"}}')
+    with pytest.raises(gateway.GatewayError):
+        gateway.configured_task_routes()
