@@ -349,10 +349,11 @@ jobs:
           if [[ "${ROVEX_ANDROID_STABLE_SIGNING:-false}" == "true" ]]; then
             APKSIGNER="$(find "$ANDROID_HOME" -type f -name apksigner -perm -u+x -print -quit)"
             test -n "$APKSIGNER"
-            SIGNER_SHA256="$("$APKSIGNER" verify --print-certs "$APK" | awk -F': ' '/Signer #1 certificate SHA-256 digest:/{print $2; exit}' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
             EXPECTED_SIGNER_SHA256="F4CA99694A5EECE4C00E0E27F8A7007659DB73F8BABECFF0E903C9BCE42EE729"
-            echo "APK_SIGNER_CERT_SHA256=$SIGNER_SHA256"
-            test "$SIGNER_SHA256" = "$EXPECTED_SIGNER_SHA256"
+            python android/scripts/verify_apk_signing.py \
+              --apksigner "$APKSIGNER" \
+              --apk "$APK" \
+              --expected-sha256 "$EXPECTED_SIGNER_SHA256"
           else
             echo "::notice::APK signature is ephemeral; artifact publication is disabled for this run."
           fi
