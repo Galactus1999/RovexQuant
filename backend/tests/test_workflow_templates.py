@@ -11,8 +11,13 @@ def test_workflow_templates_do_not_escape_github_or_shell_interpolation():
 
     escaped = []
     for workflow in workflow_files:
-        for line_number, line in enumerate(workflow.read_text(encoding="utf-8").splitlines(), start=1):
+        lines = workflow.read_text(encoding="utf-8").splitlines()
+        for line_number, line in enumerate(lines, start=1):
             if r"\${{" in line or r"\${" in line:
-                escaped.append(f"{workflow.relative_to(REPOSITORY_ROOT)}:{line_number}: {line}")
+                escaped.append(
+                    f"{workflow.relative_to(REPOSITORY_ROOT)}:{line_number}: {line}"
+                )
 
-    assert not escaped, "Escaped GitHub Actions or shell interpolation found:\\n" + "\\n".join(escaped)
+    assert not escaped, (
+        "Escaped GitHub Actions or shell interpolation found:\n" + "\n".join(escaped)
+    )
