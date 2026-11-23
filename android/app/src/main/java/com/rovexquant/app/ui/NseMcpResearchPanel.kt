@@ -437,4 +437,3 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
             modifier = Modifier.padding(horizontal = 3.dp)
         )
     }
-}
