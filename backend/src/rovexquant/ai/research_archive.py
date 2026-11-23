@@ -244,3 +244,39 @@ def get_ai_research_run(run_id: str) -> dict[str, Any] | None:
         if result.get(key) is not None:
             result[key] = str(result[key])
     return result
+
+
+def get_ai_token_budget_status() -> dict[str, Any]:
+    try:
+        daily_limit = max(0, int(os.getenv("QUANT_AI_DAILY_TOKEN_BUDGET", "0") or "0"))
+        monthly_limit = max(0, int(os.getenv("QUANT_AI_MONTHLY_TOKEN_BUDGET", "0") or "0"))
+    except ValueError as error:
+        raise EodStoreError("AI token budget configuration must use non-negative integers", 503) from error
+    try:
+        with connect() as connection:
+            values = {}
+            for period in ("day", "month"):
+                used = connection.execute(
+                    """
+                    SELECT COALESCE(SUM(
+                        CASE WHEN status = 'RUNNING'
+                        THEN COALESCE(NULLIF(token_usage->>'reserved_tokens', '')::BIGINT, 0)
+                        ELSE COALESCE(NULLIF(token_usage->>'total_tokens', '')::BIGINT, 0)
+                        END
+                    ), 0)
+                    FROM ai_research_runs WHERE created_at >= date_trunc(%s, NOW())
+                    """,
+                    (period,),
+                ).fetchone()[0]
+                limit = daily_limit if period == "day" else monthly_limit
+                used_value = int(used or 0)
+                values[period] = {
+                    "used_tokens": used_value,
+                    "limit_tokens": limit if limit > 0 else None,
+                    "remaining_tokens": max(0, limit - used_value) if limit > 0 else None,
+                }
+    except EodStoreError:
+        raise
+    except psycopg.Error as error:
+        raise EodStoreError("AI token budget status is unavailable") from error
+    return {"enabled": ai_token_budgets_enabled(), "daily": values["day"], "monthly": values["month"]}
