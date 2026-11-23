@@ -61,7 +61,7 @@ jobs:
           fi
           if [[ -n "${QUANT_MARKET_DATABASE_URL}" ]]; then
             TOKEN_DB="$(python -c 'import os; from urllib.parse import urlsplit; u=urlsplit(os.environ["QUANT_TOKEN_DATABASE_URL"] or os.environ["QUANT_TOKEN_MIGRATION_DATABASE_URL"]); print(((u.hostname or "").replace("-pooler.", "."),u.port,u.path))')"
-            MARKET_DB="$(python -c 'import os; from urllib.parse import urlsplit; u=urlsplit(os.environ["QUANT_MARKET_DATABASE_URL"]); print((u.hostname,u.port,u.path))')"
+            MARKET_DB="$(python -c 'import os; from urllib.parse import urlsplit; u=urlsplit(os.environ["QUANT_MARKET_DATABASE_URL"]); print(((u.hostname or "").replace("-pooler.", "."),u.port,u.path))')"
             if [[ "$TOKEN_DB" != "$MARKET_DB" && -z "${QUANT_MARKET_MIGRATION_DATABASE_URL}" ]]; then
               echo "::error::Separate QUANT_MARKET_DATABASE_URL requires QUANT_MARKET_MIGRATION_DATABASE_URL."
               exit 1
