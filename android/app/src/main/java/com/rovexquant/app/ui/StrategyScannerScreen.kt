@@ -38,6 +38,7 @@ fun StrategyScannerScreen(onOpenAi: () -> Unit = {}) {
     var localSummary by remember { mutableStateOf<OhlcvResearchSummary?>(null) }
     var loadingLocalData by remember { mutableStateOf(false) }
     var localDataError by remember { mutableStateOf<String?>(null) }
+    var expandedStrategy by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(context) {
         if (context.fileList().contains(OhlcvCsvResearch.STORAGE_FILE_NAME)) {
             loadingLocalData = true
@@ -87,7 +88,7 @@ fun StrategyScannerScreen(onOpenAi: () -> Unit = {}) {
         )
     }
     LazyColumn(modifier = Modifier.fillMaxSize().testTag("scanner.list"), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { SectionHeading("Find setups, not stories", "Strategy scanner.", "Separate playbooks for every holding period. Strategies are research candidates, not buy/sell recommendations.") }
+        item { SectionHeading("Research workbench", "Strategy scanner.", "Historical data first. No live signals until a strategy is validated.") }
         item {
             when {
                 loadingLocalData -> EmptyPanel("Loading local dataset", "Reading your privately stored historical CSV.")
@@ -132,13 +133,20 @@ fun StrategyScannerScreen(onOpenAi: () -> Unit = {}) {
                     Column(Modifier.weight(1f)) {
                         Text(strategy.name, color = MaterialTheme.colorScheme.onBackground, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(5.dp))
-                        Text(strategy.detail, color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
+                        if (expandedStrategy == strategy.name) {
+                            Spacer(Modifier.height(5.dp))
+                            Text(strategy.detail, color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
+                        }
                     }
                     Spacer(Modifier.width(8.dp))
-                    StatusPill(if (strategy.implemented) "Prototype" else "Planned", if (strategy.implemented) Mint else Gold)
+                    Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
+                        StatusPill(if (strategy.implemented) "Prototype" else "Planned", if (strategy.implemented) Gold else Muted)
+                        androidx.compose.material3.TextButton(onClick = { expandedStrategy = if (expandedStrategy == strategy.name) null else strategy.name }) {
+                            Text(if (expandedStrategy == strategy.name) "Less" else "Details")
+                        }
+                    }
                 }
-                Spacer(Modifier.height(10.dp))
-                Text(strategy.status.uppercase(), color = if (strategy.implemented) Mint else Muted, fontSize = 8.sp, letterSpacing = 1.sp, fontWeight = FontWeight.Bold)
+                Text(strategy.status.uppercase(), color = Muted, fontSize = 8.sp, letterSpacing = 1.sp, fontWeight = FontWeight.Bold)
             }
         }
         item {
@@ -157,7 +165,7 @@ fun StrategyScannerScreen(onOpenAi: () -> Unit = {}) {
                 }
             }
         }
-        item { EmptyPanel("Scanner scope", "This build scans one imported historical dataset. Multi-stock universe scanning, licensed live feeds, scheduling and alert delivery are not enabled yet.") }
+        item { Text("Not a validated trading system · multi-stock scanning and live alerts are not enabled.", color = Muted, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 4.dp)) }
     }
 }
 
