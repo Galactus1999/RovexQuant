@@ -68,7 +68,8 @@ interface QuantDataRepository {
         toDate: String,
         strategyContext: String,
         credentialId: String? = null,
-        fallbackProviders: List<String> = emptyList()
+        fallbackProviders: List<String> = emptyList(),
+        automaticTaskRouting: Boolean = false
     ): AiStrategyBrief
     suspend fun callNseMcpTool(
         session: QuantSession,
