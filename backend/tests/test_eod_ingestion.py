@@ -131,6 +131,7 @@ def test_latest_persisted_snapshot_reads_only_successful_postgres_batch(monkeypa
         ("RELIANCE", "Reliance Industries", "EQ", 110, 100, 1000, 110000, "PROVISIONAL", retrieved),
         ("HDFCBANK", "HDFC Bank", "EQ", 90, 100, 2000, 180000, "PROVISIONAL", retrieved),
         ("INFY", "Infosys", "EQ", 100, 100, 3000, 300000, "PROVISIONAL", retrieved),
+        ("BEML", "BEML Limited", "BE", 120, 100, 4000, 480000, "PROVISIONAL", retrieved),
     ]
 
     class Result:
@@ -166,6 +167,8 @@ def test_latest_persisted_snapshot_reads_only_successful_postgres_batch(monkeypa
     assert snapshot["data_mode"] == "END_OF_DAY"
     assert snapshot["trading_date"] == "2026-11-20"
     assert snapshot["quality_status"] == "PROVISIONAL"
+    assert snapshot["summary"]["total_rows"] == 4
+    assert snapshot["summary"]["equity_series_rows"] == 3
     assert snapshot["summary"]["priced_symbols"] == 3
     assert snapshot["summary"]["advances"] == 1
     assert snapshot["summary"]["declines"] == 1
