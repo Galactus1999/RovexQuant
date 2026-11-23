@@ -119,8 +119,11 @@ class QuantDashboardRegressionTest {
 
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.tool.market"))
         composeRule.onNodeWithTag("ai.tool.market").assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.tool.events"))
         composeRule.onNodeWithTag("ai.tool.events").assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.tool.macro"))
         composeRule.onNodeWithTag("ai.tool.macro").assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.tool.market"))
         composeRule.onNodeWithTag("ai.tool.market").performClick()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithText("NSE EOD snapshot attached", substring = true)
