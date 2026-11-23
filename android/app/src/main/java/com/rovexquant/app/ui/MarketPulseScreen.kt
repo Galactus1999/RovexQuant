@@ -174,7 +174,7 @@ fun MarketPulseScreen(
                 )
                 Text(
                     eodSnapshot?.let {
-                        "PostgreSQL · ${it.provider} · ${it.tradingDate} · ${it.pricedSymbols} priced symbols"
+                        "${if (it.dataOrigin == "POSTGRESQL") "PostgreSQL" else "Direct provider fallback · not persisted"} · ${it.provider} · ${it.tradingDate} · ${it.pricedSymbols} priced symbols"
                     } ?: "Automatically retrieving the latest available NSE trading session from TejHQ.",
                     color = Muted, fontSize = 10.sp, lineHeight = 15.sp
                 )
