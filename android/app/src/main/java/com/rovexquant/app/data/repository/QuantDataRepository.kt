@@ -57,7 +57,8 @@ interface QuantDataRepository {
         messages: List<AiChatMessage>,
         credentialId: String? = null,
         fallbackProviders: List<String> = emptyList(),
-        taskType: String = "chat"
+        taskType: String = "chat",
+        maxTokens: Int = 1200
     ): AiCompletion
     suspend fun requestAiStrategyBrief(
         session: QuantSession,
@@ -70,7 +71,8 @@ interface QuantDataRepository {
         strategyContext: String,
         credentialId: String? = null,
         fallbackProviders: List<String> = emptyList(),
-        automaticTaskRouting: Boolean = false
+        automaticTaskRouting: Boolean = false,
+        maxTokens: Int = 1400
     ): AiStrategyBrief
     suspend fun callNseMcpTool(
         session: QuantSession,
