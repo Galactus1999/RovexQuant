@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field, SecretStr, model_validator
 
 from rovexquant.ai.gateway import GatewayError, authorize_gateway, complete_chat, configured_providers, configured_task_routes, resolve_task_route
+from rovexquant.ai.claim_verifier import extract_research_source_refs, verify_research_claims
 from rovexquant.ai.providers import SUPPORTED
 from rovexquant.market_data import tejhq_service
 from rovexquant.market_data.tejhq_service import TejHqError
@@ -341,6 +342,10 @@ async def app_ai_chat(request: AIChatRequest):
             "max_tokens": request.max_tokens,
             "temperature": request.temperature,
         }
+        evidence_text = "\\n".join(
+            message["content"] for message in mobile_messages if message.get("role") == "user"
+        )
+        allowed_source_refs = extract_research_source_refs(evidence_text)
         archive_error = None
         try:
             run_id = reserve_ai_research_run(
@@ -350,6 +355,7 @@ async def app_ai_chat(request: AIChatRequest):
                 credential_id=request.credential_id,
                 request_payload=request_payload,
                 estimated_tokens=estimate_reserved_tokens(request_payload, request.max_tokens),
+                source_refs=[{"source_ref": ref} for ref in allowed_source_refs],
             )
         except EodStoreError as error:
             if ai_token_budgets_enabled() or error.status_code == 429:
@@ -372,9 +378,36 @@ async def app_ai_chat(request: AIChatRequest):
                 fail_ai_research_run(run_id)
             raise
 
+        verification = None
+        run_status = "SUCCEEDED"
+        if request.task_type in {"research", "macro_analysis", "filing_extraction"}:
+            try:
+                verification = await verify_research_claims(
+                    draft=completion.get("content", ""),
+                    evidence_text=evidence_text,
+                    allowed_source_refs=allowed_source_refs,
+                    research_provider=completion.get("provider_id", provider_id),
+                    research_model=completion.get("model", model),
+                )
+            except Exception as error:
+                verification = {
+                    "status": "VERIFICATION_FAILED",
+                    "method": "SECOND_MODEL_WITH_EXACT_QUOTE_VALIDATION",
+                    "summary": f"Verifier failed safely: {error}",
+                    "claims": [],
+                }
+            completion["verification"] = verification
+            if verification.get("status") == "VERIFIED":
+                run_status = "VERIFIED"
+            elif verification.get("status") == "PARTIALLY_VERIFIED":
+                run_status = "PARTIALLY_VERIFIED"
+            elif verification.get("status") == "REJECTED":
+                run_status = "REJECTED"
+            else:
+                run_status = "VERIFICATION_PENDING"
         if run_id:
             try:
-                finish_ai_research_run(run_id, completion)
+                finish_ai_research_run(run_id, completion, status=run_status, verification=verification)
                 completion["run_id"] = run_id
                 completion["archive_status"] = "PERSISTED"
             except EodStoreError as error:
@@ -470,6 +503,7 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
                         estimated_tokens=estimate_reserved_tokens(request_payload, 1400),
                         source_refs=[{
                             "provider": provider_id,
+                            "source_id": "tejhq_eod_adjusted",
                             "data_mode": "END_OF_DAY_ADJUSTED",
                             "exchange": request.exchange,
                             "symbol": request.symbol.upper(),
@@ -494,12 +528,43 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
                     fallback_providers=route_fallbacks,
                     task_type="research",
                 )
+                verification = await verify_research_claims(
+                    draft=completion.get("content", ""),
+                    evidence_text=json.dumps(user_evidence, ensure_ascii=False, separators=(",", ":"), sort_keys=True),
+                    allowed_source_refs=["tejhq_eod_adjusted"],
+                    research_provider=completion.get("provider_id", route_provider),
+                    research_model=completion.get("model", route_model),
+                )
+                completion["verification"] = verification
+                verification_status = verification.get("status", "VERIFICATION_PENDING")
+                terminal_status = (
+                    "VERIFIED" if verification_status == "VERIFIED" else
+                    "PARTIALLY_VERIFIED" if verification_status == "PARTIALLY_VERIFIED" else
+                    "REJECTED" if verification_status == "REJECTED" else
+                    "VERIFICATION_PENDING"
+                )
                 if run_id:
                     try:
-                        finish_ai_research_run(run_id, completion)
-                        research_run = {"run_id": run_id, "archive_status": "PERSISTED"}
+                        finish_ai_research_run(
+                            run_id, completion, status=terminal_status, verification=verification
+                        )
+                        research_run = {
+                            "run_id": run_id, "archive_status": "PERSISTED",
+                            "verification_status": verification_status,
+                            "verification_summary": verification.get("summary", ""),
+                        }
                     except EodStoreError as archive_error:
-                        research_run = {"run_id": run_id, "archive_status": "UNAVAILABLE", "error": str(archive_error)}
+                        research_run = {
+                            "run_id": run_id, "archive_status": "UNAVAILABLE",
+                            "verification_status": verification_status,
+                            "error": str(archive_error),
+                        }
+                else:
+                    research_run = {
+                        "archive_status": "UNAVAILABLE",
+                        "verification_status": verification_status,
+                        "verification_summary": verification.get("summary", ""),
+                    }
             except EodStoreError as error:
                 ai_error = f"Data was recovered, but the AI token budget or research archive is unavailable: {error}"
             except GatewayError as error:
