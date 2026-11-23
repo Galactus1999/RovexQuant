@@ -56,6 +56,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
     var researchRuns by remember { mutableStateOf(emptyList<com.rovexquant.app.data.model.AiResearchRun>()) }
     var historyLoading by remember { mutableStateOf(false) }
     var historyError by remember { mutableStateOf<String?>(null) }
+    var aiBudgetStatus by remember { mutableStateOf<com.rovexquant.app.data.model.AiBudgetStatus?>(null) }
     var model by rememberSaveable { mutableStateOf("") }
     var messages by remember { mutableStateOf(emptyList<AiChatMessage>()) }
     var chatInput by rememberSaveable { mutableStateOf("") }
@@ -90,6 +91,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
             }
             try {
                 researchRuns = repository.fetchAiResearchRuns(session)
+                aiBudgetStatus = repository.fetchAiBudgetStatus(session)
                 historyError = null
             } catch (failure: Exception) {
                 historyError = failure.message ?: "Research history is unavailable."
@@ -428,6 +430,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                                 scope.launch {
                                     try {
                                         researchRuns = repository.fetchAiResearchRuns(session)
+                                        aiBudgetStatus = repository.fetchAiBudgetStatus(session)
                                     } catch (cancelled: CancellationException) {
                                         throw cancelled
                                     } catch (failure: Exception) {
@@ -441,6 +444,12 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                 }
                 Text("Completed AI runs are saved with their task, model, source references and token counts. Prompt and response content is retained for reproducibility when the backend database is available.", color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
                 historyError?.let { Text("History unavailable: " + it, color = Gold, fontSize = 9.sp, lineHeight = 14.sp) }
+                aiBudgetStatus?.let { budget ->
+                    val daily = if (budget.dailyLimitTokens != null) budget.dailyUsedTokens.toString() + " / " + budget.dailyLimitTokens + " tokens" else budget.dailyUsedTokens.toString() + " tokens · no daily cap"
+                    val monthly = if (budget.monthlyLimitTokens != null) budget.monthlyUsedTokens.toString() + " / " + budget.monthlyLimitTokens + " tokens" else budget.monthlyUsedTokens.toString() + " tokens · no monthly cap"
+                    Text("HARD TOKEN BUDGETS · " + if (budget.enabled) "ENABLED" else "DISABLED", color = if (budget.enabled) Mint else Gold, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Text("Daily: " + daily + "    Monthly: " + monthly, color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
+                }
                 if (historyLoading && researchRuns.isEmpty()) CircularProgressIndicator()
                 if (researchRuns.isEmpty() && historyError == null && !historyLoading) {
                     Text("No archived research runs yet.", color = Muted, fontSize = 10.sp)
