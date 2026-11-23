@@ -351,3 +351,65 @@ def test_task_route_rejects_unknown_task_and_malformed_provider(monkeypatch):
     monkeypatch.setenv("QUANT_AI_TASK_ROUTES", '{"research":{"provider_id":"unknown","model":"x"}}')
     with pytest.raises(gateway.GatewayError):
         gateway.configured_task_routes()
+
+
+def test_strategy_brief_uses_configured_research_route_only_when_opted_in(monkeypatch):
+    from rovexquant.api.routers import ai as ai_router
+
+    bars = [
+        TejHqDailyBar(
+            date=date.fromordinal(date(2026, 1, 1).toordinal() + i),
+            open=100.0 + i, high=102.0 + i, low=99.0 + i,
+            close=101.0 + i, volume=1000 + i,
+            adjusted_close=101.0 + i, adjustment_factor=1.0,
+        )
+        for i in range(40)
+    ]
+
+    async def fake_fetch(*args, **kwargs):
+        return "tejhq_eod", bars
+
+    async def fake_complete(**kwargs):
+        assert kwargs["provider_id"] is None
+        assert kwargs["model"] is None
+        assert kwargs["task_type"] == "research"
+        return {
+            "provider_id": "groq",
+            "model": "configured-research-model",
+            "content": "Evidence-bounded research commentary.",
+            "usage": {"prompt_tokens": 120, "completion_tokens": 80, "total_tokens": 200},
+            "task_type": "research",
+            "fallback_used": False,
+        }
+
+    monkeypatch.setattr(ai_router.tejhq_service, "fetch_ohlcv", fake_fetch)
+    monkeypatch.setattr(ai_router, "complete_chat", fake_complete)
+    request = ai_router.AIStrategyBriefRequest(
+        provider_id=None,
+        model=None,
+        automatic_task_routing=True,
+        exchange="NSE",
+        symbol="RELIANCE",
+        from_date=date(2026, 1, 1),
+        to_date=date(2026, 2, 10),
+        strategy_context="Review the swing setup.",
+    )
+    result = asyncio.run(ai_router.app_ai_strategy_brief(request))
+    assert result["ai"]["provider_id"] == "groq"
+    assert result["ai"]["task_type"] == "research"
+
+
+def test_strategy_brief_rejects_manual_provider_with_automatic_routing():
+    from pydantic import ValidationError
+    from rovexquant.api.routers.ai import AIStrategyBriefRequest
+
+    with pytest.raises(ValidationError):
+        AIStrategyBriefRequest(
+            provider_id="groq",
+            model="test-model",
+            automatic_task_routing=True,
+            symbol="RELIANCE",
+            from_date=date(2026, 1, 1),
+            to_date=date(2026, 2, 10),
+            strategy_context="Review the swing setup.",
+        )
