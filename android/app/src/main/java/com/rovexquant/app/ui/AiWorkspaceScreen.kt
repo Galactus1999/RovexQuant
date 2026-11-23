@@ -569,6 +569,13 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                     if (aiResult != null) {
                         Eyebrow("AI strategy review · ${aiResult.providerId} / ${aiResult.model}")
                         Spacer(Modifier.height(7.dp))
+                        Text(
+                            "Task ${aiResult.taskType} · ${aiResult.totalTokens} tokens · " +
+                                (aiResult.costUsd?.let { "estimated USD ${"%.6f".format(Locale.US, it)}" }
+                                    ?: "cost unknown (${aiResult.costStatus})"),
+                            color = Muted, fontSize = 9.sp, lineHeight = 14.sp
+                        )
+                        Spacer(Modifier.height(7.dp))
                         Text(aiResult.content, color = MaterialTheme.colorScheme.onBackground, fontSize = 12.sp, lineHeight = 19.sp)
                         if (aiResult.fallbackUsed) {
                             Spacer(Modifier.height(7.dp))
