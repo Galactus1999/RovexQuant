@@ -41,14 +41,9 @@ private fun auditResearchCitations(output: String, evidence: String): CitationAu
     Regex("""macroKey=([^;\s]+);[^\n]*?period=([^;\s]+)""").findAll(evidence).forEach {
         allowedRefs += "macro:${it.groupValues[1]}:${it.groupValues[2]}"
     }
-    evidence.lineSequence().forEach { line ->
-        val newsId = Regex("""news_id=([^;\s]+)""").find(line)?.groupValues?.get(1)
-        if (newsId != null) {
-            allowedRefs += "filing:$newsId"
-            val page = Regex("""source_page=(\d+)""").find(line)?.groupValues?.get(1)
-            if (page != null) allowedRefs += "filing:$newsId:page:$page"
-        }
-    }
+    Regex("""["']?news_id["']?\\s*[:=]\\s*["']?([^"'\\s,}]+)""")
+        .findAll(evidence)
+        .forEach { allowedRefs += "filing:${it.groupValues[1]}" }
 
     val sourceUrls = Regex("""https?://[^\s)\]]+""").findAll(evidence)
         .map { it.value.trimEnd('.', ',', ';') }.toSet()
@@ -119,7 +114,7 @@ fun AiResearchBriefingPanel(
 
         Every factual paragraph must cite one or more exact supplied references using
         [market:EOD:TRADING_DATE], [macro:SERIES_KEY:PERIOD], [event:EVENT_ID],
-        [filing:NEWS_ID] or [filing:NEWS_ID:page:PAGE], or an exact source URL copied from
+        [filing:NEWS_ID], or an exact source URL copied from
         the evidence. For filing facts preserve source_quote, source_page, filed_at, as_of and
         stale status. Do not invent or alter a reference. If no supplied
         reference supports a statement, label it unverified or omit it. Keep the brief concise,
