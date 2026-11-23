@@ -154,11 +154,15 @@ def fail_ai_research_run(run_id: str, error_code: str = "PROVIDER_FAILURE") -> N
             connection.execute(
                 """
                 UPDATE ai_research_runs SET status = 'FAILED',
-                    response_payload = %s, token_usage = %s, cost_status = 'UNKNOWN',
-                    completed_at = %s WHERE run_id = %s AND status = 'RUNNING'
+                    response_payload = %s,
+                    token_usage = jsonb_build_object(
+                        'total_tokens', COALESCE(NULLIF(token_usage->>'reserved_tokens', '')::BIGINT, 0),
+                        'usage_status', 'RESERVATION_FALLBACK'
+                    ),
+                    cost_status = 'UNKNOWN', completed_at = %s
+                WHERE run_id = %s AND status = 'RUNNING'
                 """,
-                (Jsonb({"error_code": error_code[:48]}), Jsonb({"reserved_tokens": 0, "total_tokens": 0}),
-                 datetime.now(timezone.utc), run_id),
+                (Jsonb({"error_code": error_code[:48]}), datetime.now(timezone.utc), run_id),
             )
     except (EodStoreError, psycopg.Error):
         # A failed archive update must not mask the original provider error.
