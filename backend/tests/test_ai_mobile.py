@@ -501,8 +501,9 @@ def test_ai_research_reservation_records_running_state(monkeypatch):
 
 
 
-def test_research_chat_runs_independent_verifier_and_persists_claim_status(client, monkeypatch):
+def test_research_chat_runs_independent_verifier_and_persists_claim_status(mobile_client, monkeypatch):
     from rovexquant.api.routers import ai as ai_router
+    client, headers = mobile_client
 
     monkeypatch.setattr(ai_router, "resolve_task_route", lambda *args: ("groq", "research-model", []))
     monkeypatch.setattr(ai_router, "reserve_ai_research_run", lambda **kwargs: "00000000-0000-0000-0000-000000000001")
@@ -544,7 +545,7 @@ def test_research_chat_runs_independent_verifier_and_persists_claim_status(clien
 
     response = client.post(
         "/api/v1/app/ai/chat",
-        headers={"Authorization": "Bearer test-app-session"},
+        headers=headers,
         json={
             "task_type": "research",
             "messages": [{
