@@ -66,6 +66,12 @@ class QuantRepository(context: Context) : QuantDataRepository {
     override suspend fun fetchLatestEodMarketSnapshot(session: QuantSession, exchange: String): EodMarketSnapshot =
         withContext(Dispatchers.IO) { QuantApi.fetchLatestEodMarketSnapshot(session, exchange) }
 
+    override suspend fun requestMarketIngestion(
+        session: QuantSession, exchange: String, force: Boolean
+    ): String = withContext(Dispatchers.IO) {
+        QuantApi.requestMarketIngestion(session, exchange, force)
+    }
+
     override suspend fun fetchMarketIngestionStatus(
         session: QuantSession, exchange: String
     ): MarketIngestionStatus = withContext(Dispatchers.IO) {
