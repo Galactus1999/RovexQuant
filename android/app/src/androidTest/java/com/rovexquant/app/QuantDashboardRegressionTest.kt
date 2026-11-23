@@ -38,23 +38,22 @@ class QuantDashboardRegressionTest {
         waitForDashboard()
         composeRule.onNodeWithTag("quant.header").assertIsDisplayed()
         composeRule.onNodeWithText("Market pulse.").assertIsDisplayed()
-        composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("market.eod.snapshot"))
+        composeRule.onNodeWithTag("market.eod.snapshot").performScrollTo()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithText("FIXTURE").fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithTag("market.eod.snapshot").assertIsDisplayed()
         composeRule.onNodeWithText("END OF DAY").assertIsDisplayed()
-        composeRule.onNodeWithTag("market.pulse.list")
-            .performScrollToNode(hasTestTag("market.ingestion.status"))
+        composeRule.onNodeWithTag("market.ingestion.status").performScrollTo()
         composeRule.onNodeWithTag("market.ingestion.status").assertIsDisplayed()
         composeRule.onNodeWithText("Persisted EOD data", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasText("FIXTURE"))
+        composeRule.onNodeWithText("FIXTURE").performScrollTo()
         composeRule.onNodeWithText("FIXTURE").assertIsDisplayed()
-        composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("market.feed.status"))
+        composeRule.onNodeWithTag("market.feed.status").performScrollTo()
         composeRule.onNodeWithTag("market.feed.status").assertIsDisplayed()
-        composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("market.sector.heading"))
+        composeRule.onNodeWithTag("market.sector.heading").performScrollTo()
         composeRule.onNodeWithTag("market.sector.heading").assertIsDisplayed()
-        composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("sector.index.NIFTY BANK"))
+        composeRule.onNodeWithTag("sector.index.NIFTY BANK").performScrollTo()
         composeRule.onNodeWithTag("sector.index.NIFTY BANK").assertIsDisplayed()
     }
 
@@ -84,6 +83,8 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithText("Quant Intelligence.").assertIsDisplayed()
         // The configured provider chip is the exact "Groq ✓" label. A substring
         // search for "Groq" also matches the separate API-console action.
+        composeRule.onNodeWithTag("ai.workspace.list")
+            .performScrollToNode(hasText("Groq ✓", substring = true))
         composeRule.onNodeWithText("Groq ✓").assertIsDisplayed()
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.model"))
         composeRule.onNodeWithTag("ai.model").performTextInput("test-model")
