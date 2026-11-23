@@ -68,6 +68,12 @@ class AIStrategyBriefRequest(BaseModel):
             raise ValueError("Requested history range exceeds the supported EOD window")
         return self
 
+    @model_validator(mode="after")
+    def validate_provider_model_pair(self):
+        if bool(self.provider_id) != bool(self.model):
+            raise ValueError("provider_id and model must be supplied together, or both omitted for task routing")
+        return self
+
 
 def _last_finite(values: list[Any]) -> float | None:
     for value in reversed(values):
@@ -353,24 +359,22 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
         }
         completion = None
         ai_error = None
-        if request.provider_id and request.model:
-            try:
-                completion = await complete_chat(
-                    provider_id=request.provider_id,
-                    model=request.model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": json.dumps(user_evidence, separators=(",", ":"), sort_keys=True)},
-                    ],
-                    max_tokens=1400,
-                    temperature=0.1,
-                    credential_id=request.credential_id,
-                    fallback_providers=request.fallback_providers,
-                )
-            except GatewayError as error:
-                ai_error = f"Data was recovered, but AI commentary is unavailable: {error}"
-        else:
-            ai_error = "Data was recovered. Configure an AI provider and model to generate the strategy commentary."
+        try:
+            completion = await complete_chat(
+                provider_id=request.provider_id,
+                model=request.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": json.dumps(user_evidence, separators=(",", ":"), sort_keys=True)},
+                ],
+                max_tokens=1400,
+                temperature=0.1,
+                credential_id=request.credential_id,
+                fallback_providers=request.fallback_providers,
+                task_type="research",
+            )
+        except GatewayError as error:
+            ai_error = f"Data was recovered, but AI commentary is unavailable: {error}"
 
         return {
             "provider": provider_id,
