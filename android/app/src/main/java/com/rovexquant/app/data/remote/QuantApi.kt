@@ -797,7 +797,7 @@ object QuantApi {
         val body = JSONObject()
             .put("messages", messageArray)
             .put("task_type", taskType)
-            .put("max_tokens", 1200)
+            .put("max_tokens", maxTokens)
             .put("temperature", 0.2)
         if (!providerId.isNullOrBlank()) body.put("provider_id", providerId)
         if (!model.isNullOrBlank()) body.put("model", model)
@@ -826,7 +826,8 @@ object QuantApi {
         strategyContext: String,
         credentialId: String?,
         fallbackProviders: List<String>,
-        automaticTaskRouting: Boolean = false
+        automaticTaskRouting: Boolean = false,
+        maxTokens: Int = 1400
     ): AiStrategyBrief {
         val body = JSONObject()
             .put("symbol", symbol.trim().uppercase())
@@ -835,6 +836,7 @@ object QuantApi {
             .put("to_date", toDate)
             .put("strategy_context", strategyContext)
             .put("automatic_task_routing", automaticTaskRouting)
+            .put("max_tokens", maxTokens)
         if (!providerId.isNullOrBlank()) body.put("provider_id", providerId)
         if (!model.isNullOrBlank()) body.put("model", model)
         if (!credentialId.isNullOrBlank()) body.put("credential_id", credentialId)
