@@ -70,11 +70,17 @@ def event_study(
             bars, event_date=event_date, pre_bars=pre_bars, post_bars=post_bars,
             benchmark_bars=benchmark_bars, benchmark_symbol=benchmark_symbol,
         )
+        price_basis = (
+            "CORPORATE_ACTION_ADJUSTED"
+            if bars and all(bar.get("price_basis") == "CORPORATE_ACTION_ADJUSTED" for bar in bars)
+            else "RAW_OR_MIXED_CLOSE"
+        )
         return {
             "exchange": exchange.upper(),
             "symbol": symbol.upper(),
             "data_mode": "END_OF_DAY",
             "source": "PERSISTED_MARKET_EOD_BARS",
+            "price_basis": price_basis,
             "observation_count": len(bars),
             **result,
         }
