@@ -73,7 +73,7 @@ After deployment, create an Upstox read-only Analytics Token in the Upstox devel
 3. Authenticated `GET /api/v1/app/market/index-instruments` returns official `NSE_INDEX` keys from the Upstox BOD file.
 4. Provision the Analytics Token and verify the admin status endpoint reports connected.
 5. Sign in to the Android app with the backend HTTPS URL.
-6. Do not accept live streaming as working yet: the backend currently sends the Upstox V3 subscription as a text frame, while the provider requires a binary frame. After the Phase 2 protocol correction, verify during an active NSE session that Nifty 50 / sector ticks, exchange timestamps, receive timestamps and quality labels update. A closed market or missing credential must remain visibly disconnected, never synthesize prices.
+6. The current source sends the Upstox V3 subscription envelope as a binary frame (covered by the market-stream regression test). The previously deployed `3b2923c` revision sent a text frame and is not protocol-compatible. After deploying the corrected source and provisioning an Analytics Token, verify during an active NSE session that Nifty 50 / sector ticks, exchange timestamps, receive timestamps and quality labels update. A closed market or missing credential must remain visibly disconnected; never synthesize prices.
 
 CI validates compilation, lint, static/backend tests and APK integrity. PostgreSQL unit tests use a controlled driver double; a real Neon connection and Render deployment must still be verified after the private connection URL is configured. CI cannot prove a real Upstox account token or live exchange stream without the operator's credential and deployed backend.
 
@@ -148,3 +148,13 @@ with the old key. Do not point the old key at already-rotated ciphertext.
 
 The production Neon procedure has not been executed in this phase. Treat the
 first production restore and rotation as operator-approved change windows.
+### Official exchange reconciliation: permission gate
+
+The historical backfill / official reconciliation workflow is operator-initiated; it is not scheduled. Daily EOD collection is handled separately by the TejHQ ingestion workflow.
+
+`download_official_bhavcopy()` denies direct NSE/BSE website downloads by default. Do not set the following repository Variables unless the corresponding exchange has granted express written permission for automated retrieval:
+
+- `NSE_OFFICIAL_AUTOMATED_DATA_PERMISSION=true` and `NSE_OFFICIAL_PERMISSION_REFERENCE=<permission reference>`
+- `BSE_OFFICIAL_AUTOMATED_DATA_PERMISSION=true` and `BSE_OFFICIAL_PERMISSION_REFERENCE=<permission reference>`
+
+The permission flags are exchange-specific. A permission for NSE does not authorize BSE retrieval. The workflow and backend both enforce this default-deny check. Without permission, use TejHQ for automatic EOD collection and the official NSE MCP only for on-demand informational queries. An operator-supplied official-file reconciliation path is not yet implemented; do not report official reconciliation as complete until a report exists.
