@@ -32,7 +32,8 @@ data class EodMarketSnapshot(
     val unchanged: Int,
     val topGainers: List<EodStockMove>,
     val topLosers: List<EodStockMove>,
-    val mostActiveByVolume: List<EodStockMove>
+    val mostActiveByVolume: List<EodStockMove>,
+    val dataOrigin: String = "POSTGRESQL"
 )
 
 data class EodStockMove(
