@@ -5,6 +5,7 @@ import com.rovexquant.app.data.local.QuantSessionStore
 import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiProvider
+import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.EodMarketSnapshot
 import com.rovexquant.app.data.model.IntelligenceFeed
@@ -58,11 +59,23 @@ class QuantRepository(context: Context) : QuantDataRepository {
     override suspend fun fetchAiProviders(session: QuantSession): List<AiProvider> =
         withContext(Dispatchers.IO) { QuantApi.fetchAiProviders(session) }
 
+    override suspend fun fetchAiTaskRoutes(session: QuantSession): Map<String, AiTaskRoute> =
+        withContext(Dispatchers.IO) { QuantApi.fetchAiTaskRoutes(session) }
+
     override suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) =
         withContext(Dispatchers.IO) { QuantApi.saveAiProviderCredential(session, providerId, apiKey) }
 
     override suspend fun deleteAiProviderCredential(session: QuantSession, providerId: String) =
         withContext(Dispatchers.IO) { QuantApi.deleteAiProviderCredential(session, providerId) }
+
+    override suspend fun saveDalalOsApiKey(session: QuantSession, apiKey: String) =
+        withContext(Dispatchers.IO) { QuantApi.saveDalalOsApiKey(session, apiKey) }
+
+    override suspend fun deleteDalalOsApiKey(session: QuantSession) =
+        withContext(Dispatchers.IO) { QuantApi.deleteDalalOsApiKey(session) }
+
+    override suspend fun fetchDalalOsConfigured(session: QuantSession): Boolean =
+        withContext(Dispatchers.IO) { QuantApi.fetchDalalOsConfigured(session) }
 
     override suspend fun saveUpstoxAnalyticsToken(session: QuantSession, token: String) =
         withContext(Dispatchers.IO) { QuantApi.saveUpstoxAnalyticsToken(session, token) }
@@ -108,29 +121,33 @@ class QuantRepository(context: Context) : QuantDataRepository {
 
     override suspend fun sendAiMessage(
         session: QuantSession,
-        providerId: String,
-        model: String,
+        providerId: String?,
+        model: String?,
         messages: List<AiChatMessage>,
         credentialId: String?,
-        fallbackProviders: List<String>
+        fallbackProviders: List<String>,
+        taskType: String,
+        maxTokens: Int
     ): AiCompletion = withContext(Dispatchers.IO) {
-        QuantApi.sendAiMessage(session, providerId, model, messages, credentialId, fallbackProviders)
+        QuantApi.sendAiMessage(session, providerId, model, messages, credentialId, fallbackProviders, taskType, maxTokens)
     }
 
     override suspend fun requestAiStrategyBrief(
         session: QuantSession,
-        providerId: String,
-        model: String,
+        providerId: String?,
+        model: String?,
         symbol: String,
         exchange: String,
         fromDate: String,
         toDate: String,
         strategyContext: String,
         credentialId: String?,
-        fallbackProviders: List<String>
+        fallbackProviders: List<String>,
+        automaticTaskRouting: Boolean,
+        maxTokens: Int
     ): AiStrategyBrief = withContext(Dispatchers.IO) {
         QuantApi.requestAiStrategyBrief(
-            session, providerId, model, symbol, exchange, fromDate, toDate, strategyContext, credentialId, fallbackProviders
+            session, providerId, model, symbol, exchange, fromDate, toDate, strategyContext, credentialId, fallbackProviders, automaticTaskRouting, maxTokens
         )
     }
 
@@ -138,9 +155,10 @@ class QuantRepository(context: Context) : QuantDataRepository {
         session: QuantSession,
         server: String,
         tool: String,
-        argumentsJson: String
+        argumentsJson: String,
+        confirmNonReadOnly: Boolean
     ): NseMcpResult = withContext(Dispatchers.IO) {
-        QuantApi.callNseMcpTool(session, server, tool, argumentsJson)
+        QuantApi.callNseMcpTool(session, server, tool, argumentsJson, confirmNonReadOnly)
     }
 
     override fun createMarketStream(
