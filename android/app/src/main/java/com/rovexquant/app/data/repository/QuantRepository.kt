@@ -120,8 +120,8 @@ class QuantRepository(context: Context) : QuantDataRepository {
 
     override suspend fun sendAiMessage(
         session: QuantSession,
-        providerId: String,
-        model: String,
+        providerId: String?,
+        model: String?,
         messages: List<AiChatMessage>,
         credentialId: String?,
         fallbackProviders: List<String>,
