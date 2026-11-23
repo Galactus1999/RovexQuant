@@ -14,6 +14,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
@@ -26,9 +27,13 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rovexquant.app.data.model.MarketEvent
+import com.rovexquant.app.data.model.MacroResearchSummary
+import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.data.repository.QuantDataRepository
 import com.rovexquant.app.feature.intelligence.IntelligenceCentreViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 @Composable
 fun IntelligenceCentreScreen(session: QuantSession, repository: QuantDataRepository) {
@@ -219,6 +224,175 @@ fun IntelligenceCentreScreen(session: QuantSession, repository: QuantDataReposit
                         Text("• $limitation", color = Muted, fontSize = 10.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 4.dp))
                     }
                 }
+            }
+        }
+        item { MacroResearchToolPanel(session, repository) }
+        item { EodEventStudyToolPanel(session, repository) }
+    }
+}
+
+@Composable
+private fun MacroResearchToolPanel(
+    session: QuantSession,
+    repository: QuantDataRepository
+) {
+    val scope = rememberCoroutineScope()
+    var loading by remember { mutableStateOf(false) }
+    var summary by remember { mutableStateOf<MacroResearchSummary?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    TerminalCard {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Eyebrow("Macro research · World Bank / FRED / AMFI")
+            StatusPill(if (summary == null) "Not loaded" else "Retrieved", if (summary == null) Gold else Mint)
+        }
+        Text(
+            "Pulls actual provider observations through the authenticated backend. Annual macro series, daily/monthly FRED series and mutual-fund NAV remain separate data types.",
+            color = Muted, fontSize = 10.sp, lineHeight = 15.sp
+        )
+        Button(
+            onClick = {
+                if (loading) return@Button
+                loading = true
+                error = null
+                scope.launch {
+                    try {
+                        summary = repository.fetchMacroResearch(session)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (failure: Exception) {
+                        error = failure.message ?: "Macro research request failed."
+                    } finally {
+                        loading = false
+                    }
+                }
+            },
+            enabled = !loading,
+            modifier = Modifier.fillMaxWidth().testTag("intelligence.macro.refresh")
+        ) {
+            if (loading) CircularProgressIndicator(modifier = Modifier.size(16.dp)) else Text("Fetch macro observations")
+        }
+        error?.let { Text(it, color = Coral, fontSize = 10.sp) }
+        summary?.let { data ->
+            Text("Retrieved ${data.retrievedAt.ifBlank { "timestamp not supplied" }}", color = Muted, fontSize = 9.sp)
+            if (data.worldBankSeries.isEmpty()) {
+                Text("World Bank observations unavailable in this response.", color = Gold, fontSize = 10.sp)
+            }
+            data.worldBankSeries.forEach { series ->
+                Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                    Text(series.label, color = MaterialTheme.colorScheme.onBackground, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "${series.latestValue?.let { "%.3f".format(java.util.Locale.US, it) } ?: "No observation"} ${series.unit} · ${series.latestPeriod ?: "period unavailable"} · ${series.frequency}",
+                        color = Cyan, fontSize = 10.sp
+                    )
+                    Text("Source: ${series.source}", color = Muted, fontSize = 9.sp)
+                }
+            }
+            Spacer(Modifier.height(7.dp))
+            Text(
+                "FRED: ${if (data.fredConfigured) "${data.fredSeriesCount} series returned" else "not configured on backend"} · AMFI: ${data.amfiNavCount} NAV records (mutual funds, not equity quotes)",
+                color = Muted, fontSize = 9.sp, lineHeight = 14.sp
+            )
+            data.amfiExamples.take(3).forEach { nav ->
+                Text("${nav.schemeName}: ₹${"%.4f".format(java.util.Locale.US, nav.nav)} · ${nav.navDate}", color = Muted, fontSize = 9.sp)
+            }
+            data.providerErrors.forEach { issue ->
+                Text("Partial source failure: $issue", color = Gold, fontSize = 9.sp, lineHeight = 13.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun EodEventStudyToolPanel(
+    session: QuantSession,
+    repository: QuantDataRepository
+) {
+    val scope = rememberCoroutineScope()
+    var symbol by rememberSaveable { mutableStateOf("RELIANCE") }
+    var eventDate by rememberSaveable { mutableStateOf("") }
+    var benchmark by rememberSaveable { mutableStateOf("NIFTY") }
+    var loading by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf<EventStudyResult?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    TerminalCard {
+        Eyebrow("Historical event study · persisted EOD bars")
+        Text(
+            "Measures pre/post-event price response from the stored EOD history. This is descriptive event-window analysis, not proof that the event caused the return.",
+            color = Muted, fontSize = 10.sp, lineHeight = 15.sp
+        )
+        OutlinedTextField(
+            value = symbol,
+            onValueChange = { symbol = it.uppercase().filter { ch -> ch.isLetterOrDigit() || ch in "&._-" }.take(40) },
+            label = { Text("NSE symbol") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().testTag("intelligence.event.symbol")
+        )
+        OutlinedTextField(
+            value = eventDate,
+            onValueChange = { eventDate = it.take(10) },
+            label = { Text("Event date · YYYY-MM-DD") },
+            placeholder = { Text("2026-10-15") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().testTag("intelligence.event.date")
+        )
+        OutlinedTextField(
+            value = benchmark,
+            onValueChange = { benchmark = it.uppercase().filter { ch -> ch.isLetterOrDigit() || ch in "&._-" }.take(40) },
+            label = { Text("Benchmark symbol · optional") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Button(
+            onClick = {
+                if (loading) return@Button
+                loading = true
+                error = null
+                result = null
+                scope.launch {
+                    try {
+                        result = repository.fetchEventStudy(
+                            session, symbol.trim(), eventDate.trim(), benchmark.trim().ifBlank { null }
+                        )
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (failure: Exception) {
+                        error = failure.message ?: "Event study failed."
+                    } finally {
+                        loading = false
+                    }
+                }
+            },
+            enabled = !loading && symbol.isNotBlank() && eventDate.matches(Regex("\\d{4}-\\d{2}-\\d{2}")),
+            modifier = Modifier.fillMaxWidth().testTag("intelligence.event.run")
+        ) {
+            if (loading) CircularProgressIndicator(modifier = Modifier.size(16.dp)) else Text("Run event-window analysis")
+        }
+        error?.let { Text(it, color = Coral, fontSize = 10.sp, lineHeight = 15.sp) }
+        result?.let { study ->
+            Spacer(Modifier.height(8.dp))
+            Text("${study.exchange}:${study.symbol} · event ${study.eventDate}", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            Text("Anchor ${study.anchorDate} · post window ${study.firstPostEventDate} to ${study.lastPostEventDate} · ${study.postBarsUsed} bars", color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
+            listOf(
+                "Pre-event return" to study.preEventReturn,
+                "Post-event cumulative return" to study.cumulativeReturn,
+                "Benchmark-adjusted return" to study.marketAdjustedReturn,
+                "Cumulative abnormal return" to study.cumulativeAbnormalReturn
+            ).forEach { (label, value) ->
+                Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(label, color = Muted, fontSize = 10.sp)
+                    Text(
+                        value?.let { "%+.2f%%".format(java.util.Locale.US, it * 100.0) } ?: "Unavailable",
+                        color = value?.let { if (it >= 0) Mint else Coral } ?: Gold,
+                        fontSize = 10.sp, fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            Text("Benchmark: ${study.benchmarkSymbol ?: "not used"} · matched observations: ${study.benchmarkMatches}", color = Muted, fontSize = 9.sp)
+            Text("Method: ${study.method}", color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
+            study.limitations.forEach { limitation ->
+                Text("• $limitation", color = Gold, fontSize = 9.sp, lineHeight = 14.sp, modifier = Modifier.padding(top = 4.dp))
             }
         }
     }

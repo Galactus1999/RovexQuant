@@ -4,7 +4,8 @@ data class AiProvider(
     val providerId: String,
     val configured: Boolean,
     val credentialIds: List<String>,
-    val defaultModel: String? = null
+    val defaultModel: String? = null,
+    val fallbackModelConfigured: Boolean = false
 )
 
 data class AiChatMessage(

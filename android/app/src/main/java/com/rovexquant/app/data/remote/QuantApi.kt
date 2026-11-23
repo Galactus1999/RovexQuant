@@ -628,7 +628,8 @@ object QuantApi {
                                 ids.optString(idIndex).takeIf { it.isNotBlank() }?.let(::add)
                             }
                         },
-                        defaultModel = item.optString("default_model").takeIf { it.isNotBlank() && it != "null" }
+                        defaultModel = item.optString("default_model").takeIf { it.isNotBlank() && it != "null" },
+                        fallbackModelConfigured = item.optBoolean("fallback_model_configured", false)
                     ))
                 }
             }
@@ -646,6 +647,19 @@ object QuantApi {
             .url("${session.baseUrl}/api/v1/app/ai/providers/$providerId/credential")
             .header("Authorization", "Bearer ${session.accessToken}")
             .put(body.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+        }
+    }
+
+    fun deleteAiProviderCredential(session: QuantSession, providerId: String) {
+        require(providerId in setOf("deepseek", "groq", "openrouter", "gemini", "openai")) { "Unsupported AI provider." }
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/ai/providers/$providerId/credential")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .delete()
             .build()
         masterHttp.newCall(request).execute().use { response ->
             val text = response.body?.string().orEmpty()
@@ -686,7 +700,8 @@ object QuantApi {
         providerId: String,
         model: String,
         messages: List<AiChatMessage>,
-        credentialId: String?
+        credentialId: String?,
+        fallbackProviders: List<String>
     ): AiCompletion {
         require(messages.isNotEmpty() && messages.size <= 12) { "Keep AI conversations to the latest 12 messages." }
         val boundedMessages = mutableListOf<AiChatMessage>()
@@ -710,6 +725,7 @@ object QuantApi {
             .put("max_tokens", 1200)
             .put("temperature", 0.2)
         if (!credentialId.isNullOrBlank()) body.put("credential_id", credentialId)
+        body.put("fallback_providers", JSONArray().apply { fallbackProviders.distinct().take(3).forEach { put(it) } })
         val request = Request.Builder()
             .url("${session.baseUrl}/api/v1/app/ai/chat")
             .header("Authorization", "Bearer ${session.accessToken}")
@@ -731,7 +747,8 @@ object QuantApi {
         fromDate: String,
         toDate: String,
         strategyContext: String,
-        credentialId: String?
+        credentialId: String?,
+        fallbackProviders: List<String>
     ): AiStrategyBrief {
         val body = JSONObject()
             .put("provider_id", providerId)
@@ -742,6 +759,7 @@ object QuantApi {
             .put("to_date", toDate)
             .put("strategy_context", strategyContext)
         if (!credentialId.isNullOrBlank()) body.put("credential_id", credentialId)
+        body.put("fallback_providers", JSONArray().apply { fallbackProviders.distinct().take(3).forEach { put(it) } })
         val request = Request.Builder()
             .url("${session.baseUrl}/api/v1/app/ai/strategy-brief")
             .header("Authorization", "Bearer ${session.accessToken}")

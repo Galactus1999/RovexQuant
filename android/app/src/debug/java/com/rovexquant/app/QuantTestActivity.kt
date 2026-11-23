@@ -106,6 +106,7 @@ class FakeQuantRepository(
         listOf(AiProvider("groq", true, listOf("default")))
 
     override suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) = Unit
+    override suspend fun deleteAiProviderCredential(session: QuantSession, providerId: String) = Unit
     override suspend fun saveUpstoxAnalyticsToken(session: QuantSession, token: String) = Unit
     override suspend fun fetchUpstoxConfigured(session: QuantSession): Boolean = false
     override suspend fun requestMarketIngestion(
@@ -233,7 +234,8 @@ class FakeQuantRepository(
         providerId: String,
         model: String,
         messages: List<AiChatMessage>,
-        credentialId: String?
+        credentialId: String?,
+        fallbackProviders: List<String>
     ) = AiCompletion(providerId, credentialId, model, "Deterministic AI fixture response.", false)
 
     override suspend fun requestAiStrategyBrief(
@@ -245,7 +247,8 @@ class FakeQuantRepository(
         fromDate: String,
         toDate: String,
         strategyContext: String,
-        credentialId: String?
+        credentialId: String?,
+        fallbackProviders: List<String>
     ) = AiStrategyBrief(
         provider = "tejhq_eod",
         dataMode = "END_OF_DAY",

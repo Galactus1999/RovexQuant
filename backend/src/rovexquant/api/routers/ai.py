@@ -199,6 +199,7 @@ def app_ai_providers():
                 "configured": item["configured"],
                 "credential_ids": item["credential_ids"],
                 "default_model": item["default_model"],
+                "fallback_model_configured": item["fallback_model_configured"],
             }
             for item in configured_providers()
         ]

@@ -41,6 +41,10 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
     var credentialInput by remember { mutableStateOf("") }
     var credentialSaving by remember { mutableStateOf(false) }
     var credentialError by remember { mutableStateOf<String?>(null) }
+    var credentialDeleting by remember { mutableStateOf(false) }
+    var providerTesting by remember { mutableStateOf(false) }
+    var providerTestStatus by remember { mutableStateOf<String?>(null) }
+    var selectedFallbacks by remember { mutableStateOf(emptySet<String>()) }
     var selectedProvider by rememberSaveable { mutableStateOf("") }
     var model by rememberSaveable { mutableStateOf("") }
     var messages by remember { mutableStateOf(emptyList<AiChatMessage>()) }
@@ -101,7 +105,8 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                     session = session,
                     providerId = selectedProvider,
                     model = model.trim(),
-                    messages = updated
+                    messages = updated,
+                    fallbackProviders = selectedFallbacks.toList()
                 )
                 messages = (updated + AiChatMessage("assistant", response.content)).takeLast(10)
             } catch (cancelled: CancellationException) {
@@ -129,7 +134,8 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                     exchange = exchange,
                     fromDate = fromDate.trim(),
                     toDate = toDate.trim(),
-                    strategyContext = strategyContext.trim()
+                    strategyContext = strategyContext.trim(),
+                    fallbackProviders = selectedFallbacks.toList()
                 )
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -148,9 +154,9 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
     ) {
         item {
             SectionHeading(
-                "Research copilot · evidence first",
-                "Quant AI.",
-                "Ask research questions, explain indicators and review strategy ideas. Market facts must come from verified data, never model guesses."
+                "AI Studio · model and tool integrations",
+                "Quant Intelligence.",
+                "Connect model providers, test credentials, configure failover and run approved research tools. Verified market evidence remains authoritative."
             )
         }
         item {
@@ -252,9 +258,88 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                     modifier = Modifier.fillMaxWidth().testTag("ai.model")
                 )
                 Text(
-                    "Keys are sent only over HTTPS, encrypted in the server-side vault, and not saved on this device or included in AI prompts. Provider acceptance is verified when you send the first request.",
+                    "API keys are encrypted in the server-side vault. They are not stored in this APK or sent in prompts. Provider connectivity is verified only by the explicit test below.",
                     color = Muted, fontSize = 10.sp, lineHeight = 15.sp
                 )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            if (providerTesting || selectedProvider.isBlank() || model.isBlank()) return@Button
+                            providerTesting = true
+                            providerTestStatus = null
+                            scope.launch {
+                                try {
+                                    val result = repository.sendAiMessage(
+                                        session = session, providerId = selectedProvider, model = model.trim(),
+                                        messages = listOf(AiChatMessage("user", "Reply with exactly ROVEX_AI_CONNECTION_OK."))
+                                    )
+                                    providerTestStatus = "Connected · ${result.providerId} / ${result.model}"
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (failure: Exception) {
+                                    providerTestStatus = "Connection failed: ${failure.message ?: "provider request failed"}"
+                                } finally { providerTesting = false }
+                            }
+                        },
+                        enabled = canUseAi && !providerTesting,
+                        modifier = Modifier.weight(1f).testTag("ai.provider.test")
+                    ) {
+                        if (providerTesting) CircularProgressIndicator(modifier = Modifier.size(16.dp)) else Text("Test connection")
+                    }
+                    if (providers.firstOrNull { it.providerId == selectedProvider }?.credentialIds?.contains("app") == true) {
+                        TextButton(
+                            enabled = !credentialDeleting && !credentialSaving,
+                            onClick = {
+                                credentialDeleting = true
+                                credentialError = null
+                                scope.launch {
+                                    try {
+                                        repository.deleteAiProviderCredential(session, selectedProvider)
+                                        providers = repository.fetchAiProviders(session)
+                                        providerTestStatus = "App-stored key removed. Environment-managed keys, if any, remain configured."
+                                    } catch (cancelled: CancellationException) {
+                                        throw cancelled
+                                    } catch (failure: Exception) {
+                                        credentialError = failure.message ?: "Unable to remove provider key."
+                                    } finally { credentialDeleting = false }
+                                }
+                            }
+                        ) { Text(if (credentialDeleting) "Removing…" else "Remove app key") }
+                    }
+                }
+                providerTestStatus?.let {
+                    Text(it, color = if (it.startsWith("Connected")) Mint else Gold, fontSize = 10.sp, lineHeight = 15.sp)
+                }
+                val fallbackOptions = configuredProviders.filter { it.providerId != selectedProvider && it.fallbackModelConfigured }
+                Spacer(Modifier.height(8.dp))
+                Eyebrow("Automatic failover · transient errors only")
+                if (fallbackOptions.isEmpty()) {
+                    Text("Failover becomes available when another configured provider has a server-side fallback model.", color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
+                } else {
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                        fallbackOptions.forEach { candidate ->
+                            FilterChip(
+                                selected = candidate.providerId in selectedFallbacks,
+                                onClick = {
+                                    selectedFallbacks = if (candidate.providerId in selectedFallbacks) selectedFallbacks - candidate.providerId
+                                    else (selectedFallbacks + candidate.providerId).take(3).toSet()
+                                },
+                                label = { Text(candidate.providerId.replaceFirstChar { it.uppercase() }) }
+                            )
+                        }
+                    }
+                    Text("Fallback providers need a server-side fallback model and credential. Authentication and entitlement errors never silently switch providers.", color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
+                }
+                credentialError?.let { Text(it, color = Coral, fontSize = 10.sp, lineHeight = 15.sp) }
+            }
+        }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionHeading("Connected research tools", "NSE MCP.", "Discover permitted read-only exchange research tools and explicitly attach a selected result to an AI request.")
+                NseMcpResearchPanel(session, repository) { context ->
+                    chatInput = (context + "\n\n" + chatInput).take(10000)
+                    chatError = null
+                }
             }
         }
         item {
