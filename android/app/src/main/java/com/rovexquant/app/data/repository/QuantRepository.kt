@@ -21,6 +21,7 @@ import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.data.remote.MarketStreamController
 import com.rovexquant.app.data.remote.QuantApi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -74,9 +75,13 @@ class QuantRepository(context: Context) : QuantDataRepository {
         withContext(Dispatchers.IO) {
             try {
                 QuantApi.fetchLatestEodMarketSnapshot(session, exchange)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (persistedFailure: Exception) {
                 try {
                     QuantApi.fetchLatestEodMarketSnapshotDirect(session, exchange)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (directFailure: Exception) {
                     directFailure.addSuppressed(persistedFailure)
                     throw directFailure
