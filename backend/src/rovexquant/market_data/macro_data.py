@@ -62,12 +62,12 @@ async def fetch_world_bank(indicators: list[str] | None = None) -> dict[str, Any
     if unknown:
         raise ValueError(f"Unsupported World Bank indicator: {unknown[0]}")
     retrieved = datetime.now(timezone.utc).isoformat()
-    output = []
-    for key in selected:
+
+    async def fetch_one(key: str) -> dict[str, Any]:
         code, label, frequency, unit = WORLD_BANK_INDICATORS[key]
         payload = await _get_json(
             f"{WORLD_BANK_ENDPOINT}/{code}",
-            {"format": "json", "per_page": 15, "date": "2000:2100"},
+            {"format": "json", "per_page": 100, "date": "1960:2100"},
         )
         if not isinstance(payload, list) or len(payload) < 2 or not isinstance(payload[1], list):
             raise MacroProviderError("World Bank returned an invalid indicator payload")
@@ -80,9 +80,10 @@ async def fetch_world_bank(indicators: list[str] | None = None) -> dict[str, Any
                 year = int(row["date"])
             except (TypeError, ValueError):
                 continue
-            observations.append({"period": str(year), "value": value})
+            if math.isfinite(value):
+                observations.append({"period": str(year), "value": value})
         observations.sort(key=lambda item: item["period"])
-        output.append({
+        return {
             "key": key, "indicator_code": code, "label": label,
             "country": "IND", "frequency": frequency, "unit": unit,
             "observations": observations,
@@ -92,7 +93,10 @@ async def fetch_world_bank(indicators: list[str] | None = None) -> dict[str, Any
             "source_url": f"https://api.worldbank.org/v2/country/IND/indicator/{code}",
             "retrieved_at": retrieved,
             "data_delay": "LOW_FREQUENCY_OFFICIAL_RELEASE",
-        })
+        }
+
+    # Bounded to the five-indicator allowlist; concurrent fetch avoids serial API latency.
+    output = await asyncio.gather(*(fetch_one(key) for key in selected))
     return {"provider": "WORLD_BANK", "retrieved_at": retrieved, "series": output}
 
 
