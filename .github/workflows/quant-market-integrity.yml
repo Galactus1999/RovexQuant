@@ -12,7 +12,7 @@ on:
         required: true
         default: reconcile
         type: choice
-        options: [reconcile, backfill]
+        options: [reconcile, backfill, backfill_derived]
       exchange:
         description: Exchange for manual operation
         required: true
@@ -84,6 +84,11 @@ jobs:
         working-directory: backend
         run: |
           python scripts/backfill_hf_parquet.py --exchange "\${{ inputs.exchange }}" --year "\${{ inputs.year }}"
+      - name: Import adjusted prices, corporate actions and symbol history
+        if: github.event_name == 'workflow_dispatch' && inputs.operation == 'backfill_derived'
+        working-directory: backend
+        run: |
+          python scripts/backfill_derived_parquet.py --exchange "${{ inputs.exchange }}" --year "${{ inputs.year }}"
       - name: Reconcile official NSE and BSE reports
         if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.operation == 'reconcile')
         working-directory: backend
