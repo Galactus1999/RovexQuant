@@ -248,6 +248,39 @@ jobs:
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           gradle-version: "8.14.8"
+      - name: Configure persistent Android development signing
+        shell: bash
+        env:
+          QUANT_ANDROID_KEYSTORE_BASE64: ${{ secrets.QUANT_ANDROID_KEYSTORE_BASE64 }}
+          QUANT_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.QUANT_ANDROID_KEYSTORE_PASSWORD }}
+          QUANT_ANDROID_KEY_ALIAS: ${{ secrets.QUANT_ANDROID_KEY_ALIAS }}
+          QUANT_ANDROID_KEY_PASSWORD: ${{ secrets.QUANT_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          REQUIRED=(QUANT_ANDROID_KEYSTORE_BASE64 QUANT_ANDROID_KEYSTORE_PASSWORD QUANT_ANDROID_KEY_ALIAS QUANT_ANDROID_KEY_PASSWORD)
+          MISSING=()
+          for name in "${REQUIRED[@]}"; do
+            if [[ -z "${!name:-}" ]]; then MISSING+=("$name"); fi
+          done
+          if [[ "${#MISSING[@]}" -gt 0 ]]; then
+            if [[ "$GITHUB_REF" == "refs/heads/main" ]]; then
+              echo "::error::Persistent signing secrets are mandatory for main-branch APK builds. Missing: ${MISSING[*]}"
+              exit 1
+            fi
+            echo "::warning::No persistent signing secrets available; this non-main/PR build is test-only and its APK will not be published."
+            exit 0
+          fi
+          KEYSTORE="$RUNNER_TEMP/rovexquant-development.jks"
+          printf '%s' "$QUANT_ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
+          test -s "$KEYSTORE"
+          keytool -list -keystore "$KEYSTORE" -storepass "$QUANT_ANDROID_KEYSTORE_PASSWORD" -alias "$QUANT_ANDROID_KEY_ALIAS" >/dev/null
+          {
+            echo "ROVEX_ANDROID_KEYSTORE_PATH=$KEYSTORE"
+            echo "ROVEX_ANDROID_KEYSTORE_PASSWORD=$QUANT_ANDROID_KEYSTORE_PASSWORD"
+            echo "ROVEX_ANDROID_KEY_ALIAS=$QUANT_ANDROID_KEY_ALIAS"
+            echo "ROVEX_ANDROID_KEY_PASSWORD=$QUANT_ANDROID_KEY_PASSWORD"
+            echo "ROVEX_ANDROID_STABLE_SIGNING=true"
+          } >> "$GITHUB_ENV"
       - name: Validate Android project structure
         shell: bash
         run: |
@@ -280,7 +313,7 @@ jobs:
       - name: Enforce Android runtime dependency license allowlist
         run: python android/scripts/check_dependency_licenses.py
       - name: Verify locked dependencies and compile Quant APK with strict verification
-        run: gradle -p android :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug :app:testDebugUnitTest --dependency-verification=strict --no-daemon --stacktrace
+        run: gradle -p android -PquantVersionCode="$GITHUB_RUN_NUMBER" :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug :app:testDebugUnitTest --dependency-verification=strict --no-daemon --stacktrace
       - name: Verify APK identity, contents and archive integrity
         shell: bash
         run: |
@@ -310,7 +343,21 @@ jobs:
           echo "APK_APPLICATION_ID=$APP_ID"
           echo "APK_VERSION_NAME=$VERSION"
           test "$APP_ID" = "com.rovexquant.app"
+          APK_VERSION_CODE="$("$ANALYZER" manifest version-code "$APK")"
+          echo "APK_VERSION_CODE=$APK_VERSION_CODE"
+          test "$APK_VERSION_CODE" = "$GITHUB_RUN_NUMBER"
+          if [[ "${ROVEX_ANDROID_STABLE_SIGNING:-false}" == "true" ]]; then
+            APKSIGNER="$(find "$ANDROID_HOME" -type f -name apksigner -perm -u+x -print -quit)"
+            test -n "$APKSIGNER"
+            SIGNER_SHA256="$("$APKSIGNER" verify --print-certs "$APK" | awk -F': ' '/Signer #1 certificate SHA-256 digest:/{print $2; exit}' | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+            EXPECTED_SIGNER_SHA256="F4CA99694A5EECE4C00E0E27F8A7007659DB73F8BABECFF0E903C9BCE42EE729"
+            echo "APK_SIGNER_CERT_SHA256=$SIGNER_SHA256"
+            test "$SIGNER_SHA256" = "$EXPECTED_SIGNER_SHA256"
+          else
+            echo "::notice::APK signature is ephemeral; artifact publication is disabled for this run."
+          fi
       - name: Upload Quant debug APK
+        if: ${{ success() && env.ROVEX_ANDROID_STABLE_SIGNING == 'true' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Quant-Android-Debug-APK
