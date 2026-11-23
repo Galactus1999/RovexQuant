@@ -346,7 +346,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
             TerminalCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Eyebrow("AI conversation")
-                    StatusPill(if (chatLoading) "Thinking" else "Ready", if (chatLoading) Gold else Mint)
+                    StatusPill(if (chatLoading) "Thinking" else if (canUseAi) "Configured" else "Setup required", if (chatLoading) Gold else if (canUseAi) Mint else Gold)
                 }
                 Spacer(Modifier.height(8.dp))
                 if (messages.isEmpty()) {
