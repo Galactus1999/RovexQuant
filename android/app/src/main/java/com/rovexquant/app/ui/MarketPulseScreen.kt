@@ -87,6 +87,8 @@ fun MarketPulseScreen(
     var freshnessClock by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val niftyTrace = remember { mutableStateListOf<Double>() }
     val bankTrace = remember { mutableStateListOf<Double>() }
+    val nifty = indexKeys["NIFTY 50"]?.let { ticks[it] }
+    val bank = indexKeys["NIFTY BANK"]?.let { ticks[it] }
 
     LaunchedEffect(ticks) {
         while (true) {
@@ -133,8 +135,6 @@ fun MarketPulseScreen(
             else -> filtered.sortedByDescending { ticks[it.instrumentKey]?.changePercent ?: Double.NEGATIVE_INFINITY }
         }
     }
-    val nifty = indexKeys["NIFTY 50"]?.let { ticks[it] }
-    val bank = indexKeys["NIFTY BANK"]?.let { ticks[it] }
     val rankedSectors = remember(ticks, indexKeys, freshnessClock) {
         coreSectorIndices.sortedByDescending { sector ->
             indexKeys[sector.benchmark]?.let { ticks[it] }?.let { quote ->
