@@ -199,7 +199,7 @@ fun SettingsScreen(
                 )
                 ingestionError?.let { Text(it, color = Coral, fontSize = 10.sp) }
                 ingestionStatus?.errorMessage?.takeIf { ingestionStatus?.status == "FAILED" }?.let {
-                    Text(it, color = Coral, fontSize = 10.sp)
+                    Text("The latest data refresh did not complete.", color = Coral, fontSize = 10.sp)
                 }
                 Button(
                     onClick = {
@@ -212,7 +212,7 @@ fun SettingsScreen(
                             } catch (cancelled: CancellationException) {
                                 throw cancelled
                             } catch (failure: Exception) {
-                                ingestionError = failure.message ?: "Database status unavailable"
+                                ingestionError = "Data status temporarily unavailable. Try again."
                             } finally {
                                 ingestionLoading = false
                             }
