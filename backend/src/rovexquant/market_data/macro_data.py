@@ -114,8 +114,8 @@ async def fetch_fred(series: list[str] | None = None) -> dict[str, Any]:
     if unknown:
         raise ValueError(f"Unsupported FRED series: {unknown[0]}")
     retrieved = datetime.now(timezone.utc).isoformat()
-    output = []
-    for key in selected:
+
+    async def fetch_one(key: str) -> dict[str, Any]:
         code, label, frequency, unit = FRED_SERIES[key]
         payload = await _get_json(FRED_ENDPOINT, {
             "series_id": code, "api_key": api_key, "file_type": "json",
@@ -130,7 +130,7 @@ async def fetch_fred(series: list[str] | None = None) -> dict[str, Any]:
             except (KeyError, TypeError, ValueError):
                 continue
         observations.sort(key=lambda item: item["period"])
-        output.append({
+        return {
             "key": key, "series_id": code, "label": label,
             "frequency": frequency, "unit": unit,
             "observations": observations,
@@ -140,7 +140,9 @@ async def fetch_fred(series: list[str] | None = None) -> dict[str, Any]:
             "source_url": f"https://fred.stlouisfed.org/series/{code}",
             "retrieved_at": retrieved,
             "data_delay": "OFFICIAL_RELEASE_FREQUENCY",
-        })
+        }
+
+    output = await asyncio.gather(*(fetch_one(key) for key in selected))
     return {"provider": "FRED", "configured": True, "retrieved_at": retrieved, "series": output}
 
 
@@ -292,12 +294,14 @@ async def fetch_rbi_dbie_mirror(series: list[str] | None = None) -> dict[str, An
     if not base.startswith("https://"):
         raise ValueError("RBIH_DBIE_BASE_URL must use HTTPS")
     retrieved = datetime.now(timezone.utc).isoformat()
-    output = []
-    for key in selected:
+
+    async def fetch_one(key: str) -> dict[str, Any]:
         slug, label, frequency, unit = RBI_DBIE_SERIES[key]
         payload = await _get_json(f"{base}/data/sdmx-{slug}.json", {})
         observations, as_of, mirror_label = _extract_dbie_observations(payload)
-        output.append({
+        if not observations:
+            raise MacroProviderError(f"DBIE mirror series {slug} contained no usable observations")
+        return {
             "key": key, "series_id": slug.upper(), "label": mirror_label or label,
             "frequency": frequency, "unit": unit, "observations": observations,
             "latest_period": observations[-1]["period"], "latest_value": observations[-1]["value"],
@@ -306,7 +310,9 @@ async def fetch_rbi_dbie_mirror(series: list[str] | None = None) -> dict[str, An
             "source_url": f"{base}/data/sdmx-{slug}.json",
             "retrieved_at": retrieved, "data_delay": "MIRROR_LAST_SCRAPE_NOT_LIVE",
             "primary_source": "https://data.rbi.org.in/DBIE/",
-        })
+        }
+
+    output = await asyncio.gather(*(fetch_one(key) for key in selected))
     return {
         "provider": "RBIH_DBIE_MIRROR", "configured": True, "retrieved_at": retrieved,
         "data_vintage": "RBIH_MIRROR_LAST_SCRAPE", "series": output,
