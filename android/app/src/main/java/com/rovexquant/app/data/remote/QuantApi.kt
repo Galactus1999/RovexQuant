@@ -544,13 +544,22 @@ object QuantApi {
         }
 
         val refresh = requestJson("/api/v1/app/research/macro/refresh", post = true)
-        val history = requestJson("/api/v1/app/research/macro/history?limit=2000")
-        val historyRows = history?.optJSONArray("observations") ?: JSONArray()
+        // Query each provider explicitly. This avoids an unfiltered mixed-provider
+        // history response masking a provider-specific read failure or truncation.
+        val worldBankHistory = requestJson("/api/v1/app/research/macro/history?provider=WORLD_BANK&limit=2000")
+        val rbiHistory = requestJson("/api/v1/app/research/macro/history?provider=RBIH_DBIE_MIRROR&limit=2000")
+        val fredHistory = requestJson("/api/v1/app/research/macro/history?provider=FRED&limit=2000")
+        val historyResponses = listOfNotNull(worldBankHistory, rbiHistory, fredHistory)
+        val historyRows = JSONArray()
+        historyResponses.forEach { response ->
+            val rows = response.optJSONArray("observations") ?: JSONArray()
+            for (index in 0 until rows.length()) historyRows.put(rows.optJSONObject(index))
+        }
         val latestBySeries = linkedMapOf<String, JSONObject>()
         val fredSeries = linkedSetOf<String>()
         for (index in 0 until historyRows.length()) {
             val item = historyRows.optJSONObject(index) ?: continue
-            val provider = item.optString("provider")
+            val provider = item.optString("provider").uppercase()
             val key = item.optString("series_key")
             if (provider == "FRED") fredSeries += key
             if (provider != "WORLD_BANK" && provider != "RBIH_DBIE_MIRROR") continue
@@ -616,7 +625,7 @@ object QuantApi {
                 ?.optBoolean("configured", false),
             fredSeriesCount = fredSeries.size,
             providerErrors = errors,
-            persistedObservationCount = history?.optInt("count") ?: 0,
+            persistedObservationCount = historyResponses.sumOf { it.optInt("count") },
             rbiDbieSeriesCount = latestBySeries.keys.count { it.startsWith("RBIH_DBIE_MIRROR:") },
             providerStatuses = providerStatuses
         )
