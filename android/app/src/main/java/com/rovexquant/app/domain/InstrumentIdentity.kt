@@ -9,13 +9,32 @@ enum class InstrumentType {
     SECTOR_INDEX
 }
 
-enum class OhlcvInterval(val key: String) {
-    DAILY("1d")
+enum class OhlcvInterval(
+    val key: String,
+    val apiUnit: String?,
+    val apiInterval: Int?,
+    val maximumHistoryDays: Long,
+    val isIntraday: Boolean,
+    val displayLabel: String
+) {
+    DAILY("1d", null, null, 6_200L, false, "1D"),
+    MINUTE_1("1m", "minutes", 1, 30L, true, "1m"),
+    MINUTE_5("5m", "minutes", 5, 30L, true, "5m"),
+    MINUTE_10("10m", "minutes", 10, 30L, true, "10m"),
+    MINUTE_15("15m", "minutes", 15, 30L, true, "15m"),
+    MINUTE_30("30m", "minutes", 30, 92L, true, "30m"),
+    HOUR_1("1h", "hours", 1, 92L, true, "1h"),
+    HOUR_4("4h", "hours", 4, 92L, true, "4h");
+
+    companion object {
+        val intraday: List<OhlcvInterval> = entries.filter { it.isIntraday }
+    }
 }
 
 enum class OhlcvProvider(val sourceLabel: String) {
     TEJHQ_EOD("TejHQ · NSE/BSE EOD"),
-    NSE_INDICES_PORTAL("NSE Indices historical portal")
+    NSE_INDICES_PORTAL("NSE Indices historical portal"),
+    UPSTOX_V3_INTRADAY("Upstox V3 intraday candles")
 }
 
 data class InstrumentIdentity(
@@ -98,19 +117,27 @@ object InstrumentCatalog {
 
     private val equityPattern = Regex("^[A-Z0-9][A-Z0-9&-]{0,29}$")
 
-    fun resolve(symbol: String, exchange: String = "NSE"): InstrumentIdentity {
+    fun resolve(
+        symbol: String,
+        exchange: String = "NSE",
+        interval: OhlcvInterval = OhlcvInterval.DAILY
+    ): InstrumentIdentity {
         val market = exchange.trim().uppercase(Locale.ROOT)
         require(market == "NSE" || market == "BSE") { "Only NSE and BSE instruments are supported." }
         val canonical = symbol.trim().uppercase(Locale.ROOT).replace(Regex("\\s+"), " ")
         require(canonical.isNotEmpty()) { "Enter an instrument symbol." }
+        if (interval.isIntraday) {
+            require(market == "NSE") { "Upstox V3 intraday candles are currently supported for NSE only." }
+        }
 
         if (market == "NSE" && canonical in broadMarketIndices) {
             return InstrumentIdentity(
                 exchange = market,
                 canonicalSymbol = canonical,
                 instrumentType = InstrumentType.BROAD_MARKET_INDEX,
-                provider = OhlcvProvider.NSE_INDICES_PORTAL,
-                providerSymbol = canonical
+                provider = if (interval.isIntraday) OhlcvProvider.UPSTOX_V3_INTRADAY else OhlcvProvider.NSE_INDICES_PORTAL,
+                providerSymbol = canonical,
+                interval = interval
             )
         }
         if (market == "NSE" && canonical in sectorIndices) {
@@ -118,8 +145,9 @@ object InstrumentCatalog {
                 exchange = market,
                 canonicalSymbol = canonical,
                 instrumentType = InstrumentType.SECTOR_INDEX,
-                provider = OhlcvProvider.NSE_INDICES_PORTAL,
-                providerSymbol = indexProviderAliases[canonical] ?: canonical
+                provider = if (interval.isIntraday) OhlcvProvider.UPSTOX_V3_INTRADAY else OhlcvProvider.NSE_INDICES_PORTAL,
+                providerSymbol = indexProviderAliases[canonical] ?: canonical,
+                interval = interval
             )
         }
         require(!canonical.startsWith("NIFTY") && !canonical.startsWith("BANKNIFTY")) {
@@ -132,8 +160,9 @@ object InstrumentCatalog {
             exchange = market,
             canonicalSymbol = canonical,
             instrumentType = InstrumentType.EQUITY,
-            provider = OhlcvProvider.TEJHQ_EOD,
-            providerSymbol = canonical
+            provider = if (interval.isIntraday) OhlcvProvider.UPSTOX_V3_INTRADAY else OhlcvProvider.TEJHQ_EOD,
+            providerSymbol = canonical,
+            interval = interval
         )
     }
 
