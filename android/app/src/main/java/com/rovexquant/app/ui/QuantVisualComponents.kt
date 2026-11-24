@@ -26,6 +26,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.max
+import java.time.Duration
+import java.time.Instant
 
 private val VisualPositive = Color(0xFF00D98B)
 private val VisualNegative = Color(0xFFFF5D70)
@@ -197,5 +199,15 @@ fun EmptyCandlestickChart(
         Text(message, color = Color(0xFFB7C4D4), fontSize = 11.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(5.dp))
         TextButton(onClick = onAction) { Text(actionLabel) }
+    }
+}
+
+fun Instant.relativeAgeLabel(now: Instant = Instant.now()): String {
+    val seconds = Duration.between(this, now).seconds.coerceAtLeast(0L)
+    return when {
+        seconds < 60 -> "Updated just now"
+        seconds < 3_600 -> "Updated ${seconds / 60}m ago"
+        seconds < 86_400 -> "Updated ${seconds / 3_600}h ago"
+        else -> "Updated ${seconds / 86_400}d ago"
     }
 }
