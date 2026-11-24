@@ -297,7 +297,7 @@ fun InstrumentResearchScreen(
                 .testTag("instrument.chart.timeframes"),
             horizontalArrangement = Arrangement.spacedBy(5.dp)
         ) {
-            (OhlcvInterval.intraday + OhlcvInterval.DAILY).forEach { timeframe ->
+            (listOf(OhlcvInterval.DAILY) + OhlcvInterval.intraday).forEach { timeframe ->
                 FilterChip(
                     enabled = !refreshing,
                     selected = selectedInterval == timeframe,
