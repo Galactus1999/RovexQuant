@@ -42,6 +42,13 @@ class InstrumentIdentityTest {
         assertThrows(IllegalArgumentException::class.java) { InstrumentCatalog.resolve("NIFTY 100") }
     }
 
+    @Test fun bseEquityUsesEquityProvider() {
+        val identity = InstrumentCatalog.resolve("TCS", "BSE")
+        assertEquals("BSE", identity.exchange)
+        assertEquals(InstrumentType.EQUITY, identity.instrumentType)
+        assertEquals(OhlcvProvider.TEJHQ_EOD, identity.provider)
+    }
+
     @Test fun typedCacheIdentitySeparatesInstrumentTypeAndInterval() {
         val equity = InstrumentCatalog.resolve("RELIANCE")
         val index = InstrumentCatalog.resolve("NIFTY 50")
