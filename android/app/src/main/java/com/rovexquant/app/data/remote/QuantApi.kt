@@ -580,7 +580,7 @@ object QuantApi {
                 latestPeriod = item.optString("period").takeIf { it.isNotBlank() && it != "null" },
                 latestValue = item.optDouble("value", Double.NaN).takeIf { it.isFinite() },
                 source = provider + (metadata?.optString("source")?.let { " · $it" } ?: ""),
-                provider = provider
+                provider = item.optString("provider").uppercase()
             )
         }
 
