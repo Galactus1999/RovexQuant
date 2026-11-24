@@ -126,6 +126,7 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
                     symbol = instrument.first,
                     displayName = instrument.second,
                     repository = workspace.repository,
+                    session = activeSession,
                     onBack = { selectedInstrument = null }
                 )
             } else {
