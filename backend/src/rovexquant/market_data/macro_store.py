@@ -211,8 +211,8 @@ def latest_macro_observations(
                        provider, series_key, period, value, unit, frequency, label,
                        source_url, source_sha256, retrieved_at, metadata
                 FROM macro_observations
-                WHERE (%s IS NULL OR provider=%s)
-                  AND (%s IS NULL OR series_key=%s)
+                WHERE (%s::text IS NULL OR provider=%s::text)
+                  AND (%s::text IS NULL OR series_key=%s::text)
                 ORDER BY provider, series_key, period, retrieved_at DESC
                 LIMIT %s
                 """,
@@ -221,7 +221,7 @@ def latest_macro_observations(
     except (EodStoreError, psycopg.Error) as error:
         if isinstance(error, EodStoreError):
             raise
-        raise EodStoreError("Macro history tables are unavailable; apply database migrations") from error
+        raise EodStoreError("Macro observation history query failed; verify the database schema and query") from error
     return {
         "provider": source, "series_key": series_key,
         "observations": [{
