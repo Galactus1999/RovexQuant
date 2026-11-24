@@ -22,9 +22,9 @@ enum class OhlcvInterval(
     MINUTE_5("5m", "minutes", 5, 30L, true, "5m"),
     MINUTE_10("10m", "minutes", 10, 30L, true, "10m"),
     MINUTE_15("15m", "minutes", 15, 30L, true, "15m"),
-    MINUTE_30("30m", "minutes", 30, 92L, true, "30m"),
-    HOUR_1("1h", "hours", 1, 92L, true, "1h"),
-    HOUR_4("4h", "hours", 4, 92L, true, "4h");
+    MINUTE_30("30m", "minutes", 30, 90L, true, "30m"),
+    HOUR_1("1h", "hours", 1, 90L, true, "1h"),
+    HOUR_4("4h", "hours", 4, 90L, true, "4h");
 
     companion object {
         val intraday: List<OhlcvInterval> = entries.filter { it.isIntraday }
