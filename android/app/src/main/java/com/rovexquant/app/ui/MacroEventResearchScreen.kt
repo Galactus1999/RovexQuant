@@ -286,7 +286,8 @@ private fun EventMetric(label: String, value: Double?, modifier: Modifier = Modi
 fun EventDatePickerField(
     value: String,
     onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    label: String = "Event date"
 ) {
     var show by remember { mutableStateOf(false) }
     val selected = remember(value) { runCatching { LocalDate.parse(value) }.getOrNull() }
@@ -298,7 +299,7 @@ fun EventDatePickerField(
         onValueChange = {},
         readOnly = true,
         modifier = modifier,
-        label = { Text("Event date") },
+        label = { Text(label) },
         placeholder = { Text("Choose date") },
         trailingIcon = {
             TextButton(onClick = { show = true }) { Text("Calendar") }
