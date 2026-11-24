@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 import math
 import os
+import re
 from typing import Any
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
@@ -21,15 +22,15 @@ class UpstoxCandleError(Exception):
 
 
 _INTERVALS = {
-    "1m": ("minutes", 1, 31),
-    "5m": ("minutes", 5, 31),
-    "10m": ("minutes", 10, 31),
-    "15m": ("minutes", 15, 31),
+    "1m": ("minutes", 1, 30),
+    "5m": ("minutes", 5, 30),
+    "10m": ("minutes", 10, 30),
+    "15m": ("minutes", 15, 30),
     "30m": ("minutes", 30, 92),
     "1h": ("hours", 1, 92),
     "4h": ("hours", 4, 92),
 }
-_KEY_PATTERN = __import__("re").compile(
+_KEY_PATTERN = re.compile(
     r"^(?:NSE_EQ\\|INE[A-Z0-9]{9}|NSE_INDEX\\|[A-Za-z0-9 _&()./-]{1,80})$"
 )
 _MARKET_ZONE = ZoneInfo("Asia/Kolkata")
