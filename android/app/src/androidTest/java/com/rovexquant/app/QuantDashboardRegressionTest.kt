@@ -122,8 +122,8 @@ class QuantDashboardRegressionTest {
         }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("instrument.chart.timeframe.5m").assertIsSelected()
-        composeRule.onNodeWithTag("instrument.chart.time.labels").assertIsDisplayed()
-        composeRule.onNodeWithText("09:15", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithTag("instrument.chart.time.labels").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("09:15", substring = true).performScrollTo().assertIsDisplayed()
         composeRule.onAllNodesWithTag("instrument.chart.volume.toggle").assertCountEquals(0)
         composeRule.waitUntil(15_000) {
             runCatching {
