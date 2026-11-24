@@ -13,6 +13,7 @@ import com.rovexquant.app.data.model.IntelligenceFeed
 import com.rovexquant.app.data.model.MarketIndexInstrument
 import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.MarketTick
+import com.rovexquant.app.data.model.InstrumentQuoteSnapshot
 import com.rovexquant.app.data.model.MarketIngestionStatus
 import com.rovexquant.app.data.model.MacroResearchSummary
 import com.rovexquant.app.data.model.MarketIntegrityStatus
@@ -123,6 +124,12 @@ class QuantRepository(context: Context) : QuantDataRepository {
         session: QuantSession, exchange: String
     ): MarketIngestionStatus = withContext(Dispatchers.IO) {
         QuantApi.fetchMarketIngestionStatus(session, exchange)
+    }
+
+    override suspend fun fetchInstrumentQuote(
+        session: QuantSession, symbol: String
+    ): InstrumentQuoteSnapshot? = withContext(Dispatchers.IO) {
+        QuantApi.fetchInstrumentQuote(session, symbol)
     }
 
     override suspend fun fetchIntelligenceEvents(
