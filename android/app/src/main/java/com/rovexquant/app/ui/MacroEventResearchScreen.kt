@@ -72,7 +72,7 @@ fun MacroEventResearchScreen(
             TerminalCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Eyebrow("India macro · World Bank")
-                    StatusPill(if (state.macro != null) "RETRIEVED" else "ON DEMAND", Cyan)
+                    StatusPill(if (state.macro != null) "AVAILABLE" else "PENDING", Cyan)
                 }
                 Text("Macroeconomic indicators", color = MaterialTheme.colorScheme.onBackground,
                     fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
@@ -83,7 +83,7 @@ fun MacroEventResearchScreen(
                 if (state.macroLoading && state.macro == null) {
                     CircularProgressIndicator(color = Mint, modifier = Modifier.align(Alignment.CenterHorizontally))
                 }
-                state.macroError?.let { EmptyPanel("Macro retrieval unavailable", it, Coral) }
+                state.macroError?.let { GracefulErrorState("Macro data delayed. Try again later.", onRetry = model::refreshMacro) }
                 state.macro?.let { MacroSummaryContent(it) }
             }
         }
@@ -100,7 +100,7 @@ fun MacroEventResearchScreen(
                     modifier = Modifier.fillMaxWidth().testTag("integrity.refresh")) {
                     Text(if (state.integrityLoading) "Checking…" else "Refresh status")
                 }
-                state.integrityError?.let { EmptyPanel("Integrity status unavailable", it, Coral) }
+                state.integrityError?.let { GracefulErrorState("Data verification unavailable. Try again later.", onRetry = model::refreshIntegrity) }
                 state.integrity?.latestReport?.let { report ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("${report.tradingDate} · ${report.status}", color = Mint, fontSize = 10.sp)
@@ -124,17 +124,11 @@ fun MacroEventResearchScreen(
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("US macro data", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold)
                     StatusPill(
-                        when {
-                            state.macro?.fredConfigured == null -> "UNKNOWN"
-                            state.macro?.fredConfigured == true -> "READY"
-                            else -> "SETUP NEEDED"
-                        },
+                        if (state.macro?.fredConfigured == true) "AVAILABLE" else "LIMITED",
                         if (state.macro?.fredConfigured == true) Mint else Gold
                     )
                 }
-                if (state.macro?.fredConfigured == true) {
-                    Text("${state.macro?.fredSeriesCount ?: 0} series available", color = Muted, fontSize = 10.sp)
-                }
+                Text(if ((state.macro?.fredSeriesCount ?: 0) > 0) "${state.macro?.fredSeriesCount} US macro series available" else "US macro data currently unavailable. Showing last-known observations where available.", color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
             }
         }
         item {
@@ -172,7 +166,7 @@ fun MacroEventResearchScreen(
                 if (state.eventLoading && state.eventStudy == null) {
                     CircularProgressIndicator(color = Mint, modifier = Modifier.align(Alignment.CenterHorizontally))
                 }
-                state.eventError?.let { EmptyPanel("Event study unavailable", it, Coral) }
+                state.eventError?.let { GracefulErrorState("Event study unavailable. Check the inputs and retry.", onRetry = model::runEventStudy) }
                 state.eventStudy?.let { EventStudyContent(it) }
             }
         }
@@ -184,23 +178,7 @@ private fun MacroSummaryContent(summary: MacroResearchSummary) {
     if (summary.persistedObservationCount > 0) {
         Text("${summary.persistedObservationCount} observations saved", color = Muted, fontSize = 9.sp)
     }
-    summary.providerStatuses.forEach { status ->
-        val parts = status.split(" · ")
-        val provider = when (parts.firstOrNull()?.uppercase()) {
-            "WORLD_BANK" -> "World Bank"
-            "RBIH_DBIE_MIRROR" -> "RBI data"
-            "FRED" -> "FRED"
-            "AMFI" -> "AMFI NAV"
-            else -> parts.firstOrNull().orEmpty().replace('_', ' ')
-        }
-        val state = parts.getOrNull(1)?.lowercase()?.replace('_', ' ').orEmpty()
-        val count = parts.getOrNull(2).orEmpty()
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(provider, color = Muted, fontSize = 9.sp)
-            Text(listOf(state, count).filter { it.isNotBlank() }.joinToString(" · "),
-                color = if (state == "failed") Coral else Muted, fontSize = 9.sp)
-        }
-    }
+    Text("Macro coverage · ${summary.persistedObservationCount} observations saved", color = Muted, fontSize = 9.sp)
     val groups = listOf(
         "WORLD_BANK" to "World Bank · India",
         "RBIH_DBIE_MIRROR" to "RBI mirror",
