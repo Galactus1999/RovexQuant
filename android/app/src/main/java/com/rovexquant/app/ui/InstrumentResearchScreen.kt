@@ -25,6 +25,7 @@ import com.rovexquant.app.data.local.TejHqOhlcvStore
 import com.rovexquant.app.data.local.TejHqOhlcvSyncManager
 import com.rovexquant.app.data.repository.QuantDataRepository
 import com.rovexquant.app.domain.InstrumentCatalog
+import com.rovexquant.app.domain.ChartSeriesMapper
 import com.rovexquant.app.domain.MarketOhlcvSeries
 import com.rovexquant.app.domain.OhlcvBar
 import java.time.Instant
@@ -72,7 +73,7 @@ fun InstrumentResearchScreen(
                     from = if (fullHistory) today.minusDays(6200) else today.minusYears(3),
                     to = today,
                     incremental = !fullHistory
-                )
+                ).also(ChartSeriesMapper::map)
             }
             series = result
         } catch (cancelled: CancellationException) {
