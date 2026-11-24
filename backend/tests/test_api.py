@@ -37,6 +37,37 @@ def test_indicator_endpoint_returns_warmup_values():
     assert len(response.json()["rsi"]) == 49
     assert len(response.json()["macd"][0]) == 49
 
+def test_indicator_endpoint_returns_aligned_ohlc_indicator_arrays_and_warmups():
+    closes = [100.0 + index * 0.5 for index in range(80)]
+    highs = [value + 1.0 for value in closes]
+    lows = [value - 1.0 for value in closes]
+    response = client.post(
+        "/api/v1/research/indicators",
+        headers=auth_headers(),
+        json={"close": closes, "high": highs, "low": lows},
+    )
+    assert response.status_code == 200
+    result = response.json()
+    assert len(result["sma"]) == len(closes)
+    assert len(result["ema"]) == len(closes)
+    assert len(result["rsi"]) == len(closes)
+    assert len(result["macd"]) == 3
+    assert all(len(series) == len(closes) for series in result["macd"])
+    assert all(len(series) == len(closes) for series in result["bollinger_bands"].values())
+    assert len(result["atr"]) == len(closes)
+    assert len(result["adx"]) == len(closes)
+    assert result["rsi"][:14] == [None] * 14
+    assert result["rsi"][14] is not None
+    assert result["atr"][:14] == [None] * 14
+    assert result["atr"][14] is not None
+    assert result["adx"][:27] == [None] * 27
+    assert result["adx"][27] is not None
+    assert result["macd"][0][:25] == [None] * 25
+    assert result["macd"][0][25] is not None
+    assert result["macd"][1][:33] == [None] * 33
+    assert result["macd"][1][33] is not None
+
+
 def test_indicator_endpoint_returns_sma_ema_and_bollinger_reference_values():
     response = client.post("/api/v1/research/indicators", headers=auth_headers(), json={
         "close": [1, 2, 3, 4, 5],
