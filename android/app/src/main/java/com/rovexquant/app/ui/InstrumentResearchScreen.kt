@@ -266,8 +266,8 @@ private fun InteractivePriceChart(
     val visibleBars = remember(bars, safeStart, safeEnd) {
         if (safeStart < safeEnd) bars.subList(safeStart, safeEnd) else emptyList()
     }
-    val sma20Values = remember(bars) { movingAverage(bars, 20) }
-    val sma50Values = remember(bars) { movingAverage(bars, 50) }
+    val sma20Values = remember(bars) { simpleMovingAverage(bars, 20) }
+    val sma50Values = remember(bars) { simpleMovingAverage(bars, 50) }
     val bar = bars.getOrNull(selected)
 
     Column {
@@ -390,7 +390,8 @@ private fun InteractivePriceChart(
     }
 }
 
-private fun movingAverage(bars: List<OhlcvBar>, period: Int): List<Double?> {
+internal fun simpleMovingAverage(bars: List<OhlcvBar>, period: Int): List<Double?> {
+    require(period > 0) { "Moving-average period must be positive." }
     val result = MutableList<Double?>(bars.size) { null }
     var rollingSum = 0.0
     for (index in bars.indices) {
