@@ -2,6 +2,9 @@ package com.rovexquant.app.data.repository
 
 import com.rovexquant.app.data.local.QuantSessionStore
 import com.rovexquant.app.domain.OhlcvBar
+import com.rovexquant.app.domain.InstrumentIdentity
+import com.rovexquant.app.domain.MarketOhlcvSeries
+import com.rovexquant.app.domain.OhlcvProvider
 import java.time.LocalDate
 import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiCompletion
@@ -47,6 +50,21 @@ interface QuantDataRepository {
     suspend fun fetchMarketIntegrityStatus(session: QuantSession, exchange: String = "NSE"): MarketIntegrityStatus
     suspend fun fetchMarketDataHealth(session: QuantSession, exchange: String = "NSE"): MarketDataHealth
     suspend fun fetchTejHqOhlcv(exchange: String, symbol: String, from: LocalDate, to: LocalDate): List<OhlcvBar>
+    suspend fun fetchInstrumentOhlcv(
+        instrument: InstrumentIdentity,
+        from: LocalDate,
+        to: LocalDate
+    ): MarketOhlcvSeries {
+        require(instrument.provider == OhlcvProvider.TEJHQ_EOD) {
+            "This repository implementation does not provide the selected instrument's history."
+        }
+        return MarketOhlcvSeries(
+            instrument = instrument,
+            bars = fetchTejHqOhlcv(instrument.exchange, instrument.providerSymbol, from, to),
+            volumeAvailable = true,
+            adjustmentStatus = "TejHQ raw end-of-day bhavcopy OHLCV"
+        )
+    }
     suspend fun fetchEventStudy(session: QuantSession, symbol: String, eventDate: String, benchmarkSymbol: String?): EventStudyResult
     suspend fun sendAiMessage(
         session: QuantSession,

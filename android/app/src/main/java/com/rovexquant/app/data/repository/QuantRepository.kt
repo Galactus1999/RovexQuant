@@ -22,7 +22,12 @@ import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.data.remote.MarketStreamController
 import com.rovexquant.app.data.remote.QuantApi
 import com.rovexquant.app.data.remote.TejHqOhlcvClient
+import com.rovexquant.app.data.remote.NiftyIndicesOhlcvClient
 import com.rovexquant.app.domain.OhlcvBar
+import com.rovexquant.app.domain.InstrumentIdentity
+import com.rovexquant.app.domain.MarketOhlcvSeries
+import com.rovexquant.app.domain.OhlcvProvider
+import java.time.Instant
 import java.time.LocalDate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -114,6 +119,32 @@ class QuantRepository(context: Context) : QuantDataRepository {
         exchange: String, symbol: String, from: LocalDate, to: LocalDate
     ): List<OhlcvBar> = withContext(Dispatchers.IO) {
         TejHqOhlcvClient.fetch(exchange, symbol, from, to)
+    }
+
+    override suspend fun fetchInstrumentOhlcv(
+        instrument: InstrumentIdentity,
+        from: LocalDate,
+        to: LocalDate
+    ): MarketOhlcvSeries = withContext(Dispatchers.IO) {
+        val bars = when (instrument.provider) {
+            OhlcvProvider.TEJHQ_EOD ->
+                TejHqOhlcvClient.fetch(instrument.exchange, instrument.providerSymbol, from, to)
+            OhlcvProvider.NSE_INDICES_PORTAL ->
+                NiftyIndicesOhlcvClient.fetch(instrument, from, to)
+        }
+        MarketOhlcvSeries(
+            instrument = instrument,
+            bars = bars,
+            retrievedAt = Instant.now(),
+            volumeAvailable = instrument.provider == OhlcvProvider.TEJHQ_EOD,
+            adjustmentStatus = when (instrument.provider) {
+                OhlcvProvider.TEJHQ_EOD -> "Raw end-of-day bhavcopy prices; corporate-action adjustment not applied"
+                OhlcvProvider.NSE_INDICES_PORTAL -> "Price Return Index OHLC; dividends are not included"
+            },
+            providerNote = if (instrument.provider == OhlcvProvider.NSE_INDICES_PORTAL) {
+                "Official NSE Indices website-backed historical form; its underlying request contract is undocumented and may change."
+            } else null
+        )
     }
 
     override suspend fun fetchEventStudy(
