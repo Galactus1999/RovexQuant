@@ -15,11 +15,13 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -48,9 +50,14 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
     val state by workspace.uiState.collectAsStateWithLifecycle()
     var selected by remember { mutableStateOf(TerminalSection.PULSE) }
     var showSettings by remember { mutableStateOf(false) }
+    var showInstrumentSearch by remember { mutableStateOf(false) }
     var selectedInstrument by remember { mutableStateOf<Pair<String, String>?>(null) }
-    BackHandler(enabled = showSettings || selectedInstrument != null) {
-        if (showSettings) showSettings = false else selectedInstrument = null
+    BackHandler(enabled = showInstrumentSearch || showSettings || selectedInstrument != null) {
+        when {
+            showInstrumentSearch -> showInstrumentSearch = false
+            showSettings -> showSettings = false
+            else -> selectedInstrument = null
+        }
     }
 
     if (state.restoringSession) {
@@ -71,6 +78,20 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
         return
     }
 
+    if (showInstrumentSearch) {
+        InstrumentSearchDialog(
+            equities = state.equities,
+            indexKeys = state.indexKeys,
+            onDismiss = { showInstrumentSearch = false },
+            onSelect = { symbol, name ->
+                selectedInstrument = symbol to name
+                selected = TerminalSection.PULSE
+                showSettings = false
+                showInstrumentSearch = false
+            }
+        )
+    }
+
     Column(Modifier.fillMaxSize().background(Ink)) {
         Column(Modifier.padding(horizontal = 17.dp)) {
             TerminalHeader(
@@ -83,6 +104,12 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
                 onSignOut = workspace::signOut,
                 onOpenSettings = { showSettings = true }
             )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(
+                    onClick = { showInstrumentSearch = true },
+                    modifier = Modifier.testTag("instrument.global.search.open")
+                ) { Text("⌕ Find company / index", color = Cyan, fontSize = 11.sp) }
+            }
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (showSettings) {
