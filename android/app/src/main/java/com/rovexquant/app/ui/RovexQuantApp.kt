@@ -99,7 +99,7 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
                     state.streamStatus.startsWith("Live") -> "Live data"
                     state.streamStatus.contains("stale", ignoreCase = true) -> "Stale data"
                     state.streamStatus.startsWith("Connected") -> "Connected"
-                    else -> "Backend"
+                    else -> "Market data unavailable"
                 },
                 onSignOut = workspace::signOut,
                 onOpenSettings = { showSettings = true }
@@ -144,7 +144,7 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
                         onRefreshEodSnapshot = workspace::refreshEodSnapshot,
                         onOpenInstrument = { symbol, name -> selectedInstrument = symbol to name }
                     )
-                    TerminalSection.SCANNER -> StrategyScannerScreen(onOpenAi = { selected = TerminalSection.AI })
+                    TerminalSection.SCANNER -> StrategyScannerScreen(onOpenAi = { selected = TerminalSection.AI }, onOpenResearchLab = { selected = TerminalSection.LAB })
                     TerminalSection.SIGNALS -> SignalsScreen()
                     TerminalSection.LAB -> ResearchLabScreen(
                         session = activeSession,
