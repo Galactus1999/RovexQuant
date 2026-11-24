@@ -117,7 +117,7 @@ fun InstrumentResearchScreen(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
-            error = failure.message ?: "Historical data refresh failed."
+            error = "Historical data unavailable. Tap retry to check the authorized source."
         } finally {
             refreshing = false
             loading = false
@@ -137,7 +137,7 @@ fun InstrumentResearchScreen(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
-            quoteError = failure.message ?: "Instrument quote snapshot unavailable."
+            quoteError = "Quote data delayed. Try again later."
         } finally {
             quoteLoading = false
         }
@@ -156,7 +156,7 @@ fun InstrumentResearchScreen(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
-            intelligenceError = failure.message ?: "Recent news discovery unavailable."
+            intelligenceError = "Recent news is temporarily unavailable."
         } finally {
             intelligenceLoading = false
         }
@@ -455,7 +455,7 @@ fun InstrumentResearchScreen(
                 else "Calculating indicators…",
                 color = Muted, fontSize = 9.sp
             )
-            indicatorsError != null -> Text("Indicators unavailable: $indicatorsError", color = Coral, fontSize = 9.sp)
+            indicatorsError != null -> GracefulErrorState("Indicators unavailable. Refresh the chart to retry.")
             indicators != null -> Text(
                 "${if (indicatorsSource == "BACKEND") "Backend" else "Offline local fallback"} indicators · ${indicators!!.barCount} bars · " +
                     "${bars.getOrNull(indicators!!.startIndex)?.timestamp?.toLocalDate()?.toString() ?: "coverage pending"} onward" +
@@ -489,14 +489,11 @@ fun InstrumentResearchScreen(
         Spacer(Modifier.height(10.dp))
         when {
             loading -> CircularProgressIndicator()
-            visible.isEmpty() -> TerminalCard {
-                Text(error ?: "No historical bars are available for this instrument.", color = Muted)
-                if (identity != null) {
-                    TextButton(onClick = { scope.launch { refreshSeries() } }, enabled = !refreshing) {
-                        Text("Retry historical data")
-                    }
-                }
-            }
+            visible.isEmpty() -> EmptyCandlestickChart(
+                message = "Connect an authorized data feed to render validated candles.",
+                actionLabel = if (refreshing) "Loading…" else "Retry data",
+                onAction = { if (!refreshing && identity != null) scope.launch { refreshSeries() } }
+            )
             else -> TerminalCard {
                 Text(
                     "${visible.size} bars  ·  ${visible.first().timestamp.toLocalDate()} → ${visible.last().timestamp.toLocalDate()}",
@@ -545,9 +542,7 @@ fun InstrumentResearchScreen(
             intelligenceError = intelligenceError,
             onOpenUrl = { url -> uriHandler.openUri(url) }
         )
-        error?.let {
-            Text(it, color = Coral, fontSize = 10.sp, modifier = Modifier.padding(top = 8.dp))
-        }
+        error?.let { GracefulErrorState("Historical data delayed. Tap retry to check again.", onRetry = { scope.launch { refreshSeries() } }, modifier = Modifier.padding(top = 8.dp)) }
     }
 }
 
@@ -690,7 +685,7 @@ private fun InstrumentOverviewPanel(
         }
         when {
             intelligenceLoading -> Text("Searching recent news…", color = Muted, fontSize = 10.sp)
-            intelligenceError != null -> Text(intelligenceError, color = Muted, fontSize = 10.sp)
+            intelligenceError != null -> GracefulErrorState("Recent news unavailable. Try again later.")
             intelligence?.events?.isNotEmpty() == true -> {
                 intelligence.events.take(6).forEach { event ->
                     TerminalCard {
