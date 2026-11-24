@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -84,11 +85,25 @@ fun MarketPulseScreen(
     var showSectorCube by remember { mutableStateOf(false) }
     var showAllEquities by remember { mutableStateOf(false) }
     var freshnessClock by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val niftyTrace = remember { mutableStateListOf<Double>() }
+    val bankTrace = remember { mutableStateListOf<Double>() }
 
     LaunchedEffect(ticks) {
         while (true) {
             freshnessClock = System.currentTimeMillis()
             delay(5_000)
+        }
+    }
+    LaunchedEffect(nifty?.lastPrice) {
+        nifty?.lastPrice?.let { value ->
+            niftyTrace.add(value)
+            if (niftyTrace.size > 48) niftyTrace.removeAt(0)
+        }
+    }
+    LaunchedEffect(bank?.lastPrice) {
+        bank?.lastPrice?.let { value ->
+            bankTrace.add(value)
+            if (bankTrace.size > 48) bankTrace.removeAt(0)
         }
     }
     fun isFresh(tick: MarketTick): Boolean = runCatching {
@@ -153,8 +168,7 @@ fun MarketPulseScreen(
         }
     }
     val liveSectorCount = sectorTiles.count { it.isFresh }
-    val exchangeClock = latestTick?.exchangeTimestamp?.substringAfter("T")?.take(8) ?: "unavailable"
-    val receiveClock = latestTick?.receivedAt?.substringAfter("T")?.take(8) ?: "unavailable"
+    val globalFresh = latestTick?.let { it.quality == "VALID" && isFresh(it) } == true
 
     PullToRefreshBox(
         isRefreshing = isRefreshing,
@@ -184,14 +198,9 @@ fun MarketPulseScreen(
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Text("Market Pulse", color = MaterialTheme.colorScheme.onBackground, fontSize = 25.sp, fontWeight = FontWeight.Bold)
-                StatusPill(
-                    when {
-                        streamStatus.startsWith("Live") -> "LIVE"
-                        streamStatus.startsWith("Connected") -> "CONNECTED"
-                        streamStatus.contains("stale", ignoreCase = true) -> "STALE"
-                        else -> "OFFLINE"
-                    },
-                    if (streamStatus.startsWith("Live")) Mint else Gold
+                DataFreshnessIndicator(
+                    label = if (globalFresh) "Live market feed" else "Delayed / unavailable",
+                    fresh = globalFresh
                 )
             }
         }
@@ -203,7 +212,7 @@ fun MarketPulseScreen(
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                 ) {
                     Eyebrow("NSE · EOD")
-                    StatusPill("END OF DAY", Gold)
+                    Text("EOD", color = Gold, fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
                 }
                 Text(
                     "NSE equity snapshot",
@@ -217,11 +226,12 @@ fun MarketPulseScreen(
                     color = Muted, fontSize = 10.sp, lineHeight = 15.sp
                 )
                 if (eodSnapshot != null) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        EodBreadthStat("Advances", eodSnapshot.advances, Mint, Modifier.weight(1f))
-                        EodBreadthStat("Declines", eodSnapshot.declines, Coral, Modifier.weight(1f))
-                        EodBreadthStat("Unchanged", eodSnapshot.unchanged, Muted, Modifier.weight(1f))
-                    }
+                    MarketBreadthBar(
+                        advances = eodSnapshot.advances,
+                        declines = eodSnapshot.declines,
+                        unchanged = eodSnapshot.unchanged,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp)
+                    )
                     Spacer(Modifier.height(5.dp))
                     val moverCount = eodSnapshot.topGainers.size + eodSnapshot.topLosers.size + eodSnapshot.mostActiveByVolume.size
                     if (moverCount > 0) {
@@ -260,70 +270,49 @@ fun MarketPulseScreen(
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MetricTile(
-                    "NIFTY 50",
-                    nifty?.lastPrice?.let { String.format(Locale.US, "%.2f", it) } ?: "—",
-                    nifty?.let {
-                        if (it.quality == "VALID" && isFresh(it)) "LIVE" else "STALE"
-                    } ?: "—",
-                    modifier = Modifier.weight(1f).clickable { onOpenInstrument("NIFTY 50", "NIFTY 50") }
+                IndexQuoteCard(
+                    name = "NIFTY 50", price = nifty?.lastPrice, changePercent = nifty?.changePercent,
+                    trace = niftyTrace, onClick = { onOpenInstrument("NIFTY 50", "NIFTY 50") },
+                    modifier = Modifier.weight(1f)
                 )
-                MetricTile(
-                    "NIFTY BANK",
-                    bank?.lastPrice?.let { String.format(Locale.US, "%.2f", it) } ?: "—",
-                    bank?.let {
-                        if (it.quality == "VALID" && isFresh(it)) "LIVE" else "STALE · ${it.quality}"
-                    } ?: "Awaiting verified tick",
-                    accent = Cyan,
-                    modifier = Modifier.weight(1f).clickable { onOpenInstrument("NIFTY BANK", "NIFTY BANK") }
-                )
-            }
-        }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MetricTile(
-                    "Adv / Decl",
-                    eodSnapshot?.let { "${it.advances} / ${it.declines}" } ?: "— / —",
-                    eodSnapshot?.let { "${it.unchanged} unchanged" } ?: "—",
-                    accent = Gold,
+                IndexQuoteCard(
+                    name = "NIFTY BANK", price = bank?.lastPrice, changePercent = bank?.changePercent,
+                    trace = bankTrace, onClick = { onOpenInstrument("NIFTY BANK", "NIFTY BANK") },
                     modifier = Modifier.weight(1f)
                 )
             }
         }
         item {
+            if (eodSnapshot == null) {
+                GracefulErrorState("Market breadth is not available yet.")
+            }
+        }
+        item {
             TerminalCard {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            "Sector performance",
-                            color = MaterialTheme.colorScheme.onBackground,
-                            fontSize = 19.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.testTag("market.sector.heading")
-                        )
-                        Text(
-                            "$liveSectorCount / ${sectorTiles.size} fresh quotes · red / green cube heatmap",
-                            color = Muted,
-                            fontSize = 10.sp
-                        )
-                    }
-                    StatusPill("3D MAP", Cyan)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Text("Sector heatmap", color = MaterialTheme.colorScheme.onBackground,
+                        fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.testTag("market.sector.heading"))
+                    Text("$liveSectorCount / ${sectorTiles.size} updated", color = Muted, fontSize = 9.sp)
                 }
+                Text("Sector benchmark moves · equal-size tiles (market-cap weights not supplied)",
+                    color = Muted, fontSize = 9.sp)
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    "Explore all sector benchmarks in one rotatable cube. Each block uses its latest verified market move.",
-                    color = Muted,
-                    fontSize = 10.sp,
-                    lineHeight = 15.sp
-                )
-                TextButton(
-                    onClick = { showSectorCube = true },
-                    modifier = Modifier.fillMaxWidth().testTag("market.sector.cube.open")
-                ) { Text("Open sector cube · ${sectorTiles.size} sectors") }
+                sectorTiles.chunked(3).forEach { rowTiles ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                        rowTiles.forEach { tile ->
+                            SectorHeatmapCell(label = tile.shortLabel, changePercent = tile.changePercent,
+                                fresh = tile.isFresh, onClick = { onOpenInstrument(tile.benchmark, tile.benchmark) },
+                                modifier = Modifier.weight(1f))
+                        }
+                        repeat(3 - rowTiles.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+                TextButton(onClick = { showSectorCube = true },
+                    modifier = Modifier.fillMaxWidth().testTag("market.sector.cube.open")) {
+                    Text("Open 3D sector view")
+                }
             }
         }
         item {
