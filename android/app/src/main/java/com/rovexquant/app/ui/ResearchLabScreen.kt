@@ -122,6 +122,7 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
                     val csv = context.contentResolver.openInputStream(uri)?.use { it.readUtf8Limited() }
                         ?: throw IllegalArgumentException("Could not open the selected file")
                     val bars = OhlcvCsvResearch.parse(csv)
+                    TejHqOhlcvStore.clear(context)
                     val temporary = File(context.filesDir, OhlcvCsvResearch.STORAGE_FILE_NAME + ".tmp")
                     val destination = File(context.filesDir, OhlcvCsvResearch.STORAGE_FILE_NAME)
                     temporary.writeText(csv, Charsets.UTF_8)
@@ -380,7 +381,7 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
                 }
                 if (summary != null) {
                     TextButton(onClick = {
-                        context.deleteFile(OhlcvCsvResearch.STORAGE_FILE_NAME)
+                        TejHqOhlcvStore.clear(context)
                         summary = null
                         datasetName = "No dataset loaded"
                         error = null
