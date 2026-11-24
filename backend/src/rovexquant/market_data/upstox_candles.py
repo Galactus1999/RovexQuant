@@ -52,28 +52,50 @@ async def resolve_nse_instrument_key(symbol: str) -> str:
     normalized = " ".join(symbol.strip().upper().split())
     if not normalized or len(normalized) > 80:
         raise UpstoxCandleError("A valid NSE company symbol or index name is required.", 422)
+
+    def matching(records: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
+        return [
+            record for record in records
+            if query in {
+                " ".join(str(record.get("name", "")).upper().split()),
+                " ".join(str(record.get("trading_symbol", "")).upper().split()),
+            }
+        ]
+
+    index_master_error: InstrumentMasterError | None = None
+    if normalized.startswith("NIFTY") or normalized.startswith("BANKNIFTY"):
+        index_query = "NIFTY BANK" if normalized == "BANKNIFTY" else normalized
+        try:
+            index_matches = matching(await get_nse_index_instruments(), index_query)
+            if index_matches:
+                key = index_matches[0].get("instrument_key")
+                if isinstance(key, str) and _KEY_PATTERN.fullmatch(key):
+                    return key
+                raise UpstoxCandleError("NSE index master returned an invalid instrument key.", 502)
+        except InstrumentMasterError as error:
+            index_master_error = error
+
     try:
-        if normalized.startswith("NIFTY") or normalized.startswith("BANKNIFTY"):
-            records = await get_nse_index_instruments()
-        else:
-            records = await get_nse_equity_instruments()
+        equity_matches = matching(await get_nse_equity_instruments(), normalized)
     except InstrumentMasterError as error:
+        if index_master_error is not None:
+            raise UpstoxCandleError(
+                "The verified NSE instrument masters are temporarily unavailable.", 503
+            ) from error
         raise UpstoxCandleError(
-            "The verified NSE instrument master is temporarily unavailable.", 503
+            "The verified NSE equity master is temporarily unavailable.", 503
         ) from error
-    matches = [
-        record for record in records
-        if normalized in {
-            " ".join(str(record.get("name", "")).upper().split()),
-            " ".join(str(record.get("trading_symbol", "")).upper().split()),
-        }
-    ]
-    if not matches:
-        raise UpstoxCandleError("Instrument is not present in the current verified NSE master.", 404)
-    key = matches[0].get("instrument_key")
-    if not isinstance(key, str) or not _KEY_PATTERN.fullmatch(key):
-        raise UpstoxCandleError("NSE instrument master returned an invalid instrument key.", 502)
-    return key
+
+    if equity_matches:
+        key = equity_matches[0].get("instrument_key")
+        if isinstance(key, str) and _KEY_PATTERN.fullmatch(key):
+            return key
+        raise UpstoxCandleError("NSE equity master returned an invalid instrument key.", 502)
+    if index_master_error is not None:
+        raise UpstoxCandleError(
+            "The verified NSE index master is temporarily unavailable.", 503
+        ) from index_master_error
+    raise UpstoxCandleError("Instrument is not present in the current verified NSE master.", 404)
 
 
 def _parse_candles(payload: Any) -> list[dict[str, Any]]:
