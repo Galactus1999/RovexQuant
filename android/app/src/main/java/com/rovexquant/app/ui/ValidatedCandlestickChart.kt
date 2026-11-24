@@ -17,6 +17,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -281,7 +283,7 @@ internal fun ValidatedCandlestickChart(
             if (showRsi) IndicatorPane("RSI (14) · 30/70 reference", listOf(result.rsi), null, result.startIndex, globalStart, globalEnd, 0.0 to 100.0, listOf(30.0, 70.0), "instrument.chart.indicator.rsi.pane")
             if (showMacd) IndicatorPane("MACD (12, 26, 9)", listOf(result.macdLine, result.macdSignal), result.macdHistogram, result.startIndex, globalStart, globalEnd, tag = "instrument.chart.indicator.macd.pane")
             if (showAtr) IndicatorPane("ATR (14)", listOf(result.atr), null, result.startIndex, globalStart, globalEnd, tag = "instrument.chart.indicator.atr.pane")
-            if (showAdx) IndicatorPane("ADX (14) · trend-strength scale", listOf(result.adx), null, result.startIndex, globalStart, globalEnd, 0.0 to 100.0, tag = "instrument.chart.indicator.adx.pane")
+            if (showAdx) IndicatorPane("ADX (14) · trend-strength scale", listOf(result.adx), null, result.startIndex, globalStart, globalEnd, 0.0 to 100.0, listOf(25.0), "instrument.chart.indicator.adx.pane")
         }
     }
 }
@@ -300,11 +302,32 @@ private fun IndicatorPane(
     tag: String = "instrument.chart.indicator.pane"
 ) {
     val lineColors = listOf(Color(0xFF55C9F3), Color(0xFFFFC857), Color(0xFFB39DDB))
-    // Tag the pane container, not only the drawing surface, so UI tests and accessibility
-    // tooling can observe the pane even when its Canvas has not entered the viewport.
+    // Expose the actual plotted sample coverage and latest values to accessibility
+    // and regression tests; a pane's presence alone does not prove it contains data.
+    val latestSourceIndex = globalEnd - 1
+    val latestValues = lines.map { values ->
+        values.getOrNull(latestSourceIndex - indicatorStartIndex)
+    }
+    val validSampleCount = lines.sumOf { values ->
+        (globalStart until globalEnd).count { sourceIndex ->
+            values.getOrNull(sourceIndex - indicatorStartIndex) != null
+        }
+    } + (histogram?.let { values ->
+        (globalStart until globalEnd).count { sourceIndex ->
+            values.getOrNull(sourceIndex - indicatorStartIndex) != null
+        }
+    } ?: 0)
+    val latestText = latestValues.mapIndexedNotNull { index, value ->
+        value?.let { "series ${index + 1} ${String.format(java.util.Locale.US, "%.2f", it)}" }
+    }.joinToString(", ")
+    val plotDescription = "$title plot; $validSampleCount non-null plotted samples; latest $latestText"
     Column(Modifier.fillMaxWidth().testTag(tag)) {
         Text(title, color = Color(0xFFE6EDF5), fontSize = 10.sp)
-        Canvas(Modifier.fillMaxWidth().height(104.dp)) {
+        Canvas(
+            Modifier.fillMaxWidth().height(104.dp)
+                .testTag("$tag.plot")
+                .semantics { contentDescription = plotDescription }
+        ) {
             val count = (globalEnd - globalStart).coerceAtLeast(0)
             if (count == 0 || size.width <= 0f) return@Canvas
             val samples = buildList {
@@ -341,7 +364,7 @@ private fun IndicatorPane(
                     val top = minOf(zero, y(value))
                     val height = kotlin.math.abs(zero - y(value)).coerceAtLeast(1f)
                     drawRect(
-                        ChartCrosshair.copy(alpha = 0.55f),
+                        (if (value >= 0.0) ChartUp else ChartDown).copy(alpha = 0.72f),
                         Offset(x - step * 0.3f, top),
                         androidx.compose.ui.geometry.Size(step * 0.6f, height)
                     )
