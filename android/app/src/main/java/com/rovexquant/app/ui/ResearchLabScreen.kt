@@ -75,7 +75,7 @@ fun ResearchLabScreen(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
-                eventError = failure.message ?: "Event study could not be calculated."
+                eventError = "Event study unavailable. Check back later and retry."
             } finally {
                 eventLoading = false
             }
@@ -92,7 +92,7 @@ fun ResearchLabScreen(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
-                macroError = failure.message ?: "Macro research providers are unavailable."
+                macroError = "Macro data delayed. Tap refresh to retry."
             } finally {
                 macroLoading = false
             }
@@ -128,7 +128,7 @@ fun ResearchLabScreen(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
-                error = failure.message ?: "Could not import this CSV"
+                error = "CSV could not be imported. Check its format and try again."
             } finally {
                 loading = false
             }
@@ -152,7 +152,7 @@ fun ResearchLabScreen(
                 datasetName = "Saved local dataset"
 
             } catch (failure: Exception) {
-                error = failure.message ?: "Saved dataset could not be read"
+                error = "Saved dataset unavailable. Re-import your CSV."
             } finally {
                 loading = false
             }
@@ -203,7 +203,7 @@ fun ResearchLabScreen(
                         enabled = !eventLoading && eventDate.matches(Regex("\\d{4}-\\d{2}-\\d{2}")) && eventSymbol.isNotBlank(),
                         modifier = Modifier.fillMaxWidth()
                     ) { Text(if (eventLoading) "Calculating…" else "Calculate event window") }
-                    eventError?.let { Text(it, color = Coral, fontSize = 10.sp) }
+                    eventError?.let { GracefulErrorState("Event study unavailable. Tap to retry.", onRetry = { runEventStudy() }) }
                     eventResult?.let { result ->
                         IndicatorLine("Pre-event return", result.preEventReturn?.let { String.format(Locale.US, "%.2f%%", it * 100) } ?: "Unavailable")
                         IndicatorLine("Post-event return", result.cumulativeReturn?.let { String.format(Locale.US, "%.2f%%", it * 100) } ?: "Unavailable")
@@ -224,7 +224,7 @@ fun ResearchLabScreen(
                     if (macroLoading && macroSummary == null) {
                         Text("Retrieving World Bank, AMFI and FRED status…", color = Muted, fontSize = 11.sp)
                     }
-                    macroError?.let { Text(it, color = Coral, fontSize = 11.sp) }
+                    macroError?.let { GracefulErrorState("Macro data delayed. Tap to retry.", onRetry = { refreshMacroResearch() }) }
                     macroSummary?.let { report ->
                         Text("World Bank · India", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                         report.worldBankSeries.forEach { series ->
@@ -238,14 +238,15 @@ fun ResearchLabScreen(
                         }
                         Text(
                             when (report.fredConfigured) {
-                                true -> "FRED configured · ${report.fredSeriesCount} series returned"
-                                false -> "FRED not configured · add FRED_API_KEY as a backend secret"
-                                null -> "FRED configuration status unavailable · refresh backend status"
+                                true -> "${report.fredSeriesCount} US macro series available"
+                                false -> "US macro series currently unavailable"
+                                null -> "US macro series currently unavailable"
                             },
                             color = if (report.fredConfigured == true) Mint else Gold, fontSize = 10.sp
                         )
-                        if (report.providerErrors.isNotEmpty()) {
-                            report.providerErrors.forEach { Text(it, color = Gold, fontSize = 9.sp) }
+                        if (report.fredConfigured != true) {
+                            Text("Showing available last-known macro observations where present.",
+                                color = Muted, fontSize = 9.sp)
                         }
                         Text("Retrieved ${report.retrievedAt}. Annual macro observations and daily fund NAVs are not equity quotes or intraday signals.", color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
                     }
@@ -309,7 +310,7 @@ fun ResearchLabScreen(
                 }
             }
         } else {
-            item { EmptyPanel("No historical dataset loaded", "Fetch daily OHLCV history above or import a CSV. Data is stored privately on this device.") }
+
         }
 
     }
