@@ -209,35 +209,37 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
                                     else -> spec.optString("description").take(90)
                                 }
                                 val fieldLabel = label + if (key in requiredNames) " · required" else ""
+                                val normalizedKey = key.lowercase().replace("_", "").replace("-", "")
                                 when {
-                                    format == "date-time" || key.contains("datetime", true) ||
-                                        key.contains("timestamp", true) -> ToolDateTimeField(
+                                    format == "date-time" || normalizedKey.contains("datetime") ||
+                                        normalizedKey.contains("timestamp") -> ToolDateTimeField(
                                         label = fieldLabel,
                                         value = current,
                                         enabled = !calling,
                                         onValueChange = { formValues = formValues + (key to it) }
                                     )
-                                    format == "time" || key.equals("time", true) -> ToolTimeField(
+                                    format == "time" || (normalizedKey.contains("time") && !normalizedKey.contains("datetime")) -> ToolTimeField(
                                         label = fieldLabel,
                                         value = current,
                                         enabled = !calling,
                                         onValueChange = { formValues = formValues + (key to it) }
                                     )
-                                    format == "date" || key.contains("date", true) -> ToolDateField(
+                                    format == "date" || normalizedKey.contains("date") -> ToolDateField(
                                         label = fieldLabel,
                                         value = current,
                                         enabled = !calling,
                                         onValueChange = { formValues = formValues + (key to it) }
                                     )
-                                    key.contains("symbol", true) || key.contains("ticker", true) ||
-                                        key.contains("instrument", true) || key.contains("index", true) -> ToolInstrumentField(
+                                    normalizedKey.contains("symbol") || normalizedKey.contains("ticker") ||
+                                        normalizedKey.contains("instrument") || normalizedKey.contains("index") -> ToolInstrumentField(
                                         label = fieldLabel,
                                         value = current,
                                         enabled = !calling,
                                         onValueChange = { formValues = formValues + (key to it) }
                                     )
-                                    key.contains("timespan", true) || key.contains("period", true) ||
-                                        key.contains("duration", true) -> ToolTimespanField(
+                                    normalizedKey.contains("timespan") || normalizedKey.contains("period") ||
+                                        normalizedKey.contains("duration") || normalizedKey.contains("interval") ||
+                                        normalizedKey.contains("lookback") || normalizedKey.contains("window") -> ToolTimespanField(
                                         label = fieldLabel,
                                         value = current,
                                         enabled = !calling,
