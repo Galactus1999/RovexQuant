@@ -135,7 +135,6 @@ fun MarketPulseScreen(
     }
     val nifty = indexKeys["NIFTY 50"]?.let { ticks[it] }
     val bank = indexKeys["NIFTY BANK"]?.let { ticks[it] }
-    val latestTick = listOfNotNull(nifty, bank).maxByOrNull { it.receivedAt }
     val rankedSectors = remember(ticks, indexKeys, freshnessClock) {
         coreSectorIndices.sortedByDescending { sector ->
             indexKeys[sector.benchmark]?.let { ticks[it] }?.let { quote ->
@@ -168,7 +167,6 @@ fun MarketPulseScreen(
         }
     }
     val liveSectorCount = sectorTiles.count { it.isFresh }
-    val globalFresh = latestTick?.let { it.quality == "VALID" && isFresh(it) } == true
 
     PullToRefreshBox(
         isRefreshing = isRefreshing,
@@ -197,11 +195,8 @@ fun MarketPulseScreen(
         LazyColumn(modifier = Modifier.fillMaxSize().testTag("market.pulse.list"), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Text("Market Pulse", color = MaterialTheme.colorScheme.onBackground, fontSize = 25.sp, fontWeight = FontWeight.Bold)
-                DataFreshnessIndicator(
-                    label = if (globalFresh) "Live market feed" else "Delayed / unavailable",
-                    fresh = globalFresh
-                )
+                Text("Market Pulse", color = MaterialTheme.colorScheme.onBackground, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+
             }
         }
         item {
