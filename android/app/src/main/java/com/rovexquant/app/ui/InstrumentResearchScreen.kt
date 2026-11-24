@@ -124,21 +124,6 @@ fun InstrumentResearchScreen(
     }
 
     val bars = series?.bars.orEmpty()
-    val chartVisibleData by produceState<ChartSeriesData?>(initialValue = null, chartData, visible) {
-        val source = chartData
-        val firstDate = visible.firstOrNull()?.timestamp?.toLocalDate()?.toString()
-        val lastDate = visible.lastOrNull()?.timestamp?.toLocalDate()?.toString()
-        value = if (source == null || firstDate == null || lastDate == null) {
-            null
-        } else {
-            withContext(Dispatchers.Default) {
-                source.copy(
-                    candles = source.candles.filter { it.time >= firstDate && it.time <= lastDate },
-                    volumeBars = source.volumeBars?.filter { it.time >= firstDate && it.time <= lastDate }
-                )
-            }
-        }
-    }
     val visible = remember(bars, range) {
         val today = LocalDate.now(ZoneId.of("Asia/Kolkata"))
         val cutoff = when (range) {
@@ -149,7 +134,26 @@ fun InstrumentResearchScreen(
             "3Y" -> today.minusYears(3)
             else -> null
         }
-        if (cutoff == null) bars else bars.filter { !it.timestamp.toLocalDate().isBefore(cutoff) }
+        if (cutoff == null) bars else bars.filter {
+            !it.timestamp.atZoneSameInstant(ZoneId.of("Asia/Kolkata")).toLocalDate().isBefore(cutoff)
+        }
+    }
+    val chartVisibleData by produceState<ChartSeriesData?>(initialValue = null, chartData, visible) {
+        val source = chartData
+        val firstDate = visible.firstOrNull()
+            ?.timestamp?.atZoneSameInstant(ZoneId.of("Asia/Kolkata"))?.toLocalDate()?.toString()
+        val lastDate = visible.lastOrNull()
+            ?.timestamp?.atZoneSameInstant(ZoneId.of("Asia/Kolkata"))?.toLocalDate()?.toString()
+        value = if (source == null || firstDate == null || lastDate == null) {
+            null
+        } else {
+            withContext(Dispatchers.Default) {
+                source.copy(
+                    candles = source.candles.filter { it.time >= firstDate && it.time <= lastDate },
+                    volumeBars = source.volumeBars?.filter { it.time >= firstDate && it.time <= lastDate }
+                )
+            }
+        }
     }
     val latest = visible.lastOrNull()
 
