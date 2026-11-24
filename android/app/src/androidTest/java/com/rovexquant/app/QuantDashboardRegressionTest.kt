@@ -1,6 +1,8 @@
 package com.rovexquant.app
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertCountEquals
@@ -75,7 +77,41 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("instrument.chart.candles")
             .performScrollTo().assertIsDisplayed()
         composeRule.onAllNodesWithTag("instrument.chart.volume.toggle").assertCountEquals(0)
-        composeRule.onNodeWithText("← Back to Pulse").performClick()
+        composeRule.waitUntil(15_000) {
+            runCatching {
+                composeRule.onNodeWithTag("instrument.chart.indicator.rsi.toggle").assertIsEnabled()
+            }.isSuccess
+        }
+        composeRule.onNodeWithTag("instrument.chart.indicator.rsi.toggle").performScrollTo().performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("instrument.chart.indicator.rsi.pane")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("instrument.chart.indicator.rsi.pane").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("instrument.chart.indicator.macd.toggle").performScrollTo().performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("instrument.chart.indicator.macd.pane")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("instrument.chart.indicator.macd.pane").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("instrument.chart.indicator.atr.toggle").performScrollTo().performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("instrument.chart.indicator.atr.pane")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("instrument.chart.indicator.atr.pane").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("instrument.chart.indicator.adx.toggle").performScrollTo().performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("instrument.chart.indicator.adx.pane")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("instrument.chart.indicator.adx.pane").performScrollTo().assertIsDisplayed()
+        for (key in listOf("sma", "ema", "bollinger")) {
+            val toggle = composeRule.onNodeWithTag("instrument.chart.indicator.$key.toggle")
+            toggle.performScrollTo().performClick()
+            toggle.assertIsSelected()
+        }
+        composeRule.onNodeWithText("← Back to Pulse").performScrollTo().performClick()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("market.pulse.list").fetchSemanticsNodes().isNotEmpty()
         }
