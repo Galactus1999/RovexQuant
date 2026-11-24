@@ -5,8 +5,6 @@ import com.rovexquant.app.data.model.EodMarketSnapshot
 import com.rovexquant.app.data.model.EodStockMove
 import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.QuantSession
-import com.rovexquant.app.data.model.MarketIngestionStatus
-import com.rovexquant.app.data.repository.QuantDataRepository
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -70,14 +68,10 @@ fun MarketPulseScreen(
     equityInstruments: List<MarketEquityInstrument> = emptyList(),
     streamStatus: String = "Not connected",
     session: QuantSession? = null,
-    repository: QuantDataRepository? = null,
     onReconnect: () -> Unit = {},
     eodSnapshot: EodMarketSnapshot? = null,
     eodSnapshotStatus: String = "EOD snapshot not loaded",
-    onRefreshEodSnapshot: () -> Unit = {},
-    marketIngestionStatus: MarketIngestionStatus? = null,
-    marketIngestionStatusLabel: String = "Persistent database status not checked",
-    onRefreshMarketIngestionStatus: () -> Unit = {}
+    onRefreshEodSnapshot: () -> Unit = {}
 ) {
     val activeSession = session
     var equitySearch by remember { mutableStateOf("") }
