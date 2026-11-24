@@ -226,7 +226,12 @@ fun InstrumentResearchScreen(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
             if (series?.volumeAvailable == true) {
-                FilterChip(selected = volume, onClick = { volume = !volume }, label = { Text("Volume") })
+                FilterChip(
+                    modifier = Modifier.testTag("instrument.chart.volume.toggle"),
+                    selected = volume,
+                    onClick = { volume = !volume },
+                    label = { Text("Volume") }
+                )
             }
             FilterChip(selected = sma20, onClick = { sma20 = !sma20 }, label = { Text("SMA 20") })
             FilterChip(selected = sma50, onClick = { sma50 = !sma50 }, label = { Text("SMA 50") })
