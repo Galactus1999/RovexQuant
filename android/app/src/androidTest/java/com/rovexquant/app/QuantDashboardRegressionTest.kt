@@ -87,6 +87,8 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithText("More").performClick()
         composeRule.onNodeWithText("Portfolio").performClick()
         composeRule.onNodeWithText("Portfolio & risk.").assertIsDisplayed()
+        composeRule.onNodeWithTag("portfolio.screen")
+            .performScrollToNode(hasTestTag("portfolio.entry"))
         composeRule.onNodeWithTag("portfolio.entry").assertIsDisplayed()
     }
 
@@ -135,6 +137,8 @@ class QuantDashboardRegressionTest {
         waitForDashboard()
         composeRule.onNodeWithText("Intel").performClick()
         composeRule.onNodeWithText("AI Intelligence Centre").assertIsDisplayed()
+        composeRule.onNodeWithTag("intelligence.screen")
+            .performScrollToNode(hasText("No research run yet"))
         composeRule.onNodeWithText("No research run yet").assertIsDisplayed()
         composeRule.onNodeWithText("Refresh intelligence").performClick()
         composeRule.waitUntil(10_000) {
@@ -156,11 +160,20 @@ class QuantDashboardRegressionTest {
 
     @Test fun portfolioCalculatesRiskBasedShareQuantity() {
         waitForDashboard()
+        composeRule.onNodeWithText("More").performClick()
         composeRule.onNodeWithText("Portfolio").performClick()
+        composeRule.onNodeWithTag("portfolio.screen")
+            .performScrollToNode(hasTestTag("portfolio.capital"))
         composeRule.onNodeWithTag("portfolio.capital").performTextInput("5000")
+        composeRule.onNodeWithTag("portfolio.screen")
+            .performScrollToNode(hasTestTag("portfolio.allocation"))
         composeRule.onNodeWithTag("portfolio.allocation").performTextClearance()
         composeRule.onNodeWithTag("portfolio.allocation").performTextInput("100")
+        composeRule.onNodeWithTag("portfolio.screen")
+            .performScrollToNode(hasTestTag("portfolio.entry"))
         composeRule.onNodeWithTag("portfolio.entry").performTextInput("250")
+        composeRule.onNodeWithTag("portfolio.screen")
+            .performScrollToNode(hasTestTag("portfolio.stop"))
         composeRule.onNodeWithTag("portfolio.stop").performTextInput("244")
         composeRule.onNodeWithTag("portfolio.quantity").assertTextEquals("8 shares")
         composeRule.onNodeWithTag("portfolio.stopLoss").assertTextEquals("Planned loss at stop  ₹48.00")
