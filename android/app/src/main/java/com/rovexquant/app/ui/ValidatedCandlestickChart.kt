@@ -85,7 +85,9 @@ internal fun ValidatedCandlestickChart(
                 val indicatorData = indicators
                 if (indicatorData != null) {
                     for (localIndex in safeStart until safeEnd) {
-                        val indicatorIndex = indicatorSourceOffset + localIndex - indicatorData.startIndex
+                        val indicatorIndex = indicatorData.localIndexForSourceBar(
+                            indicatorSourceOffset + localIndex
+                        ) ?: continue
                         if (showSma) indicatorData.sma.getOrNull(indicatorIndex)?.let(::add)
                         if (showEma) indicatorData.ema.getOrNull(indicatorIndex)?.let(::add)
                         if (showBollinger) {
@@ -210,7 +212,9 @@ internal fun ValidatedCandlestickChart(
                 val path = Path()
                 var started = false
                 for (globalIndex in safeStart until safeEnd) {
-                    val sourceIndex = indicatorSourceOffset + globalIndex - indicatorData.startIndex
+                    val sourceIndex = indicatorData.localIndexForSourceBar(
+                        indicatorSourceOffset + globalIndex
+                    ) ?: continue
                     val value = values.getOrNull(sourceIndex) ?: continue
                     val x = (globalIndex - safeStart + 0.5f) * step
                     if (!started) {
