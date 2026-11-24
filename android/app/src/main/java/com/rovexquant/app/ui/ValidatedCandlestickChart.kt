@@ -274,10 +274,10 @@ internal fun ValidatedCandlestickChart(
         indicators?.let { result ->
             val globalStart = indicatorSourceOffset + safeStart
             val globalEnd = indicatorSourceOffset + safeEnd
-            if (showRsi) IndicatorPane("RSI (14) · 30/70 reference", listOf(result.rsi), null, result.startIndex, globalStart, globalEnd, 0.0 to 100.0, listOf(30.0, 70.0))
-            if (showMacd) IndicatorPane("MACD (12, 26, 9)", listOf(result.macdLine, result.macdSignal), result.macdHistogram, result.startIndex, globalStart, globalEnd)
-            if (showAtr) IndicatorPane("ATR (14)", listOf(result.atr), null, result.startIndex, globalStart, globalEnd)
-            if (showAdx) IndicatorPane("ADX (14) · trend-strength scale", listOf(result.adx), null, result.startIndex, globalStart, globalEnd, 0.0 to 100.0)
+            if (showRsi) IndicatorPane("RSI (14) · 30/70 reference", listOf(result.rsi), null, result.startIndex, globalStart, globalEnd, 0.0 to 100.0, listOf(30.0, 70.0), "instrument.chart.indicator.rsi.pane")
+            if (showMacd) IndicatorPane("MACD (12, 26, 9)", listOf(result.macdLine, result.macdSignal), result.macdHistogram, result.startIndex, globalStart, globalEnd, tag = "instrument.chart.indicator.macd.pane")
+            if (showAtr) IndicatorPane("ATR (14)", listOf(result.atr), null, result.startIndex, globalStart, globalEnd, tag = "instrument.chart.indicator.atr.pane")
+            if (showAdx) IndicatorPane("ADX (14) · trend-strength scale", listOf(result.adx), null, result.startIndex, globalStart, globalEnd, 0.0 to 100.0, tag = "instrument.chart.indicator.adx.pane")
         }
     }
 }
@@ -292,12 +292,13 @@ private fun IndicatorPane(
     globalStart: Int,
     globalEnd: Int,
     fixedRange: Pair<Double, Double>? = null,
-    referenceLevels: List<Double> = emptyList()
+    referenceLevels: List<Double> = emptyList(),
+    tag: String = "instrument.chart.indicator.pane"
 ) {
     val lineColors = listOf(Color(0xFF55C9F3), Color(0xFFFFC857), Color(0xFFB39DDB))
     Column(Modifier.fillMaxWidth()) {
         Text(title, color = Color(0xFFE6EDF5), fontSize = 10.sp)
-        Canvas(Modifier.fillMaxWidth().height(104.dp).testTag("instrument.chart.indicator.pane")) {
+        Canvas(Modifier.fillMaxWidth().height(104.dp).testTag(tag)) {
             val count = (globalEnd - globalStart).coerceAtLeast(0)
             if (count == 0 || size.width <= 0f) return@Canvas
             val samples = buildList {
