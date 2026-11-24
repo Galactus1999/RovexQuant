@@ -41,7 +41,8 @@ fun IntelligenceCentreScreen(
     session: QuantSession,
     repository: QuantDataRepository,
     equityInstruments: List<MarketEquityInstrument> = emptyList(),
-    indexKeys: Map<String, String> = emptyMap()
+    indexKeys: Map<String, String> = emptyMap(),
+    developerMode: Boolean = false
 ) {
     val factory = remember(session, repository) {
         object : ViewModelProvider.Factory {
@@ -73,6 +74,7 @@ fun IntelligenceCentreScreen(
                 "Global developments translated into transparent Indian-sector exposure hypotheses. Chat is separate and optional."
             )
         }
+        if (developerMode) {
         item {
             Column(Modifier.testTag("market.data-health")) {
                 TerminalCard {
@@ -135,6 +137,7 @@ fun IntelligenceCentreScreen(
                 }
             }
         }
+        }
 
         item {
             TerminalCard {
@@ -180,7 +183,7 @@ fun IntelligenceCentreScreen(
             item { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Mint) } }
         }
         if (state.error != null) {
-            item { EmptyPanel("Intelligence retrieval unavailable", state.error ?: "Try again later.", Coral) }
+            item { GracefulErrorState("Intelligence delayed. Try again later.") }
         }
         state.feed?.let { feed ->
             item {
