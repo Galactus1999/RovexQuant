@@ -267,13 +267,26 @@ internal fun ValidatedCandlestickChart(
         val first = visible.firstOrNull()?.time.orEmpty()
         val last = visible.lastOrNull()?.time.orEmpty()
         if (visible.isNotEmpty()) {
+            val axisLabels = listOf(
+                chartAxisLabel(visible.first().time),
+                chartAxisLabel(visible[visible.size / 2].time),
+                chartAxisLabel(visible.last().time)
+            )
             Row(
-                modifier = Modifier.fillMaxWidth().testTag("instrument.chart.time.labels"),
+                modifier = Modifier.fillMaxWidth()
+                    .testTag("instrument.chart.time.labels")
+                    .semantics {
+                        contentDescription = if (data.instrument.interval.isIntraday) {
+                            "Intraday chart time labels: ${axisLabels.joinToString()}"
+                        } else {
+                            "Daily chart date labels: ${axisLabels.joinToString()}"
+                        }
+                    },
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(chartAxisLabel(visible.first().time), color = Color(0xFF9AA8B8), fontSize = 9.sp)
-                Text(chartAxisLabel(visible[visible.size / 2].time), color = Color(0xFF9AA8B8), fontSize = 9.sp)
-                Text(chartAxisLabel(visible.last().time), color = Color(0xFF9AA8B8), fontSize = 9.sp)
+                axisLabels.forEach { label ->
+                    Text(label, color = Color(0xFF9AA8B8), fontSize = 9.sp)
+                }
             }
         }
         Text(
