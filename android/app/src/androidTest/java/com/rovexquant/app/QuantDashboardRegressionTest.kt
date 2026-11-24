@@ -43,11 +43,12 @@ class QuantDashboardRegressionTest {
         // The controls live in a nested horizontal scroller inside the screen's
         // vertical scroller. Scroll the horizontal container itself so the
         // pointer injected by performClick lands inside the clipped viewport.
-        // Scroll the row as a child of the screen's vertical scroller, then
-        // scroll within that row to reveal the requested chip horizontally.
-        val controls = composeRule.onNodeWithTag("instrument.chart.indicator.controls")
-        controls.performScrollTo()
-        controls.performScrollToNode(hasTestTag(tag))
+        // The outer screen scrolls to the row itself (a direct child); the
+        // row then scrolls horizontally to the requested chip.
+        composeRule.onNodeWithTag("instrument.research.screen")
+            .performScrollToNode(hasTestTag("instrument.chart.indicator.controls"))
+        composeRule.onNodeWithTag("instrument.chart.indicator.controls")
+            .performScrollToNode(hasTestTag(tag))
         composeRule.onNodeWithTag(tag).assertIsDisplayed().performClick()
         composeRule.waitForIdle()
     }
