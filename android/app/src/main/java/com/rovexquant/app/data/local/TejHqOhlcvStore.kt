@@ -45,12 +45,8 @@ object TejHqOhlcvStore {
     fun load(context: Context, exchange: String, symbol: String): List<OhlcvBar>? {
         val file = seriesFile(context, exchange, symbol)
         if (file.isFile) return OhlcvCsvResearch.parse(file.readText(Charsets.UTF_8))
-        // Adopt the pre-multi-series cache only for the identity recorded when it was saved.
-        val current = settings(context)
-        if (current.exchange.equals(exchange, true) && current.symbol.equals(symbol, true)) {
-            val legacy = File(context.filesDir, FILE_NAME)
-            if (legacy.isFile) return OhlcvCsvResearch.parse(legacy.readText(Charsets.UTF_8))
-        }
+        // Do not infer a legacy/imported CSV's instrument identity from mutable UI settings.
+        // Unknown-provenance files remain available to Research Lab but are not attached to a symbol.
         return null
     }
 
