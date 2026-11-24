@@ -224,7 +224,7 @@ fun InstrumentResearchScreen(
                     "${visible.size} bars  ·  ${visible.first().timestamp.toLocalDate()} → ${visible.last().timestamp.toLocalDate()}",
                     color = Muted, fontSize = 10.sp
                 )
-                InteractivePriceChart(
+                CandlestickPriceChart(
                     bars = visible,
                     showVolume = volume && series?.volumeAvailable == true,
                     showSma20 = sma20,
