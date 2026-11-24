@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.local.TejHqOhlcvStore
 import com.rovexquant.app.data.local.TejHqOhlcvSyncManager
 import com.rovexquant.app.data.repository.QuantDataRepository
@@ -40,7 +41,9 @@ import java.time.ZoneId
 @Composable
 fun TejHqOhlcvPanel(
     repository: QuantDataRepository?,
-    onDatasetLoaded: (OhlcvResearchSummary, String) -> Unit
+    onDatasetLoaded: (OhlcvResearchSummary, String) -> Unit,
+    equityInstruments: List<MarketEquityInstrument> = emptyList(),
+    indexKeys: Map<String, String> = emptyMap()
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -130,13 +133,15 @@ fun TejHqOhlcvPanel(
                 modifier = Modifier.weight(1f).testTag("ohlcv.exchange.bse")
             ) { Text(if (exchange == "BSE") "● BSE" else "BSE") }
         }
-        OutlinedTextField(
+        InstrumentSymbolPicker(
             value = symbol,
-            onValueChange = { symbol = it.take(30).uppercase() },
-            label = { Text("Stock symbol") },
-            placeholder = { Text("RELIANCE") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth().testTag("ohlcv.symbol")
+            onValueChange = { symbol = it.uppercase().take(40) },
+            label = "Stock or index name",
+            testTag = "ohlcv.symbol",
+            equities = if (exchange == "NSE") equityInstruments else emptyList(),
+            indexKeys = if (exchange == "NSE") indexKeys else emptyMap(),
+            enabled = exchange == "NSE",
+            placeholder = if (exchange == "NSE") "Company name or ticker" else "BSE symbol · manual entry"
         )
         EventDatePickerField(
             value = fromDate,
