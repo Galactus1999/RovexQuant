@@ -7,7 +7,8 @@ data class MacroSeriesObservation(
     val unit: String,
     val latestPeriod: String?,
     val latestValue: Double?,
-    val source: String
+    val source: String,
+    val provider: String = ""
 )
 
 data class AmfiNavObservation(

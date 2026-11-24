@@ -184,22 +184,31 @@ private fun MacroSummaryContent(summary: MacroResearchSummary) {
                 color = if (state == "failed") Coral else Muted, fontSize = 9.sp)
         }
     }
-    if (summary.worldBankSeries.isEmpty()) {
-        Text("No World Bank observations returned.", color = Muted, fontSize = 10.sp)
-    } else {
-        summary.worldBankSeries.forEach { item ->
-            Column(Modifier.fillMaxWidth().padding(top = 9.dp)) {
-                Text(item.label, color = MaterialTheme.colorScheme.onBackground,
-                    fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(item.latestPeriod ?: "No period", color = Muted, fontSize = 10.sp)
-                    Text(
-                        item.latestValue?.let { String.format(Locale.US, "%.2f %s", it, item.unit) } ?: "Unavailable",
-                        color = if (item.latestValue == null) Gold else Mint,
-                        fontSize = 11.sp, fontWeight = FontWeight.Bold
-                    )
+    val groups = listOf(
+        "WORLD_BANK" to "World Bank · India",
+        "RBIH_DBIE_MIRROR" to "RBI mirror",
+        "FRED" to "FRED · United States"
+    )
+    groups.forEach { (provider, title) ->
+        val items = summary.worldBankSeries.filter { it.provider == provider }
+        if (items.isNotEmpty()) {
+            Eyebrow(title)
+            items.forEach { item ->
+                Column(Modifier.fillMaxWidth().padding(top = 7.dp)) {
+                    Text(item.label, color = MaterialTheme.colorScheme.onBackground,
+                        fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(item.latestPeriod ?: "No period", color = Muted, fontSize = 10.sp)
+                        Text(
+                            item.latestValue?.let { String.format(Locale.US, "%.2f %s", it, item.unit) } ?: "Unavailable",
+                            color = if (item.latestValue == null) Gold else Mint,
+                            fontSize = 11.sp, fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
+        } else if (provider == "WORLD_BANK") {
+            Text("World Bank data unavailable", color = Muted, fontSize = 10.sp)
         }
     }
     if (summary.amfiNavCount > 0) {

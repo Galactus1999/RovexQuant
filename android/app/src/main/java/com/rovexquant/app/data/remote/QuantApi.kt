@@ -562,7 +562,7 @@ object QuantApi {
             val provider = item.optString("provider").uppercase()
             val key = item.optString("series_key")
             if (provider == "FRED") fredSeries += key
-            if (provider != "WORLD_BANK" && provider != "RBIH_DBIE_MIRROR") continue
+            if (provider !in setOf("WORLD_BANK", "RBIH_DBIE_MIRROR", "FRED")) continue
             if (key.isBlank()) continue
             val groupKey = "$provider:$key"
             val prior = latestBySeries[groupKey]
@@ -579,7 +579,8 @@ object QuantApi {
                 unit = item.optString("unit"),
                 latestPeriod = item.optString("period").takeIf { it.isNotBlank() && it != "null" },
                 latestValue = item.optDouble("value", Double.NaN).takeIf { it.isFinite() },
-                source = item.optString("provider") + (metadata?.optString("source")?.let { " · $it" } ?: "")
+                source = provider + (metadata?.optString("source")?.let { " · $it" } ?: ""),
+                provider = provider
             )
         }
 
