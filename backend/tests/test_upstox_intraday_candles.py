@@ -68,6 +68,21 @@ def test_upstox_v3_resolves_index_and_never_marks_index_volume_available(monkeyp
     assert result["volume_available"] is False
 
 
+
+def test_nifty_prefixed_etf_resolves_as_equity_not_index(monkeypatch):
+    monkeypatch.setattr(upstox_candles, "get_nse_analytics_token", lambda: "fake-token", raising=False)
+    monkeypatch.setattr(upstox_candles, "get_nse_index_instruments", lambda: asyncio.sleep(0, result=[{
+        "instrument_key": "NSE_INDEX|Nifty 50",
+        "name": "Nifty 50",
+        "trading_symbol": "Nifty 50",
+    }]))
+    monkeypatch.setattr(upstox_candles, "get_nse_equity_instruments", lambda: asyncio.sleep(0, result=[{
+        "instrument_key": "NSE_EQ|INF204KB17I5",
+        "name": "NIPPON INDIA ETF NIFTY 50 BEES",
+        "trading_symbol": "NIFTYBEES",
+    }]))
+    assert asyncio.run(upstox_candles.resolve_nse_instrument_key("NIFTYBEES")) == "NSE_EQ|INF204KB17I5"
+
 def test_upstox_v3_rejects_unsupported_intervals_and_excessive_history():
     with pytest.raises(upstox_candles.UpstoxCandleError, match="Unsupported"):
         upstox_candles.interval_contract("2m")
