@@ -12,6 +12,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -128,24 +130,37 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
 
 @Composable
 private fun TerminalNavigation(selected: TerminalSection, onSelect: (TerminalSection) -> Unit) {
+    val primary = listOf(
+        TerminalSection.PULSE,
+        TerminalSection.SCANNER,
+        TerminalSection.LAB,
+        TerminalSection.INTELLIGENCE
+    )
+    val secondary = listOf(
+        TerminalSection.SIGNALS,
+        TerminalSection.PORTFOLIO,
+        TerminalSection.MACRO,
+        TerminalSection.AI
+    )
+    var moreExpanded by remember { mutableStateOf(false) }
     BoxWithConstraints(
         Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 12.dp, end = 12.dp, top = 7.dp, bottom = 7.dp)
             .clip(RoundedCornerShape(25.dp)).background(PanelRaised).padding(horizontal = 4.dp, vertical = 6.dp)
     ) {
-        val slotWidth = maxWidth / TerminalSection.values().size
-        val selectedIndex = TerminalSection.values().indexOf(selected)
+        val slotWidth = maxWidth / 5
+        val selectedIndex = primary.indexOf(selected).let { if (it >= 0) it else 4 }
         val animatedIndex by animateFloatAsState(
             targetValue = selectedIndex.toFloat(),
-            animationSpec = tween(durationMillis = 360, easing = FastOutSlowInEasing),
+            animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
             label = "navigationGlide"
         )
         Box(
             Modifier.offset(x = slotWidth * animatedIndex + 2.dp)
-                .width(slotWidth - 4.dp).height(43.dp).clip(RoundedCornerShape(16.dp))
+                .width(slotWidth - 4.dp).height(45.dp).clip(RoundedCornerShape(16.dp))
                 .background(Mint.copy(alpha = .12f))
         )
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            TerminalSection.values().forEach { destination ->
+            primary.forEach { destination ->
                 val active = selected == destination
                 val tint by animateColorAsState(if (active) Mint else Muted, label = "navigationTint")
                 Column(
@@ -153,9 +168,35 @@ private fun TerminalNavigation(selected: TerminalSection, onSelect: (TerminalSec
                         .padding(vertical = 4.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(destination.glyph, color = tint, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    Text(destination.glyph, color = tint, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(2.dp))
-                    Text(destination.label, color = tint, fontSize = 8.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Medium, maxLines = 1)
+                    Text(destination.label, color = tint, fontSize = 9.sp,
+                        fontWeight = if (active) FontWeight.Bold else FontWeight.Medium, maxLines = 1)
+                }
+            }
+            Box(Modifier.weight(1f)) {
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                        .clickable { moreExpanded = true }.padding(vertical = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("⋯", color = if (selected in secondary) Mint else Muted,
+                        fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(1.dp))
+                    Text("More", color = if (selected in secondary) Mint else Muted,
+                        fontSize = 9.sp, fontWeight = if (selected in secondary) FontWeight.Bold else FontWeight.Medium)
+                }
+                DropdownMenu(expanded = moreExpanded, onDismissRequest = { moreExpanded = false }) {
+                    secondary.forEach { destination ->
+                        DropdownMenuItem(
+                            text = { Text(destination.label) },
+                            leadingIcon = { Text(destination.glyph) },
+                            onClick = {
+                                moreExpanded = false
+                                onSelect(destination)
+                            }
+                        )
+                    }
                 }
             }
         }
