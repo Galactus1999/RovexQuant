@@ -77,17 +77,31 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithText("Strategy scanner.").assertIsDisplayed()
         composeRule.onNodeWithTag("scanner.list").performScrollToNode(hasText("No local dataset loaded"))
         composeRule.onNodeWithText("No local dataset loaded").assertIsDisplayed()
+        composeRule.onNodeWithText("More").performClick()
         composeRule.onNodeWithText("Signals").performClick()
         composeRule.onNodeWithText("Signal centre.").assertIsDisplayed()
         composeRule.onNodeWithText("Lab").performClick()
         composeRule.onNodeWithText("Research lab.").assertIsDisplayed()
         composeRule.onNodeWithTag("research.lab.list").performScrollToNode(hasText("Import OHLCV CSV"))
         composeRule.onNodeWithText("Import OHLCV CSV").assertIsDisplayed()
+        composeRule.onNodeWithText("More").performClick()
         composeRule.onNodeWithText("Portfolio").performClick()
         composeRule.onNodeWithText("Portfolio & risk.").assertIsDisplayed()
         composeRule.onNodeWithTag("portfolio.entry").assertIsDisplayed()
     }
 
+
+
+    @Test fun settingsWorkspaceSeparatesProviderCredentialsFromMarketDashboard() {
+        waitForDashboard()
+        composeRule.onNodeWithTag("quant.settings.open").performClick()
+        composeRule.onNodeWithTag("settings.screen").assertIsDisplayed()
+        composeRule.onNodeWithText("Settings").assertIsDisplayed()
+        composeRule.onNodeWithTag("settings.upstox.token").assertIsDisplayed()
+        composeRule.onNodeWithText("Open AI provider settings").assertIsDisplayed()
+        composeRule.onNodeWithText("Close").performClick()
+        composeRule.onNodeWithText("Market pulse.").assertIsDisplayed()
+    }
 
     @Test fun aiWorkspaceConnectsChatAndEodRecoveryActions() {
         waitForDashboard()
