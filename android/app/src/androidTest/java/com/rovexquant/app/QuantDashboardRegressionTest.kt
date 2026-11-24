@@ -184,6 +184,22 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("market.eod.snapshot").assertIsDisplayed()
     }
 
+    @Test fun globalInstrumentSearchFindsCompaniesAndIndicesByName() {
+        waitForDashboard()
+        composeRule.onNodeWithTag("instrument.global.search.open").performClick()
+        composeRule.onNodeWithTag("instrument.global.search.dialog").assertIsDisplayed()
+        composeRule.onNodeWithTag("instrument.global.search.input").performTextInput("Reliance Industries")
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag("instrument.global.search.result.RELIANCE")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("RELIANCE INDUSTRIES LTD").assertIsDisplayed()
+        composeRule.onNodeWithTag("instrument.global.search.result.RELIANCE").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("instrument.research.screen").assertIsDisplayed()
+        composeRule.onNodeWithText("RELIANCE INDUSTRIES LTD").assertIsDisplayed()
+    }
+
     @Test fun bottomNavigationOpensAllWorkspacesAndSectorCoverage() {
         waitForDashboard()
         composeRule.onNodeWithText("Scan").performClick()
