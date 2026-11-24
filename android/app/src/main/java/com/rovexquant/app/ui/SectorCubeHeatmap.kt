@@ -179,7 +179,7 @@ private fun SectorCubeHeatmap(
             }
             val labelSize = 8.sp.toPx()
             val valueSize = 8.sp.toPx()
-            projected.sortedBy { it.depth }.forEach { cube ->
+            projected.sortedByDescending { it.depth }.forEach { cube ->
                 val positive = cube.tile.changePercent?.let { it >= 0.0 } == true
                 val magnitude = ((cube.tile.changePercent ?: 0.0).let(::abs) / 5.0).coerceIn(0.0, 1.0).toFloat()
                 val base = when {
