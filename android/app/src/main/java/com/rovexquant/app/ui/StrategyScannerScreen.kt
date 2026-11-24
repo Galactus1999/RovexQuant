@@ -50,7 +50,7 @@ fun StrategyScannerScreen(onOpenAi: () -> Unit = {}, onOpenResearchLab: () -> Un
                     }
                 }
             } catch (failure: Exception) {
-                localDataError = failure.message ?: "Local dataset could not be analysed"
+                localDataError = "Saved dataset could not be analysed. Re-import your CSV."
             } finally {
                 loadingLocalData = false
             }
