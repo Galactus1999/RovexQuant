@@ -7,6 +7,7 @@ import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.QuantSession
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
@@ -71,7 +72,8 @@ fun MarketPulseScreen(
     onReconnect: () -> Unit = {},
     eodSnapshot: EodMarketSnapshot? = null,
     eodSnapshotStatus: String = "EOD snapshot not loaded",
-    onRefreshEodSnapshot: () -> Unit = {}
+    onRefreshEodSnapshot: () -> Unit = {},
+    onOpenInstrument: (symbol: String, displayName: String) -> Unit = { _, _ -> }
 ) {
     val activeSession = session
     var equitySearch by remember { mutableStateOf("") }
@@ -272,7 +274,7 @@ fun MarketPulseScreen(
             }
             Column(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
-                    .background(sectorTint).padding(14.dp)
+                    .background(sectorTint).clickable { onOpenInstrument(sector.benchmark, sector.benchmark) }.padding(14.dp)
             ) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -333,7 +335,7 @@ fun MarketPulseScreen(
             val quote = ticks[instrument.instrumentKey]
             TerminalCard {
                 Row(
-                    Modifier.fillMaxWidth(),
+                    Modifier.fillMaxWidth().clickable { onOpenInstrument(instrument.tradingSymbol, instrument.name) },
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                 ) {
