@@ -256,8 +256,8 @@ class FakeQuantRepository(
             bollingerUpper = series(periods.bollinger) { bars[it].close + 1.0 },
             bollingerMiddle = series(periods.bollinger) { bars[it].close },
             bollingerLower = series(periods.bollinger) { bars[it].close - 1.0 },
-            atr = series(periods.atr) { 1.0 },
-            adx = series(periods.adx * 2 + 1) { 25.0 }
+            atr = series(periods.atr + 1) { 1.0 },
+            adx = series(periods.adx * 2) { 25.0 }
         )
     }
 
