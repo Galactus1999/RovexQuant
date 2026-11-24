@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.data.model.MarketIngestionStatus
+import com.rovexquant.app.data.model.MarketDataHealth
 import com.rovexquant.app.data.repository.QuantDataRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -40,6 +41,7 @@ fun SettingsScreen(
     var ingestionStatus by remember { mutableStateOf<MarketIngestionStatus?>(null) }
     var ingestionLoading by remember { mutableStateOf(false) }
     var ingestionError by remember { mutableStateOf<String?>(null) }
+    var dataHealth by remember { mutableStateOf<MarketDataHealth?>(null) }
 
     LaunchedEffect(session, repository) {
         try {
@@ -52,6 +54,7 @@ fun SettingsScreen(
         try {
             ingestionLoading = true
             ingestionStatus = repository.fetchMarketIngestionStatus(session, "nse")
+            dataHealth = repository.fetchMarketDataHealth(session, "NSE")
             ingestionError = null
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -166,6 +169,32 @@ fun SettingsScreen(
                 Button(onClick = onOpenAiSettings, modifier = Modifier.fillMaxWidth()) {
                     Text("Open AI provider settings")
                 }
+            }
+        }
+        item {
+            TerminalCard {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Eyebrow("Database & data health")
+                    StatusPill(
+                        dataHealth?.overallStatus ?: if (ingestionLoading) "Checking" else "Unavailable",
+                        when (dataHealth?.overallStatus) {
+                            "HEALTHY" -> Mint
+                            "DEGRADED", "FAILED" -> Coral
+                            else -> Gold
+                        }
+                    )
+                }
+                Text(
+                    dataHealth?.let { "EOD · ${it.eod.status} · ${it.eod.records ?: 0} rows" } ?: "Status unavailable",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    dataHealth?.let { "Reconciliation · ${it.reconciliation.status}" } ?: "",
+                    color = Muted,
+                    fontSize = 10.sp
+                )
             }
         }
         item {
