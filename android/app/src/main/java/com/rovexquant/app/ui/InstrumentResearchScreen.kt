@@ -22,7 +22,6 @@ import com.rovexquant.app.data.local.TejHqOhlcvStore
 import com.rovexquant.app.data.local.TejHqOhlcvSyncManager
 import com.rovexquant.app.data.repository.QuantDataRepository
 import com.rovexquant.app.domain.InstrumentCatalog
-import com.rovexquant.app.domain.InstrumentIdentity
 import com.rovexquant.app.domain.MarketOhlcvSeries
 import com.rovexquant.app.domain.OhlcvBar
 import java.time.Instant
