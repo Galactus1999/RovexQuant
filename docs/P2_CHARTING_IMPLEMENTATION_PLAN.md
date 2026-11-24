@@ -148,7 +148,8 @@ The Android wrapper executes chart calls asynchronously in WebView. Its document
 - Added the feature-facing repository port and `QuantRepository` IO/session coordination. The UI does not call `QuantApi` directly.
 - Instrument research requests indicators for the latest maximum 10,000 bars. The returned `startIndex` and count preserve alignment with the larger chart history; older bars are explicitly outside the indicator coverage window.
 - Replaced local chart SMA calculations with backend SMA/EMA/Bollinger overlays and added RSI, MACD, ATR and ADX subpanels. Controls are wired to actual renderer data, and the chart remains available if indicator calculation fails.
-- Added deterministic fake indicator fixtures for UI tests, model alignment/warm-up tests, and Android emulator assertions for RSI and MACD pane activation.
+- Added deterministic fake indicator fixtures for UI tests, model alignment/warm-up tests, and Android emulator assertions for RSI, MACD, ATR and ADX pane activation plus SMA/EMA/Bollinger control selection.
+- Added a backend API regression for all returned array lengths and the expected RSI, ATR, ADX and MACD warm-up indices.
 - Moved the index volume-unavailable disclaimer into the visible chart controls area so it does not depend on selecting a candle or scrolling to the OHLC readout.
 
 ### P2.3 remaining verification and next batch
