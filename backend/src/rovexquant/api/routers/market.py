@@ -10,9 +10,9 @@ from pydantic import BaseModel, Field, model_validator
 
 from rovexquant.api.dependencies import require_market_gateway
 from rovexquant.auth import AppAuthError, bearer_claims
+from rovexquant.market_data.data_health import get_market_data_health
 from rovexquant.market_data.eod_store import EodStoreError
 from rovexquant.market_data.integrity_service import latest_data_integrity
-from rovexquant.market_data.data_health import get_market_data_health
 from rovexquant.market_data.instruments import (
     InstrumentMasterError,
     get_nse_equity_instruments,
@@ -26,8 +26,8 @@ from rovexquant.market_data.service import (
 )
 from rovexquant.market_data.streaming import StreamError, stream_upstox_market_data
 from rovexquant.market_data.upstox_candles import UpstoxCandleError, fetch_intraday_candles
-from rovexquant.security.request_controls import backtest_rate_limit
 from rovexquant.security.dependencies import require_app_session
+from rovexquant.security.request_controls import backtest_rate_limit
 
 router = APIRouter()
 
