@@ -557,7 +557,8 @@ jobs:
               cp generated-android-locks/gradle/verification-metadata.xml android/gradle/verification-metadata.xml
             fi
           fi
-          git add -A android/app/gradle.lockfile android/gradle/verification-metadata.xml android/gradle/ALLOW_DEPENDENCY_METADATA_REFRESH
+          # Stage the lockfile plus the existing Gradle metadata directory. The one-time refresh marker is optional and may not exist; naming a missing path directly makes git add fail with pathspec error.
+          git add -A -- android/app/gradle.lockfile android/gradle/
           if git diff --cached --quiet; then
             echo "Committed Android dependency integrity metadata matches the verified build artifact."
           else
