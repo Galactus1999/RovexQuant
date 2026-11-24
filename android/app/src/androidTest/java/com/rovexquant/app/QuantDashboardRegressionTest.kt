@@ -268,6 +268,15 @@ class QuantDashboardRegressionTest {
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithText("Deterministic AI fixture response.").fetchSemanticsNodes().isNotEmpty()
         }
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.recovery.symbol.find"))
+        composeRule.onNodeWithTag("ai.recovery.symbol.find").performClick()
+        composeRule.onNodeWithTag("instrument.global.search.input").performTextInput("Reliance Industries")
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag("instrument.global.search.result.RELIANCE")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("instrument.global.search.result.RELIANCE").performClick()
+        composeRule.onNodeWithTag("ai.recovery.symbol").assertTextEquals("RELIANCE")
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.recovery.run"))
         composeRule.onNodeWithTag("ai.recovery.run").performClick()
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(
