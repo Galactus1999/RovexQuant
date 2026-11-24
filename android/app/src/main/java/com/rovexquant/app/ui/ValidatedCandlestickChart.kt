@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -29,6 +30,8 @@ import com.rovexquant.app.domain.ChartCandle
 import com.rovexquant.app.domain.ChartSeriesData
 import kotlin.math.max
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private val ChartUp = Color(0xFF27C58B)
 private val ChartDown = Color(0xFFFF6678)
@@ -61,8 +64,13 @@ internal fun ValidatedCandlestickChart(
     val visible = remember(candles, safeStart, safeEnd) {
         candles.subList(safeStart, safeEnd)
     }
-    val sma20 = remember(candles) { movingAverage(candles, 20) }
-    val sma50 = remember(candles) { movingAverage(candles, 50) }
+    val averages by produceState<Pair<List<Double?>, List<Double?>>?>(initialValue = null, candles) {
+        value = withContext(Dispatchers.Default) {
+            movingAverage(candles, 20) to movingAverage(candles, 50)
+        }
+    }
+    val sma20 = averages?.first.orEmpty()
+    val sma50 = averages?.second.orEmpty()
     val selected = candles.getOrNull(selectedIndex.coerceIn(candles.indices))
 
     Column {
