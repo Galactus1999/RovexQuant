@@ -274,13 +274,16 @@ fun MarketPulseScreen(
             }
             Column(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
-                    .background(sectorTint).clickable { onOpenInstrument(sector.benchmark, sector.benchmark) }.padding(14.dp)
+                    .background(sectorTint)
+                    .clickable { onOpenInstrument(sector.benchmark, sector.benchmark) }
+                    .testTag("sector.index.${sector.benchmark}")
+                    .padding(14.dp)
             ) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(sector.sector, color = MaterialTheme.colorScheme.onBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(3.dp))
-                        Text(sector.benchmark, color = Muted, fontSize = 9.sp, letterSpacing = .5.sp, modifier = Modifier.testTag("sector.index.${sector.benchmark}"))
+                        Text(sector.benchmark, color = Muted, fontSize = 9.sp, letterSpacing = .5.sp, )
                     }
                     StatusPill(
                         quote?.takeIf { it.quality == "VALID" && isFresh(it) }?.changePercent
