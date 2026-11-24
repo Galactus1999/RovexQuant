@@ -91,7 +91,7 @@ fun InstrumentSearchDialog(
                     Column {
                         Text("Find a company or index", color = MaterialTheme.colorScheme.onBackground,
                             fontSize = 19.sp, fontWeight = FontWeight.Bold)
-                        Text("${equities.size} NSE equities · ${indexKeys.size} indices in the loaded instrument master",
+                        Text("${equities.size} NSE companies · ${indexKeys.size} indices in the on-device name library",
                             color = Muted, fontSize = 9.sp)
                     }
                     TextButton(onClick = onDismiss) { Text("Close") }
