@@ -33,7 +33,7 @@ private enum class Horizon(val title: String, val range: String, val summary: St
 private data class StrategyItem(val name: String, val detail: String, val status: String, val implemented: Boolean)
 
 @Composable
-fun StrategyScannerScreen(onOpenAi: () -> Unit = {}) {
+fun StrategyScannerScreen(onOpenAi: () -> Unit = {}, onOpenResearchLab: () -> Unit = {}) {
     val context = LocalContext.current
     var localSummary by remember { mutableStateOf<OhlcvResearchSummary?>(null) }
     var loadingLocalData by remember { mutableStateOf(false) }
@@ -92,8 +92,17 @@ fun StrategyScannerScreen(onOpenAi: () -> Unit = {}) {
         item {
             when {
                 loadingLocalData -> EmptyPanel("Loading local dataset", "Reading your privately stored historical CSV.")
-                localDataError != null -> EmptyPanel("Dataset scan unavailable", localDataError!!, Coral)
-                localSummary == null -> EmptyPanel("No local dataset loaded", "Import a licensed OHLCV CSV in Research Lab. The scanner will evaluate completed historical bars on this device.")
+                localDataError != null -> GracefulErrorState("Saved dataset unavailable. Re-import your CSV.")
+                localSummary == null -> {
+                    TerminalCard {
+                        Eyebrow("Strategy workspace")
+                        EmptyCandlestickChart(
+                            message = "Your risk / reward canvas is ready when historical data is loaded.",
+                            actionLabel = "＋ Import CSV",
+                            onAction = onOpenResearchLab
+                        )
+                    }
+                }
                 else -> {
                     val report = localSummary!!
                     TerminalCard {
@@ -105,7 +114,12 @@ fun StrategyScannerScreen(onOpenAi: () -> Unit = {}) {
                         ScannerMetric("RSI 14", report.rsi14?.let { String.format(Locale.US, "%.1f", it) } ?: "Warming up")
                         Spacer(Modifier.height(5.dp))
                         Text(report.rows.toString() + " bars · as of " + report.lastTimestamp.toString(), color = Muted, fontSize = 9.sp)
-                        Text("Historical file analysis only. These conditions are not live alerts or validated trade recommendations.", color = Muted, fontSize = 10.sp, lineHeight = 16.sp)
+                        Text("Historical file analysis only · not a live signal.", color = Muted, fontSize = 9.sp)
+                        Spacer(Modifier.height(8.dp))
+                        RiskRewardPlaceholder(
+                            message = "A single-instrument file cannot populate a multi-asset risk / reward scatter.",
+                            onImport = onOpenResearchLab
+                        )
                     }
                 }
             }
@@ -174,5 +188,26 @@ private fun ScannerMetric(label: String, value: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, color = Muted, fontSize = 11.sp)
         Text(value, color = MaterialTheme.colorScheme.onBackground, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun RiskRewardPlaceholder(message: String, onImport: () -> Unit) {
+    TerminalCard {
+        Eyebrow("Risk / reward map")
+        androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(132.dp)) {
+            val grid = Color(0xFF334155)
+            for (i in 1..4) {
+                val y = size.height * i / 5f
+                drawLine(grid, androidx.compose.ui.geometry.Offset(0f, y), androidx.compose.ui.geometry.Offset(size.width, y), 0.8f)
+            }
+            for (i in 1..5) {
+                val x = size.width * i / 6f
+                drawLine(grid, androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, size.height), 0.8f)
+            }
+            drawLine(Color(0xFF64748B), androidx.compose.ui.geometry.Offset(0f, size.height), androidx.compose.ui.geometry.Offset(size.width, 0f), 1.2f)
+        }
+        Text(message, color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
+        androidx.compose.material3.TextButton(onClick = onImport) { Text("Add historical data") }
     }
 }
