@@ -1,6 +1,7 @@
 package com.rovexquant.app.data.repository
 
 import com.rovexquant.app.data.local.QuantSessionStore
+import com.rovexquant.app.data.local.InstrumentMasterCache
 import com.rovexquant.app.domain.OhlcvBar
 import com.rovexquant.app.domain.InstrumentIdentity
 import com.rovexquant.app.domain.MarketOhlcvSeries
@@ -36,6 +37,10 @@ interface QuantDataRepository {
     suspend fun validateSession(session: QuantSession): Boolean
     suspend fun fetchIndexInstruments(session: QuantSession): List<MarketIndexInstrument>
     suspend fun fetchEquityInstruments(session: QuantSession): List<MarketEquityInstrument>
+    suspend fun loadCachedIndexInstruments(): InstrumentMasterCache<MarketIndexInstrument>? = null
+    suspend fun loadCachedEquityInstruments(): InstrumentMasterCache<MarketEquityInstrument>? = null
+    suspend fun saveCachedIndexInstruments(instruments: List<MarketIndexInstrument>) = Unit
+    suspend fun saveCachedEquityInstruments(instruments: List<MarketEquityInstrument>) = Unit
     suspend fun fetchNseMcpTools(session: QuantSession, server: String): List<NseMcpCatalog>
     suspend fun fetchAiProviders(session: QuantSession): List<AiProvider>
     suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String)
