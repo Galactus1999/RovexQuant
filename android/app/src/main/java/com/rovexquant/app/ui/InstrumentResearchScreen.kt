@@ -43,7 +43,7 @@ fun InstrumentResearchScreen(symbol: String, displayName: String, repository: Qu
         val settings = TejHqOhlcvStore.settings(context)
         val imported = withContext(Dispatchers.IO) {
             if (settings.symbol.equals(symbol, ignoreCase = true) && settings.exchange.equals("nse", ignoreCase = true)) {
-                runCatching { TejHqOhlcvStore.load(context).orEmpty() }.getOrDefault(emptyList())
+                runCatching { TejHqOhlcvStore.load(context, "nse", symbol).orEmpty() }.getOrDefault(emptyList())
             } else emptyList()
         }
         val fetched = withContext(Dispatchers.IO) { runCatching { repository.fetchTejHqOhlcv("nse", symbol, today.minusYears(3), today) } }
