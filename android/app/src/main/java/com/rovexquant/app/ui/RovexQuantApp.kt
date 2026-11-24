@@ -1,7 +1,5 @@
 package com.rovexquant.app.ui
 
-import android.app.Application
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -20,6 +18,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -29,14 +31,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rovexquant.app.feature.workspace.QuantWorkspaceViewModel
 
 private enum class TerminalSection(val label: String, val glyph: String) {
-    PULSE("Pulse", "◈"),
-    SCANNER("Scan", "⌕"),
-    SIGNALS("Signals", "⌁"),
-    LAB("Lab", "⌘"),
-    PORTFOLIO("Portfolio", "▤"),
-    INTELLIGENCE("Intel", "✦"),
-    MACRO("Macro", "◎"),
-    AI("Chat", "◉")
+    PULSE("Pulse", "◈"), SCANNER("Scan", "⌕"), SIGNALS("Signals", "⌁"),
+    LAB("Lab", "⌘"), PORTFOLIO("Portfolio", "▤"), INTELLIGENCE("Intel", "✦"),
+    MACRO("Macro", "◎"), AI("Chat", "◉"), RESEARCH("Research", "✧")
 }
 
 @Composable
@@ -48,6 +45,7 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
     val state by workspace.uiState.collectAsStateWithLifecycle()
     var selected by remember { mutableStateOf(TerminalSection.PULSE) }
     var showSettings by remember { mutableStateOf(false) }
+    val wideLayout = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 720
     BackHandler(enabled = showSettings) { showSettings = false }
 
     if (state.restoringSession) {
@@ -59,12 +57,8 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
 
     val activeSession = state.session
     if (activeSession == null) {
-        QuantLoginScreen(
-            savedConnection = state.savedConnection,
-            loading = state.loginLoading,
-            error = state.loginError,
-            onLogin = workspace::login
-        )
+        QuantLoginScreen(savedConnection = state.savedConnection, loading = state.loginLoading,
+            error = state.loginError, onLogin = workspace::login)
         return
     }
 
@@ -81,64 +75,81 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
                 onOpenSettings = { showSettings = true }
             )
         }
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            if (showSettings) {
-                SettingsScreen(
-                    session = activeSession,
-                    repository = workspace.repository,
-                    onBack = { showSettings = false },
-                    onOpenAiSettings = { showSettings = false; selected = TerminalSection.AI },
-                    onOpenMarketPulse = { showSettings = false; selected = TerminalSection.PULSE }
-                )
-            } else {
-            AnimatedContent(targetState = selected, label = "workspaceTransition") { destination ->
-                when (destination) {
-                    TerminalSection.PULSE -> MarketPulseScreen(
-                        ticks = state.ticks,
-                        indexKeys = state.indexKeys,
-                        equityInstruments = state.equities,
-                        streamStatus = state.streamStatus,
-                        session = activeSession,
-                        onReconnect = workspace::reconnectMarketStream,
-                        eodSnapshot = state.eodSnapshot,
-                        eodSnapshotStatus = state.eodSnapshotStatus,
-                        onRefreshEodSnapshot = workspace::refreshEodSnapshot
-                    )
-                    TerminalSection.SCANNER -> StrategyScannerScreen(onOpenAi = { selected = TerminalSection.AI })
-                    TerminalSection.SIGNALS -> SignalsScreen()
-                    TerminalSection.LAB -> ResearchLabScreen(
-                        session = activeSession,
-                        repository = workspace.repository
-                    )
-                    TerminalSection.PORTFOLIO -> PortfolioScreen()
-                    TerminalSection.INTELLIGENCE -> IntelligenceCentreScreen(session = activeSession, repository = workspace.repository)
-                    TerminalSection.MACRO -> MacroEventResearchScreen(session = activeSession, repository = workspace.repository)
-                    TerminalSection.AI -> AiWorkspaceScreen(session = activeSession, repository = workspace.repository)
+        Row(Modifier.weight(1f).fillMaxWidth()) {
+            if (wideLayout && !showSettings) {
+                TerminalNavigation(selected, onSelect = { selected = it }, vertical = true)
+            }
+            BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
+                val contentWidth = maxWidth.coerceAtMost(1120.dp)
+                Box(Modifier.width(contentWidth).fillMaxHeight().align(Alignment.TopCenter)) {
+                    if (showSettings) {
+                        SettingsScreen(session = activeSession, repository = workspace.repository,
+                            onBack = { showSettings = false },
+                            onOpenAiSettings = { showSettings = false; selected = TerminalSection.AI },
+                            onOpenMarketPulse = { showSettings = false; selected = TerminalSection.PULSE })
+                    } else {
+                        AnimatedContent(targetState = selected, label = "workspaceTransition") { destination ->
+                            when (destination) {
+                                TerminalSection.PULSE -> MarketPulseScreen(
+                                    ticks = state.ticks, indexKeys = state.indexKeys,
+                                    equityInstruments = state.equities, streamStatus = state.streamStatus,
+                                    session = activeSession, onReconnect = workspace::reconnectMarketStream,
+                                    eodSnapshot = state.eodSnapshot, eodSnapshotStatus = state.eodSnapshotStatus,
+                                    onRefreshEodSnapshot = workspace::refreshEodSnapshot)
+                                TerminalSection.SCANNER -> StrategyScannerScreen(onOpenAi = { selected = TerminalSection.AI })
+                                TerminalSection.SIGNALS -> SignalsScreen()
+                                TerminalSection.LAB -> ResearchLabScreen(session = activeSession, repository = workspace.repository)
+                                TerminalSection.PORTFOLIO -> PortfolioScreen()
+                                TerminalSection.INTELLIGENCE -> IntelligenceCentreScreen(session = activeSession, repository = workspace.repository)
+                                TerminalSection.MACRO -> MacroEventResearchScreen(session = activeSession, repository = workspace.repository)
+                                TerminalSection.AI -> AiWorkspaceScreen(session = activeSession, repository = workspace.repository)
+                                TerminalSection.RESEARCH -> ResearchCopilotScreen(session = activeSession, repository = workspace.repository)
+                            }
+                        }
+                    }
                 }
             }
-            }
         }
-        if (!showSettings) {
-            TerminalNavigation(selected = selected, onSelect = { selected = it })
+        if (!showSettings && !wideLayout) {
+            TerminalNavigation(selected, onSelect = { selected = it })
         }
     }
 }
 
 @Composable
-private fun TerminalNavigation(selected: TerminalSection, onSelect: (TerminalSection) -> Unit) {
-    val primary = listOf(
-        TerminalSection.PULSE,
-        TerminalSection.SCANNER,
-        TerminalSection.LAB,
-        TerminalSection.INTELLIGENCE
-    )
-    val secondary = listOf(
-        TerminalSection.SIGNALS,
-        TerminalSection.PORTFOLIO,
-        TerminalSection.MACRO,
-        TerminalSection.AI
-    )
+private fun TerminalNavigation(
+    selected: TerminalSection,
+    onSelect: (TerminalSection) -> Unit,
+    vertical: Boolean = false
+) {
+    val primary = listOf(TerminalSection.PULSE, TerminalSection.SCANNER, TerminalSection.LAB, TerminalSection.INTELLIGENCE)
+    val secondary = listOf(TerminalSection.RESEARCH, TerminalSection.SIGNALS, TerminalSection.PORTFOLIO, TerminalSection.MACRO, TerminalSection.AI)
     var moreExpanded by remember { mutableStateOf(false) }
+    val itemModifier = Modifier.semantics { contentDescription = "Open workspace" }
+
+    if (vertical) {
+        Column(
+            Modifier.width(92.dp).fillMaxHeight().navigationBarsPadding().padding(start = 8.dp, top = 8.dp, bottom = 8.dp)
+                .clip(RoundedCornerShape(24.dp)).background(PanelRaised).padding(6.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp), horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            (primary + secondary).forEach { destination ->
+                val active = selected == destination
+                val tint by animateColorAsState(if (active) Mint else Muted, label = "railTint")
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp))
+                        .background(if (active) Mint.copy(alpha = .12f) else PanelRaised)
+                        .clickable(role = Role.Tab, onClickLabel = "Open ${destination.label}") { onSelect(destination) }
+                        .padding(vertical = 9.dp), horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(destination.glyph, color = tint, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                    Text(destination.label, color = tint, fontSize = 9.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Medium)
+                }
+            }
+        }
+        return
+    }
+
     BoxWithConstraints(
         Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 12.dp, end = 12.dp, top = 7.dp, bottom = 7.dp)
             .clip(RoundedCornerShape(25.dp)).background(PanelRaised).padding(horizontal = 4.dp, vertical = 6.dp)
@@ -147,22 +158,17 @@ private fun TerminalNavigation(selected: TerminalSection, onSelect: (TerminalSec
         val selectedIndex = primary.indexOf(selected).let { if (it >= 0) it else 4 }
         val animatedIndex by animateFloatAsState(
             targetValue = selectedIndex.toFloat(),
-            animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
-            label = "navigationGlide"
-        )
-        Box(
-            Modifier.offset(x = slotWidth * animatedIndex + 2.dp)
-                .width(slotWidth - 4.dp).height(45.dp).clip(RoundedCornerShape(16.dp))
-                .background(Mint.copy(alpha = .12f))
-        )
+            animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing), label = "navigationGlide")
+        Box(Modifier.offset(x = slotWidth * animatedIndex + 2.dp).width(slotWidth - 4.dp).height(45.dp)
+            .clip(RoundedCornerShape(16.dp)).background(Mint.copy(alpha = .12f)))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             primary.forEach { destination ->
                 val active = selected == destination
                 val tint by animateColorAsState(if (active) Mint else Muted, label = "navigationTint")
                 Column(
-                    Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).clickable { onSelect(destination) }
-                        .padding(vertical = 4.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    itemModifier.weight(1f).clip(RoundedCornerShape(16.dp))
+                        .clickable(role = Role.Tab, onClickLabel = "Open ${destination.label}") { onSelect(destination) }
+                        .padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(destination.glyph, color = tint, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(2.dp))
@@ -173,25 +179,19 @@ private fun TerminalNavigation(selected: TerminalSection, onSelect: (TerminalSec
             Box(Modifier.weight(1f)) {
                 Column(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-                        .clickable { moreExpanded = true }.padding(vertical = 4.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .clickable(role = Role.Button, onClickLabel = "More workspaces") { moreExpanded = true }
+                        .padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("⋯", color = if (selected in secondary) Mint else Muted,
-                        fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text("⋯", color = if (selected in secondary) Mint else Muted, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(1.dp))
-                    Text("More", color = if (selected in secondary) Mint else Muted,
-                        fontSize = 9.sp, fontWeight = if (selected in secondary) FontWeight.Bold else FontWeight.Medium)
+                    Text("More", color = if (selected in secondary) Mint else Muted, fontSize = 9.sp,
+                        fontWeight = if (selected in secondary) FontWeight.Bold else FontWeight.Medium)
                 }
                 DropdownMenu(expanded = moreExpanded, onDismissRequest = { moreExpanded = false }) {
                     secondary.forEach { destination ->
                         DropdownMenuItem(
-                            text = { Text(destination.label) },
-                            leadingIcon = { Text(destination.glyph) },
-                            onClick = {
-                                moreExpanded = false
-                                onSelect(destination)
-                            }
-                        )
+                            text = { Text(destination.label) }, leadingIcon = { Text(destination.glyph) },
+                            onClick = { moreExpanded = false; onSelect(destination) })
                     }
                 }
             }
