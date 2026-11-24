@@ -13,7 +13,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -29,10 +28,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rovexquant.app.domain.ChartCandle
 import com.rovexquant.app.domain.ChartSeriesData
+import com.rovexquant.app.data.model.TechnicalIndicators
 import kotlin.math.max
 import kotlin.math.roundToInt
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 private val ChartUp = Color(0xFF27C58B)
 private val ChartDown = Color(0xFFFF6678)
@@ -44,9 +42,16 @@ private const val MAX_RENDERED_CHART_CANDLES = 2_000
 @Composable
 internal fun ValidatedCandlestickChart(
     data: ChartSeriesData,
+    indicators: TechnicalIndicators?,
+    indicatorSourceOffset: Int,
     showVolume: Boolean,
-    showSma20: Boolean,
-    showSma50: Boolean
+    showSma: Boolean,
+    showEma: Boolean,
+    showBollinger: Boolean,
+    showRsi: Boolean,
+    showMacd: Boolean,
+    showAtr: Boolean,
+    showAdx: Boolean
 ) {
     val candles = data.candles
     val initialCount = minOf(160, candles.size).coerceAtLeast(1)
@@ -67,16 +72,31 @@ internal fun ValidatedCandlestickChart(
     val visible = remember(candles, safeStart, safeEnd) {
         candles.subList(safeStart, safeEnd)
     }
-    val averages by produceState<Pair<List<Double?>, List<Double?>>?>(initialValue = null, candles) {
-        value = withContext(Dispatchers.Default) {
-            movingAverage(candles, 20) to movingAverage(candles, 50)
-        }
-    }
-    val sma20 = averages?.first.orEmpty()
-    val sma50 = averages?.second.orEmpty()
     val selected = candles.getOrNull(selectedIndex.coerceIn(candles.indices))
-    val visiblePriceBounds = remember(visible) {
-        if (visible.isEmpty()) null else visible.minOf { it.low } to visible.maxOf { it.high }
+    val visiblePriceBounds = remember(
+        visible, indicators, indicatorSourceOffset, safeStart, safeEnd,
+        showSma, showEma, showBollinger
+    ) {
+        if (visible.isEmpty()) {
+            null
+        } else {
+            val prices = buildList {
+                visible.forEach { add(it.low); add(it.high) }
+                val indicatorData = indicators
+                if (indicatorData != null) {
+                    for (localIndex in safeStart until safeEnd) {
+                        val indicatorIndex = indicatorSourceOffset + localIndex - indicatorData.startIndex
+                        if (showSma) indicatorData.sma.getOrNull(indicatorIndex)?.let(::add)
+                        if (showEma) indicatorData.ema.getOrNull(indicatorIndex)?.let(::add)
+                        if (showBollinger) {
+                            indicatorData.bollingerUpper.getOrNull(indicatorIndex)?.let(::add)
+                            indicatorData.bollingerLower.getOrNull(indicatorIndex)?.let(::add)
+                        }
+                    }
+                }
+            }
+            prices.minOrNull()!! to prices.maxOrNull()!!
+        }
     }
     val visibleMaxVolume = remember(data.volumeBars, safeStart, safeEnd) {
         data.volumeBars?.subList(safeStart, safeEnd)?.maxOfOrNull { it.value }?.coerceAtLeast(1L) ?: 1L
@@ -186,10 +206,12 @@ internal fun ValidatedCandlestickChart(
             }
 
             fun drawOverlay(values: List<Double?>, color: Color) {
+                val indicatorData = indicators ?: return
                 val path = Path()
                 var started = false
                 for (globalIndex in safeStart until safeEnd) {
-                    val value = values.getOrNull(globalIndex) ?: continue
+                    val sourceIndex = indicatorSourceOffset + globalIndex - indicatorData.startIndex
+                    val value = values.getOrNull(sourceIndex) ?: continue
                     val x = (globalIndex - safeStart + 0.5f) * step
                     if (!started) {
                         path.moveTo(x, y(value))
@@ -200,8 +222,15 @@ internal fun ValidatedCandlestickChart(
                 }
                 if (started) drawPath(path, color, style = Stroke(width = 1.8f))
             }
-            if (showSma20) drawOverlay(sma20, Color(0xFF55C9F3))
-            if (showSma50) drawOverlay(sma50, Color(0xFFFFC857))
+            indicators?.let { result ->
+                if (showSma) drawOverlay(result.sma, Color(0xFF55C9F3))
+                if (showEma) drawOverlay(result.ema, Color(0xFFFFC857))
+                if (showBollinger) {
+                    drawOverlay(result.bollingerUpper, Color(0xFFB39DDB))
+                    drawOverlay(result.bollingerMiddle, Color(0xFF9575CD))
+                    drawOverlay(result.bollingerLower, Color(0xFFB39DDB))
+                }
+            }
 
             if (hasVolume) {
                 val volumes = data.volumeBars!!
@@ -242,18 +271,92 @@ internal fun ValidatedCandlestickChart(
             color = Color(0xFF9AA8B8),
             fontSize = 9.sp
         )
+        indicators?.let { result ->
+            val globalStart = indicatorSourceOffset + safeStart
+            val globalEnd = indicatorSourceOffset + safeEnd
+            if (showRsi) IndicatorPane("RSI (14) · 30/70 reference", listOf(result.rsi), null, result.startIndex, globalStart, globalEnd, 0.0 to 100.0, listOf(30.0, 70.0))
+            if (showMacd) IndicatorPane("MACD (12, 26, 9)", listOf(result.macdLine, result.macdSignal), result.macdHistogram, result.startIndex, globalStart, globalEnd)
+            if (showAtr) IndicatorPane("ATR (14)", listOf(result.atr), null, result.startIndex, globalStart, globalEnd)
+            if (showAdx) IndicatorPane("ADX (14) · trend-strength scale", listOf(result.adx), null, result.startIndex, globalStart, globalEnd, 0.0 to 100.0)
+        }
     }
 }
 
-private fun movingAverage(candles: List<ChartCandle>, period: Int): List<Double?> {
-    val result = MutableList<Double?>(candles.size) { null }
-    var sum = 0.0
-    candles.forEachIndexed { index, candle ->
-        sum += candle.close
-        if (index >= period) sum -= candles[index - period].close
-        if (index >= period - 1) result[index] = sum / period
+
+@Composable
+private fun IndicatorPane(
+    title: String,
+    lines: List<List<Double?>>,
+    histogram: List<Double?>?,
+    indicatorStartIndex: Int,
+    globalStart: Int,
+    globalEnd: Int,
+    fixedRange: Pair<Double, Double>? = null,
+    referenceLevels: List<Double> = emptyList()
+) {
+    val lineColors = listOf(Color(0xFF55C9F3), Color(0xFFFFC857), Color(0xFFB39DDB))
+    Column(Modifier.fillMaxWidth()) {
+        Text(title, color = Color(0xFFE6EDF5), fontSize = 10.sp)
+        Canvas(Modifier.fillMaxWidth().height(104.dp).testTag("instrument.chart.indicator.pane")) {
+            val count = (globalEnd - globalStart).coerceAtLeast(0)
+            if (count == 0 || size.width <= 0f) return@Canvas
+            val samples = buildList {
+                lines.forEach { line ->
+                    for (globalIndex in globalStart until globalEnd) {
+                        line.getOrNull(globalIndex - indicatorStartIndex)?.let(::add)
+                    }
+                }
+                histogram?.let { values ->
+                    for (globalIndex in globalStart until globalEnd) {
+                        values.getOrNull(globalIndex - indicatorStartIndex)?.let(::add)
+                    }
+                }
+            }
+            if (samples.isEmpty()) return@Canvas
+            val minimum = fixedRange?.first ?: minOf(0.0, samples.minOrNull() ?: 0.0)
+            val maximum = fixedRange?.second ?: maxOf(0.0, samples.maxOrNull() ?: 1.0)
+            val spread = (maximum - minimum).takeIf { it > 0.0 } ?: 1.0
+            fun y(value: Double): Float = size.height - ((value - minimum) / spread).toFloat() * size.height
+            for (grid in 0..2) {
+                val gy = grid * size.height / 2f
+                drawLine(ChartGrid, Offset(0f, gy), Offset(size.width, gy), 0.7f)
+            }
+            referenceLevels.forEach { level ->
+                val gy = y(level)
+                drawLine(ChartCrosshair.copy(alpha = 0.65f), Offset(0f, gy), Offset(size.width, gy), 1f)
+            }
+            val step = size.width / count
+            histogram?.let { values ->
+                val zero = y(0.0)
+                for (globalIndex in globalStart until globalEnd) {
+                    val value = values.getOrNull(globalIndex - indicatorStartIndex) ?: continue
+                    val x = (globalIndex - globalStart + 0.5f) * step
+                    val top = minOf(zero, y(value))
+                    val height = kotlin.math.abs(zero - y(value)).coerceAtLeast(1f)
+                    drawRect(
+                        ChartCrosshair.copy(alpha = 0.55f),
+                        Offset(x - step * 0.3f, top),
+                        androidx.compose.ui.geometry.Size(step * 0.6f, height)
+                    )
+                }
+            }
+            lines.forEachIndexed { lineIndex, values ->
+                val path = Path()
+                var started = false
+                for (globalIndex in globalStart until globalEnd) {
+                    val value = values.getOrNull(globalIndex - indicatorStartIndex) ?: continue
+                    val x = (globalIndex - globalStart + 0.5f) * step
+                    if (!started) {
+                        path.moveTo(x, y(value))
+                        started = true
+                    } else {
+                        path.lineTo(x, y(value))
+                    }
+                }
+                if (started) drawPath(path, lineColors[lineIndex % lineColors.size], style = Stroke(width = 1.6f))
+            }
+        }
     }
-    return result
 }
 
 private fun Double.priceText(): String = String.format(java.util.Locale.US, "%.2f", this)
