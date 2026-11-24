@@ -48,7 +48,7 @@ object TejHqOhlcvSyncManager {
                 autoSync = TejHqOhlcvStore.settings(context).autoSync
             )
         )
-        TejHqOhlcvStore.markSynced(context)
+        TejHqOhlcvStore.markSynced(context, normalizedExchange, normalizedSymbol)
         merged
     }
 
