@@ -114,6 +114,7 @@ class QuantDashboardRegressionTest {
         for (timeframe in listOf("1m", "5m", "10m", "15m", "30m", "1h", "4h", "1d")) {
             composeRule.onAllNodesWithTag("instrument.chart.timeframe.$timeframe").assertCountEquals(1)
         }
+        composeRule.onNodeWithTag("instrument.chart.timeframes").performScrollTo()
         composeRule.onNodeWithTag("instrument.chart.timeframe.5m").performClick()
         composeRule.waitUntil(15_000) {
             composeRule.onAllNodesWithText("Upstox V3 intraday candles", substring = true)
@@ -278,7 +279,8 @@ class QuantDashboardRegressionTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithTag("instrument.global.search.result.RELIANCE").performClick()
-        composeRule.onNodeWithTag("ai.recovery.symbol").assertTextEquals("RELIANCE")
+        composeRule.onNodeWithTag("ai.recovery.symbol")
+            .assertTextEquals("NSE/BSE trading symbol", "RELIANCE")
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.recovery.run"))
         composeRule.onNodeWithTag("ai.recovery.run").performClick()
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(
