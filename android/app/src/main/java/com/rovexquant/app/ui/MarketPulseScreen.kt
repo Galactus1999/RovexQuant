@@ -80,7 +80,7 @@ fun MarketPulseScreen(
     var equityFilter by remember { mutableStateOf("ALL") }
     var isRefreshing by remember { mutableStateOf(false) }
     var showEodMovers by remember { mutableStateOf(false) }
-    var showAllSectors by remember { mutableStateOf(false) }
+    var showSectorCube by remember { mutableStateOf(false) }
     var showAllEquities by remember { mutableStateOf(false) }
     var freshnessClock by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
@@ -127,9 +127,31 @@ fun MarketPulseScreen(
             } ?: Double.NEGATIVE_INFINITY
         }
     }
-    val liveSectorCount = rankedSectors.count { sector ->
-        indexKeys[sector.benchmark]?.let { ticks[it] }?.let { it.quality == "VALID" && isFresh(it) } == true
+    val sectorTiles = remember(rankedSectors, ticks, indexKeys, freshnessClock) {
+        rankedSectors.map { sector ->
+            val quote = indexKeys[sector.benchmark]?.let { ticks[it] }
+            val fresh = quote?.let { it.quality == "VALID" && isFresh(it) } == true
+            SectorHeatmapTile(
+                label = sector.sector,
+                shortLabel = when (sector.sector) {
+                    "Financial Services" -> "FIN SERV"
+                    "Information Technology" -> "IT"
+                    "Automobiles" -> "AUTO"
+                    "Healthcare" -> "HEALTH"
+                    "Consumer Durables" -> "DURABLE"
+                    "Capital Goods" -> "CAP GOODS"
+                    "Private Banks" -> "PVT BANK"
+                    "PSU Banks" -> "PSU BANK"
+                    else -> sector.sector.uppercase().take(10)
+                },
+                benchmark = sector.benchmark,
+                changePercent = quote?.changePercent?.takeIf { fresh },
+                lastPrice = quote?.lastPrice?.takeIf { fresh },
+                isFresh = fresh
+            )
+        }
     }
+    val liveSectorCount = sectorTiles.count { it.isFresh }
     val exchangeClock = latestTick?.exchangeTimestamp?.substringAfter("T")?.take(8) ?: "unavailable"
     val receiveClock = latestTick?.receivedAt?.substringAfter("T")?.take(8) ?: "unavailable"
 
@@ -146,6 +168,17 @@ fun MarketPulseScreen(
         },
         modifier = Modifier.fillMaxSize()
     ) {
+        if (showSectorCube) {
+            SectorCubeDialog(
+                sectors = sectorTiles,
+                liveCount = liveSectorCount,
+                onDismiss = { showSectorCube = false },
+                onSelectSector = { sector ->
+                    showSectorCube = false
+                    onOpenInstrument(sector.benchmark, sector.benchmark)
+                }
+            )
+        }
         LazyColumn(modifier = Modifier.fillMaxSize().testTag("market.pulse.list"), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -257,51 +290,39 @@ fun MarketPulseScreen(
             }
         }
         item {
-            Column {
-                Text("Sector performance", color = MaterialTheme.colorScheme.onBackground, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("market.sector.heading"))
-                Spacer(Modifier.height(4.dp))
-                Text("$liveSectorCount / ${coreSectorIndices.size} live", color = Muted, fontSize = 10.sp)
-            }
-        }
-        items(rankedSectors.take(if (showAllSectors) rankedSectors.size else 4), key = { it.benchmark }) { sector ->
-            val instrumentKey = indexKeys[sector.benchmark]
-            val quote = instrumentKey?.let { ticks[it] }
-            val move = quote?.changePercent?.takeIf { quote.quality == "VALID" && isFresh(quote) }
-            val sectorTint = when {
-                move == null -> Panel
-                move >= 0.0 -> Mint.copy(alpha = .10f)
-                else -> Coral.copy(alpha = .12f)
-            }
-            Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
-                    .background(sectorTint)
-                    .clickable { onOpenInstrument(sector.benchmark, sector.benchmark) }
-                    .testTag("sector.index.${sector.benchmark}")
-                    .padding(14.dp)
-            ) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            TerminalCard {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
                     Column(Modifier.weight(1f)) {
-                        Text(sector.sector, color = MaterialTheme.colorScheme.onBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(3.dp))
-                        Text(sector.benchmark, color = Muted, fontSize = 9.sp, letterSpacing = .5.sp, )
+                        Text(
+                            "Sector performance",
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontSize = 19.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.testTag("market.sector.heading")
+                        )
+                        Text(
+                            "$liveSectorCount / ${sectorTiles.size} fresh quotes · red / green cube heatmap",
+                            color = Muted,
+                            fontSize = 10.sp
+                        )
                     }
-                    StatusPill(
-                        quote?.takeIf { it.quality == "VALID" && isFresh(it) }?.changePercent
-                            ?.let { String.format(Locale.US, "%+.2f%%", it) }
-                            ?: if (instrumentKey == null) "N/A" else "—",
-                        quote?.changePercent?.let { if (it >= 0) Mint else Coral } ?: Gold
-                    )
+                    StatusPill("3D MAP", Cyan)
                 }
-                Spacer(Modifier.height(10.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    SectorMetric("INDEX", sector.benchmark)
-                    SectorMetric("LTP", quote?.lastPrice?.let { String.format(Locale.US, "%.2f", it) } ?: "—")
-                }
-            }
-        }
-        item {
-            androidx.compose.material3.TextButton(onClick = { showAllSectors = !showAllSectors }, modifier = Modifier.fillMaxWidth()) {
-                Text(if (showAllSectors) "Show fewer sectors" else "View all sector benchmarks")
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Explore all sector benchmarks in one rotatable cube. Each block uses its latest verified market move.",
+                    color = Muted,
+                    fontSize = 10.sp,
+                    lineHeight = 15.sp
+                )
+                TextButton(
+                    onClick = { showSectorCube = true },
+                    modifier = Modifier.fillMaxWidth().testTag("market.sector.cube.open")
+                ) { Text("Open sector cube · ${sectorTiles.size} sectors") }
             }
         }
         item {
