@@ -26,6 +26,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.MarketEvent
 import com.rovexquant.app.data.model.MacroResearchSummary
 import com.rovexquant.app.data.model.EventStudyResult
@@ -36,7 +37,12 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 @Composable
-fun IntelligenceCentreScreen(session: QuantSession, repository: QuantDataRepository) {
+fun IntelligenceCentreScreen(
+    session: QuantSession,
+    repository: QuantDataRepository,
+    equityInstruments: List<MarketEquityInstrument> = emptyList(),
+    indexKeys: Map<String, String> = emptyMap()
+) {
     val factory = remember(session, repository) {
         object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
@@ -328,12 +334,13 @@ private fun EodEventStudyToolPanel(
             "Measures pre/post-event price response from the stored EOD history. This is descriptive event-window analysis, not proof that the event caused the return.",
             color = Muted, fontSize = 10.sp, lineHeight = 15.sp
         )
-        OutlinedTextField(
+        InstrumentSymbolPicker(
             value = symbol,
-            onValueChange = { symbol = it.uppercase().filter { ch -> ch.isLetterOrDigit() || ch in "&._-" }.take(40) },
-            label = { Text("NSE symbol") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth().testTag("intelligence.event.symbol")
+            onValueChange = { symbol = it.uppercase().take(80) },
+            label = "NSE company or index",
+            testTag = "intelligence.event.symbol",
+            equities = equityInstruments,
+            indexKeys = indexKeys
         )
         OutlinedTextField(
             value = eventDate,
@@ -343,12 +350,13 @@ private fun EodEventStudyToolPanel(
             singleLine = true,
             modifier = Modifier.fillMaxWidth().testTag("intelligence.event.date")
         )
-        OutlinedTextField(
+        InstrumentSymbolPicker(
             value = benchmark,
-            onValueChange = { benchmark = it.uppercase().filter { ch -> ch.isLetterOrDigit() || ch in "&._-" }.take(40) },
-            label = { Text("Benchmark symbol · optional") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
+            onValueChange = { benchmark = it.uppercase().take(80) },
+            label = "Benchmark company or index · optional",
+            testTag = "intelligence.event.benchmark",
+            equities = equityInstruments,
+            indexKeys = indexKeys
         )
         Button(
             onClick = {
