@@ -121,6 +121,9 @@ class QuantDashboardRegressionTest {
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithText("Connected · groq / test-model").fetchSemanticsNodes().isNotEmpty()
         }
+        // Let the asynchronous provider-status recomposition and semantics pass settle
+        // before the next cross-thread test-tree traversal.
+        composeRule.waitForIdle()
 
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.tool.market"))
         composeRule.onNodeWithTag("ai.tool.market").assertIsDisplayed()
@@ -134,6 +137,7 @@ class QuantDashboardRegressionTest {
             composeRule.onAllNodesWithText("NSE EOD snapshot attached", substring = true)
                 .fetchSemanticsNodes().isNotEmpty()
         }
+        composeRule.waitForIdle()
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.chat.input"))
         // assertTextContains defaults to exact-item matching; the draft contains a
         // complete evidence block, so explicitly request substring matching.
