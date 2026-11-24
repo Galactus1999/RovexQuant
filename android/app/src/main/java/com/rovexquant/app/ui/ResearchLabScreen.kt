@@ -220,9 +220,12 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
                             IndicatorLine(nav.schemeName, String.format(Locale.US, "%.4f · %s", nav.nav, nav.navDate))
                         }
                         Text(
-                            if (report.fredConfigured) "FRED configured · ${report.fredSeriesCount} series returned"
-                            else "FRED not configured · add FRED_API_KEY as a backend secret",
-                            color = if (report.fredConfigured) Mint else Gold, fontSize = 10.sp
+                            when (report.fredConfigured) {
+                                true -> "FRED configured · ${report.fredSeriesCount} series returned"
+                                false -> "FRED not configured · add FRED_API_KEY as a backend secret"
+                                null -> "FRED configuration status unavailable · refresh backend status"
+                            },
+                            color = if (report.fredConfigured == true) Mint else Gold, fontSize = 10.sp
                         )
                         if (report.providerErrors.isNotEmpty()) {
                             report.providerErrors.forEach { Text(it, color = Gold, fontSize = 9.sp) }
