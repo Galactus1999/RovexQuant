@@ -342,10 +342,16 @@ fun AiWorkspaceScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionHeading("Connected research tools", "NSE MCP.", "Discover permitted read-only exchange research tools and explicitly attach a selected result to an AI request.")
-                NseMcpResearchPanel(session, repository) { context ->
-                    chatInput = (context + "\n\n" + chatInput).take(10000)
-                    chatError = null
-                }
+                NseMcpResearchPanel(
+                    session = session,
+                    repository = repository,
+                    onAttachToAi = { context ->
+                        chatInput = (context + "\n\n" + chatInput).take(10000)
+                        chatError = null
+                    },
+                    equityInstruments = equityInstruments,
+                    indexKeys = indexKeys
+                )
             }
         }
         item {
