@@ -249,7 +249,7 @@ class FakeQuantRepository(
             barCount = count,
             sma = series(periods.sma) { bars[it].close },
             ema = series(periods.ema) { bars[it].close },
-            rsi = series(periods.rsi) { 50.0 },
+            rsi = series(periods.rsi + 1) { 50.0 },
             macdLine = series(26) { 0.5 },
             macdSignal = series(34) { 0.4 },
             macdHistogram = series(34) { 0.1 },
