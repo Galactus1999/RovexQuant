@@ -50,8 +50,16 @@ async def _get_json(url: str, params: dict[str, str | int]) -> Any:
             return response.json()
     except MacroProviderError:
         raise
-    except (httpx.HTTPError, ValueError) as error:
-        raise MacroProviderError("Macroeconomic data provider is temporarily unavailable") from error
+    except httpx.HTTPStatusError as error:
+        raise MacroProviderError(f"Provider returned HTTP {error.response.status_code}") from error
+    except httpx.TimeoutException as error:
+        raise MacroProviderError("Provider request timed out") from error
+    except httpx.ConnectError as error:
+        raise MacroProviderError("Provider connection failed") from error
+    except httpx.HTTPError as error:
+        raise MacroProviderError("Provider network request failed") from error
+    except ValueError as error:
+        raise MacroProviderError("Provider returned invalid JSON") from error
 
 
 async def fetch_world_bank(indicators: list[str] | None = None) -> dict[str, Any]:
@@ -312,13 +320,26 @@ async def fetch_rbi_dbie_mirror(series: list[str] | None = None) -> dict[str, An
             "primary_source": "https://data.rbi.org.in/DBIE/",
         }
 
-    output = await asyncio.gather(*(fetch_one(key) for key in selected))
+    outcomes = await asyncio.gather(
+        *(fetch_one(key) for key in selected), return_exceptions=True
+    )
+    output: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    for key, outcome in zip(selected, outcomes, strict=True):
+        if isinstance(outcome, Exception):
+            slug = RBI_DBIE_SERIES[key][0]
+            warnings.append(f"{slug}: {str(outcome)[:160]}")
+        else:
+            output.append(outcome)
+    if not output:
+        detail = "; ".join(warnings[:3]) or "No series returned"
+        raise MacroProviderError(f"RBIH DBIE mirror unavailable: {detail}")
     return {
         "provider": "RBIH_DBIE_MIRROR", "configured": True, "retrieved_at": retrieved,
         "data_vintage": "RBIH_MIRROR_LAST_SCRAPE", "series": output,
+        "provider_warnings": warnings,
         "limitations": [
-            "This is RBIH's read-only static mirror of RBI DBIE, not a live RBI API.",
-            "Observation freshness is bounded by the mirror's last scrape; use each series as_of field.",
-            "Verify material observations against the RBI portal before relying on them.",
+            "RBIH mirror data is a delayed static copy, not a live RBI feed.",
+            "Check each series observation date against the official RBI DBIE portal.",
         ],
     }
