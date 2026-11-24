@@ -18,11 +18,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,6 +44,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 
 @Composable
 fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, onAttachToAi: ((String) -> Unit)? = null) {
@@ -197,15 +204,24 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
                                     key.contains("timespan", true) || key.contains("period", true) -> "e.g. 1d, 3d, 7d"
                                     else -> spec.optString("description").take(90)
                                 }
-                                OutlinedTextField(
-                                    value = current,
-                                    onValueChange = { formValues = formValues + (key to it.take(240)) },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    label = { Text(label + if (key in requiredNames) " · required" else " · optional") },
-                                    placeholder = { Text(hint) },
-                                    singleLine = true,
-                                    enabled = !calling
-                                )
+                                if (format == "date" || key.contains("date", true)) {
+                                    ToolDateField(
+                                        label = label + if (key in requiredNames) " · required" else " · optional",
+                                        value = current,
+                                        enabled = !calling,
+                                        onValueChange = { formValues = formValues + (key to it) }
+                                    )
+                                } else {
+                                    OutlinedTextField(
+                                        value = current,
+                                        onValueChange = { formValues = formValues + (key to it.take(240)) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        label = { Text(label + if (key in requiredNames) " · required" else " · optional") },
+                                        placeholder = { Text(hint) },
+                                        singleLine = true,
+                                        enabled = !calling
+                                    )
+                                }
                             }
                         }
                         if (fields.any { it !in requiredNames }) {
@@ -340,4 +356,52 @@ private fun buildToolArguments(tool: NseMcpTool, values: Map<String, String>): J
         }
     }
     return result
+}
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ToolDateField(
+    label: String,
+    value: String,
+    enabled: Boolean,
+    onValueChange: (String) -> Unit
+) {
+    var showPicker by remember { mutableStateOf(false) }
+    val initialMillis = remember(value) {
+        runCatching {
+            LocalDate.parse(value).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        }.getOrNull()
+    }
+    val pickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
+    OutlinedTextField(
+        value = value,
+        onValueChange = {},
+        readOnly = true,
+        enabled = enabled,
+        label = { Text(label) },
+        placeholder = { Text("Select date · YYYY-MM-DD") },
+        trailingIcon = {
+            TextButton(enabled = enabled, onClick = { showPicker = true }) { Text("Calendar") }
+        },
+        modifier = Modifier.fillMaxWidth()
+    )
+    if (showPicker) {
+        DatePickerDialog(
+            onDismissRequest = { showPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    pickerState.selectedDateMillis?.let { millis ->
+                        onValueChange(Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate().toString())
+                    }
+                    showPicker = false
+                }) { Text("Apply") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = pickerState)
+        }
+    }
 }
