@@ -28,7 +28,7 @@ fun PortfolioScreen() {
         entry.toDoubleOrNull() ?: Double.NaN, stop.toDoubleOrNull() ?: Double.NaN,
         allocation.toDoubleOrNull() ?: Double.NaN
     )
-    LazyColumn(contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(modifier = Modifier.fillMaxSize().testTag("portfolio.screen"), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { SectionHeading("Capital-aware, never capital-blind", "Portfolio & risk.", "Calculate a cash-equity position from your own capital, stop distance and risk limit.") }
         item {
             TerminalCard {
