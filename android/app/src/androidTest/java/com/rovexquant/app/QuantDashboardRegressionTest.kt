@@ -1,7 +1,6 @@
 package com.rovexquant.app
 
 import androidx.compose.ui.test.assert
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertIsNotSelected
@@ -122,8 +121,8 @@ class QuantDashboardRegressionTest {
         }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("instrument.chart.timeframe.5m").assertIsSelected()
-        composeRule.onNodeWithTag("instrument.chart.time.labels").assertExists()
-        composeRule.onNodeWithText("09:15", substring = true).assertExists()
+        composeRule.onNodeWithTag("instrument.chart.time.labels").assertIsDisplayed()
+        composeRule.onNodeWithText("09:15", substring = true).assertIsDisplayed()
         composeRule.onAllNodesWithTag("instrument.chart.volume.toggle").assertCountEquals(0)
         composeRule.waitUntil(15_000) {
             runCatching {
