@@ -30,9 +30,9 @@ _INTERVALS = {
     "5m": ("minutes", 5, 30),
     "10m": ("minutes", 10, 30),
     "15m": ("minutes", 15, 30),
-    "30m": ("minutes", 30, 92),
-    "1h": ("hours", 1, 92),
-    "4h": ("hours", 4, 92),
+    "30m": ("minutes", 30, 90),
+    "1h": ("hours", 1, 90),
+    "4h": ("hours", 4, 90),
 }
 _KEY_PATTERN = re.compile(
     r"^(?:NSE_EQ\|INE[A-Z0-9]{9}|NSE_INDEX\|[A-Za-z0-9 _&()./-]{1,80})$"
