@@ -66,7 +66,7 @@ fun InstrumentResearchScreen(
                     from = if (fullHistory) today.minusDays(6200) else today.minusYears(3),
                     to = today,
                     incremental = !fullHistory
-                ).also(ChartSeriesMapper::map)
+                ).also { ChartSeriesMapper.map(it) }
             }
             series = result
         } catch (cancelled: CancellationException) {
