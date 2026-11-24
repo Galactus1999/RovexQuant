@@ -108,6 +108,7 @@ internal fun ValidatedCandlestickChart(
                 onClick = {
                     windowCount = renderLimit
                     windowStart = (candles.size - renderLimit).coerceAtLeast(0)
+                    selectedIndex = candles.lastIndex
                 }
             ) { Text("Max view · 2k") }
         }
