@@ -1,6 +1,7 @@
 """Bounded refresh orchestration for free macro providers and the RBIH DBIE mirror."""
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
@@ -18,18 +19,36 @@ async def refresh_macro_sources() -> dict[str, Any]:
         ("AMFI", lambda: fetch_amfi_nav(limit=100)),
         ("RBIH_DBIE_MIRROR", fetch_rbi_dbie_mirror),
     )
-    for name, fetcher in jobs:
+    async def fetch_bounded(name: str, fetcher: Any) -> tuple[str, dict[str, Any] | None, Exception | None]:
         try:
-            payload = await fetcher()
-            if payload.get("configured") is False:
-                providers.append({
-                    "provider": name, "status": "SKIPPED",
-                    "reason": str(payload.get("reason") or "Provider is not configured")[:240],
-                })
-                continue
-            providers.append(persist_macro_payload(name, payload))
+            payload = await asyncio.wait_for(fetcher(), timeout=25.0)
+            return name, payload, None
         except Exception as error:
-            message = str(error)[:240] or "Provider refresh failed"
+            return name, None, error
+
+    # Fetch independent providers concurrently. The old serial orchestration could
+    # spend 15s x several series on each source inside one synchronous HTTP request,
+    # allowing the Render edge/worker to terminate the request before persistence.
+    fetched = await asyncio.gather(*(fetch_bounded(name, fetcher) for name, fetcher in jobs))
+    for name, payload, error in fetched:
+        if error is not None or payload is None:
+            message = (str(error) if error else "Provider returned no payload")[:240] or "Provider refresh failed"
+            try:
+                record_macro_failure(name, message)
+            except Exception:
+                pass
+            providers.append({"provider": name, "status": "FAILED", "error": message})
+            continue
+        if payload.get("configured") is False:
+            providers.append({
+                "provider": name, "status": "SKIPPED",
+                "reason": str(payload.get("reason") or "Provider is not configured")[:240],
+            })
+            continue
+        try:
+            providers.append(persist_macro_payload(name, payload))
+        except Exception as persist_error:
+            message = str(persist_error)[:240] or "Provider persistence failed"
             try:
                 record_macro_failure(name, message)
             except Exception:
