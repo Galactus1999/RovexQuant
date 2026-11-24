@@ -17,6 +17,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -43,10 +45,12 @@ class QuantDashboardRegressionTest {
         // The controls live in a nested horizontal scroller inside the screen's
         // vertical scroller. Scroll the horizontal container itself so the
         // pointer injected by performClick lands inside the clipped viewport.
-        // The outer screen scrolls to the row itself (a direct child); the
-        // row then scrolls horizontally to the requested chip.
+        // Explicitly return the vertical screen scroller to its start. The
+        // control row then reveals the requested chip using its horizontal axis.
         composeRule.onNodeWithTag("instrument.research.screen")
-            .performScrollToNode(hasTestTag("instrument.chart.indicator.controls"))
+            .performSemanticsAction(SemanticsActions.ScrollBy) { scrollBy ->
+                scrollBy(0f, -10_000f)
+            }
         composeRule.onNodeWithTag("instrument.chart.indicator.controls")
             .performScrollToNode(hasTestTag(tag))
         composeRule.onNodeWithTag(tag).assertIsDisplayed().performClick()
