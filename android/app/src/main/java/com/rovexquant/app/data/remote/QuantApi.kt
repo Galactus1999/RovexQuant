@@ -1208,7 +1208,7 @@ object QuantApi {
                     val symbol = item.optString("trading_symbol")
                     val name = item.optString("name")
                     val isin = item.optString("isin")
-                    if (key.startsWith("NSE_EQ|INE") && symbol.isNotBlank() && name.isNotBlank()
+                    if (key.startsWith("NSE_EQ|IN") && symbol.isNotBlank() && name.isNotBlank()
                         && isin.isNotBlank() && key == "NSE_EQ|$isin") {
                         add(MarketEquityInstrument(key, name, symbol, isin))
                     }
