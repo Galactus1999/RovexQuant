@@ -80,14 +80,14 @@ object OhlcvCsvResearch {
         val ordered = bars.sortedBy { it.timestamp }
         require(ordered.size <= 100_000) { "Dataset exceeds the 100,000-row safety limit" }
         return buildString {
-            append("timestamp,open,high,low,close,volume\\n")
+            append("timestamp,open,high,low,close,volume\n")
             ordered.forEach { bar ->
                 append(bar.timestamp).append(',')
                     .append(bar.open).append(',')
                     .append(bar.high).append(',')
                     .append(bar.low).append(',')
                     .append(bar.close).append(',')
-                    .append(bar.volume).append('\\n')
+                    .append(bar.volume).append('\n')
             }
         }
     }
