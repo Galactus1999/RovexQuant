@@ -156,15 +156,17 @@ fun InstrumentResearchScreen(
 
     val bars = series?.bars.orEmpty()
     val visible = remember(bars, range) {
-        val today = LocalDate.now(ZoneId.of("Asia/Kolkata"))
+        val latestTradingDate = bars.lastOrNull()?.timestamp
+            ?.atZoneSameInstant(ZoneId.of("Asia/Kolkata"))?.toLocalDate()
+            ?: LocalDate.now(ZoneId.of("Asia/Kolkata"))
         val cutoff = when (range) {
-            "1D" -> today.minusDays(1)
-            "5D" -> today.minusDays(7)
-            "1M" -> today.minusMonths(1)
-            "3M" -> today.minusMonths(3)
-            "6M" -> today.minusMonths(6)
-            "1Y" -> today.minusYears(1)
-            "3Y" -> today.minusYears(3)
+            "1D" -> latestTradingDate
+            "5D" -> latestTradingDate.minusDays(7)
+            "1M" -> latestTradingDate.minusMonths(1)
+            "3M" -> latestTradingDate.minusMonths(3)
+            "6M" -> latestTradingDate.minusMonths(6)
+            "1Y" -> latestTradingDate.minusYears(1)
+            "3Y" -> latestTradingDate.minusYears(3)
             else -> null
         }
         if (cutoff == null) bars else bars.filter {
