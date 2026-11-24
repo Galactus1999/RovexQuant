@@ -287,7 +287,7 @@ fun InstrumentResearchScreen(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (backendFailure: Exception) {
-                indicatorsNotice = "Live indicator service unavailable; locally calculated values are shown."
+                indicatorsNotice = "Local indicator calculation is being used."
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -451,15 +451,15 @@ fun InstrumentResearchScreen(
         }
         when {
             indicatorsLoading -> Text(
-                if (indicators != null) "Local indicators ready · syncing backend calculation…"
+                if (indicators != null) "Indicators ready · refreshing analysis…"
                 else "Calculating indicators…",
                 color = Muted, fontSize = 9.sp
             )
             indicatorsError != null -> GracefulErrorState("Indicators unavailable. Refresh the chart to retry.")
             indicators != null -> Text(
-                "${if (indicatorsSource == "BACKEND") "Backend" else "Offline local fallback"} indicators · ${indicators!!.barCount} bars · " +
+                "Indicators · ${indicators!!.barCount} bars · " +
                     "${bars.getOrNull(indicators!!.startIndex)?.timestamp?.toLocalDate()?.toString() ?: "coverage pending"} onward" +
-                    (indicatorsNotice?.let { " · backend unavailable" } ?: ""),
+                    (indicatorsNotice?.let { " · local calculation" } ?: ""),
                 color = if (indicatorsSource == "BACKEND") Muted else Gold,
                 fontSize = 9.sp
             )
