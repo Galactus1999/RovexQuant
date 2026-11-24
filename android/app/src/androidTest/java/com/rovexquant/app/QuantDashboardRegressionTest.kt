@@ -3,6 +3,7 @@ package com.rovexquant.app
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -51,16 +52,7 @@ class QuantDashboardRegressionTest {
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithText("FIXTURE").fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithTag("market.pulse.list")
-            .performScrollToNode(hasTestTag("market.ingestion.status"))
-        composeRule.onNodeWithTag("market.ingestion.status").assertIsDisplayed()
-        composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithText("Persisted EOD data", substring = true)
-                .fetchSemanticsNodes().isNotEmpty()
-        }
-        composeRule.onNodeWithTag("market.pulse.list")
-            .performScrollToNode(hasText("Persisted EOD data", substring = true))
-        composeRule.onNodeWithText("Persisted EOD data", substring = true).assertIsDisplayed()
+        composeRule.onAllNodesWithTag("market.ingestion.status").assertCountEquals(0)
         composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasText("FIXTURE"))
         composeRule.onNodeWithText("FIXTURE").assertIsDisplayed()
         composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("market.feed.status"))
@@ -99,6 +91,8 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("quant.settings.open").performClick()
         composeRule.onNodeWithTag("settings.screen").assertIsDisplayed()
         composeRule.onNodeWithText("Settings").assertIsDisplayed()
+        composeRule.onNodeWithTag("settings.screen").performScrollToNode(hasTestTag("settings.database.refresh"))
+        composeRule.onNodeWithTag("settings.database.refresh").assertIsDisplayed()
         composeRule.onNodeWithTag("settings.screen").performScrollToNode(hasTestTag("settings.upstox.token"))
         composeRule.onNodeWithTag("settings.upstox.token").assertIsDisplayed()
         composeRule.onNodeWithTag("settings.screen").performScrollToNode(hasText("Open AI provider settings"))
