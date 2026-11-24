@@ -34,6 +34,15 @@ class TechnicalIndicatorsTest {
     }
 
     @Test
+    fun mapsVisibleChartBarsToAbsoluteIndicatorSourceWindow() {
+        val result = fixture()
+        assertEquals(0, result.localIndexForSourceBar(7))
+        assertEquals(2, result.localIndexForSourceBar(9))
+        assertEquals(null, result.localIndexForSourceBar(6))
+        assertEquals(null, result.localIndexForSourceBar(10))
+    }
+
+    @Test
     fun rejectsMisalignedIndicatorArrays() {
         assertThrows(IllegalArgumentException::class.java) {
             fixture(sma = listOf(null, 2.0))
