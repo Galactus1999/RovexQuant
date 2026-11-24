@@ -22,7 +22,7 @@ data class InstrumentMasterCache<T>(
 object InstrumentMasterStore {
     private const val VERSION = 1
     private const val MAX_INSTRUMENTS = 20_000
-    private val equityKey = Regex("^NSE_EQ\\|INE[A-Z0-9]{9}$")
+    private val equityKey = Regex("^NSE_EQ\\|IN[A-Z0-9]{10}$")
     private val indexKey = Regex("^NSE_INDEX\\|[A-Za-z0-9 _&()./-]{1,80}$")
     private val symbol = Regex("^[A-Z0-9][A-Z0-9&._-]{0,39}$")
 
