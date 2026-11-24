@@ -80,6 +80,7 @@ object InstrumentCatalog {
         "NIFTY MEDIA",
         "NIFTY METAL",
         "NIFTY NBFC",
+        "NIFTY OIL & GAS",
         "NIFTY OIL AND GAS INDEX",
         "NIFTY PHARMA",
         "NIFTY POWER",
@@ -89,6 +90,10 @@ object InstrumentCatalog {
         "NIFTY REITS & REALTY",
         "NIFTY RETAIL",
         "NIFTY TELECOMMUNICATIONS"
+    )
+
+    private val indexProviderAliases = mapOf(
+        "NIFTY OIL & GAS" to "NIFTY OIL AND GAS INDEX"
     )
 
     private val equityPattern = Regex("^[A-Z0-9][A-Z0-9&-]{0,29}$")
@@ -114,7 +119,7 @@ object InstrumentCatalog {
                 canonicalSymbol = canonical,
                 instrumentType = InstrumentType.SECTOR_INDEX,
                 provider = OhlcvProvider.NSE_INDICES_PORTAL,
-                providerSymbol = canonical
+                providerSymbol = indexProviderAliases[canonical] ?: canonical
             )
         }
         require(!canonical.startsWith("NIFTY") && !canonical.startsWith("BANKNIFTY")) {
@@ -130,5 +135,21 @@ object InstrumentCatalog {
             provider = OhlcvProvider.TEJHQ_EOD,
             providerSymbol = canonical
         )
+    }
+
+    fun isRegisteredIndex(instrument: InstrumentIdentity): Boolean {
+        if (instrument.exchange != "NSE" || instrument.provider != OhlcvProvider.NSE_INDICES_PORTAL) return false
+        val expectedProviderSymbol = when {
+            instrument.canonicalSymbol in broadMarketIndices -> instrument.canonicalSymbol
+            instrument.canonicalSymbol in sectorIndices ->
+                indexProviderAliases[instrument.canonicalSymbol] ?: instrument.canonicalSymbol
+            else -> return false
+        }
+        val expectedType = if (instrument.canonicalSymbol in broadMarketIndices) {
+            InstrumentType.BROAD_MARKET_INDEX
+        } else {
+            InstrumentType.SECTOR_INDEX
+        }
+        return instrument.instrumentType == expectedType && instrument.providerSymbol == expectedProviderSymbol
     }
 }

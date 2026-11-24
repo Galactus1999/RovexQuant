@@ -1,6 +1,7 @@
 package com.rovexquant.app.data.remote
 
 import com.rovexquant.app.domain.InstrumentIdentity
+import com.rovexquant.app.domain.InstrumentCatalog
 import com.rovexquant.app.domain.OhlcvBar
 import java.io.IOException
 import java.time.LocalDate
@@ -49,7 +50,7 @@ object NiftyIndicesOhlcvClient {
 
     @Synchronized
     fun fetch(instrument: InstrumentIdentity, from: LocalDate, to: LocalDate): List<OhlcvBar> {
-        require(instrument.providerSymbol == instrument.canonicalSymbol) {
+        require(InstrumentCatalog.isRegisteredIndex(instrument)) {
             "Index provider mapping is not registered."
         }
         require(instrument.exchange == "NSE") { "NSE Indices history is available only for NSE indices." }

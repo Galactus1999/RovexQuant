@@ -4,8 +4,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,6 +22,7 @@ import com.rovexquant.app.data.local.TejHqOhlcvStore
 import com.rovexquant.app.data.local.TejHqOhlcvSyncManager
 import com.rovexquant.app.data.repository.QuantDataRepository
 import com.rovexquant.app.domain.InstrumentCatalog
+import com.rovexquant.app.domain.InstrumentIdentity
 import com.rovexquant.app.domain.MarketOhlcvSeries
 import com.rovexquant.app.domain.OhlcvBar
 import java.time.Instant
@@ -171,10 +170,7 @@ fun InstrumentResearchScreen(
             }
         }
         Spacer(Modifier.height(10.dp))
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(5.dp)
-        ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
             listOf("1M", "3M", "6M", "1Y", "3Y", "ALL").forEach { period ->
                 FilterChip(
                     selected = range == period,

@@ -24,6 +24,13 @@ class InstrumentIdentityTest {
         assertEquals(OhlcvProvider.NSE_INDICES_PORTAL, identity.provider)
     }
 
+    @Test fun dashboardOilAndGasAliasMapsToOfficialIndexName() {
+        val identity = InstrumentCatalog.resolve("NIFTY OIL & GAS")
+        assertEquals(InstrumentType.SECTOR_INDEX, identity.instrumentType)
+        assertEquals("NIFTY OIL AND GAS INDEX", identity.providerSymbol)
+        assertEquals(true, InstrumentCatalog.isRegisteredIndex(identity))
+    }
+
     @Test fun ordinaryEquityRemainsStrictAndUsesTejHq() {
         val identity = InstrumentCatalog.resolve("RELIANCE")
         assertEquals(InstrumentType.EQUITY, identity.instrumentType)
