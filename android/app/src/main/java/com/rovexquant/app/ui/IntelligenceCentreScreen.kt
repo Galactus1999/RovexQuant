@@ -292,7 +292,11 @@ private fun MacroResearchToolPanel(
             }
             Spacer(Modifier.height(7.dp))
             Text(
-                "FRED: ${if (data.fredConfigured) "${data.fredSeriesCount} series returned" else "not configured on backend"} · AMFI: ${data.amfiNavCount} NAV records (mutual funds, not equity quotes)",
+                "FRED: ${when (data.fredConfigured) {
+                    true -> "${data.fredSeriesCount} series returned"
+                    false -> "not configured on backend"
+                    null -> "configuration status unavailable"
+                }} · AMFI: ${data.amfiNavCount} NAV records (mutual funds, not equity quotes)",
                 color = Muted, fontSize = 9.sp, lineHeight = 14.sp
             )
             data.amfiExamples.take(3).forEach { nav ->
