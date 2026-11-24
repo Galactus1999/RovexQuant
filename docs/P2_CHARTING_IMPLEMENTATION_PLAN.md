@@ -89,3 +89,24 @@ Before dependency adoption, verify the exact AAR API and transitive dependency c
 ## Definition of done
 
 P2 is complete only when the chart is connected to real validated P1-routed history, chart interactions and indicator controls work, volume is correctly conditional, data provenance/quality is visible, Android lifecycle and security tests pass, and exact-head CI is green. A renderer demo or static screenshot is not acceptance.
+
+
+## Primary technical references reviewed
+
+- TradingView Lightweight Charts getting started and series data: https://tradingview.github.io/lightweight-charts/docs/5.2
+- TradingView Android wrapper and WebView requirements: https://tradingview.github.io/lightweight-charts/docs/5.2/android
+- Android wrapper API, Maven coordinate, asynchronous bridge error listener and attribution: https://github.com/tradingview/lightweight-charts-android
+- Maven Central artifact metadata, AAR version, Apache-2.0 license and declared transitive dependencies: https://central.sonatype.com/artifact/com.tradingview/lightweightcharts
+- Lightweight Charts time-scale visible ranges and crosshair interaction: https://tradingview.github.io/lightweight-charts/docs/time-scale
+- Lightweight Charts multi-pane API: https://tradingview.github.io/lightweight-charts/docs/panes
+- TradingView product licensing distinction: https://www.tradingview.com/free-charting-libraries/
+- Wilder RSI method and smoothing: https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/relative-strength-index-rsi
+- Wilder ADX method and warm-up implications: https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/average-directional-index-adx
+- TA-Lib indicator catalogue: https://ta-lib.org/functions/
+- Reference textbook: John J. Murphy, *Technical Analysis of the Financial Markets*, publisher page: https://www.penguinrandomhouse.com/books/350647/technical-analysis-of-the-financial-markets-by-john-j-murphy/
+
+### Source-audit finding: indicator transport contract
+
+The current backend exposes authenticated `POST /api/v1/research/indicators`. It accepts aligned close/high/low arrays up to 10,000 observations, configurable SMA/EMA/RSI/Bollinger/ATR/ADX periods, and returns aligned deterministic arrays; MACD is also returned. ATR and ADX are emitted only when both high and low arrays are supplied. This route is already rate-limited. P2 Android integration must add a typed repository/API call rather than duplicate indicator formulas in chart JavaScript. The chart history limit (100,000) is therefore distinct from the current indicator request limit (10,000); the UI must disclose the calculation window or use a bounded visible-window request with sufficient warm-up history. Do not silently pretend that indicators cover more history than was submitted.
+
+The Android wrapper executes chart calls asynchronously in WebView. Its documentation warns that bridge errors may otherwise be thrown on the main thread and crash the app. Any adopted wrapper integration must register and test its error listener, make disposal/recreation lifecycle-safe, and verify that a stale callback cannot update a disposed chart.
