@@ -82,12 +82,12 @@ fun MacroEventResearchScreen(session: QuantSession, repository: QuantDataReposit
             TerminalCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Eyebrow("P3 · independent exchange verification")
-                    StatusPill(state.integrity?.status ?: "CHECKING", if (state.integrity?.status == "MATCHED") Mint else Gold)
+                    StatusPill(state.integrity?.status ?: if (state.integrityLoading) "CHECKING" else "NOT CHECKED", if (state.integrity?.status == "MATCHED") Mint else Gold)
                 }
                 Text("Market data integrity", color = MaterialTheme.colorScheme.onBackground,
                     fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "Compares stored TejHQ EOD bars with official NSE/BSE bhavcopy. Matching rows are promoted to verified; discrepancies remain visible.",
+                    "Displays the latest stored comparison of TejHQ EOD bars against an authorized official NSE/BSE bhavcopy. This status check does not download exchange files or start a new reconciliation; a new run requires approved source access and an explicit reconciliation job.",
                     color = Muted, fontSize = 10.sp, lineHeight = 15.sp
                 )
                 Button(onClick = model::refreshIntegrity, enabled = !state.integrityLoading,
@@ -145,13 +145,23 @@ fun MacroEventResearchScreen(session: QuantSession, repository: QuantDataReposit
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Cross-market macro context", color = MaterialTheme.colorScheme.onBackground,
                         fontWeight = FontWeight.SemiBold)
-                    StatusPill(if (state.macro?.fredConfigured == true) "CONFIGURED" else "NOT CONFIGURED", Gold)
+                    StatusPill(
+                        when {
+                            state.macro == null -> "NOT CHECKED"
+                            state.macro?.fredConfigured == true -> "CONFIGURED"
+                            else -> "NOT CONFIGURED"
+                        },
+                        if (state.macro?.fredConfigured == true) Mint else Gold
+                    )
                 }
                 Text(
-                    if (state.macro?.fredConfigured == true) {
-                        "${state.macro?.fredSeriesCount ?: 0} FRED series returned."
-                    } else {
-                        "FRED_API_KEY is not configured. US yields, Fed funds, CPI and dollar series are intentionally unavailable until a key is supplied."
+                    when {
+                        state.macro == null ->
+                            "FRED configuration has not yet been checked. Tap Refresh macro data to query the backend and retrieve US yields, Fed funds, CPI and dollar observations."
+                        state.macro?.fredConfigured == true ->
+                            "FRED_API_KEY is configured on the backend. ${state.macro?.fredSeriesCount ?: 0} series have persisted observations; check provider status below for retrieval or persistence failures."
+                        else ->
+                            "The backend reports FRED_API_KEY is not configured. Add it to the deployed backend environment and redeploy."
                     },
                     color = Muted, fontSize = 10.sp, lineHeight = 15.sp
                 )
