@@ -340,7 +340,7 @@ fun InstrumentResearchScreen(
             )
             series!!.providerNote?.let { Text(it, color = Muted, fontSize = 9.sp) }
             series!!.retrievedAt?.let {
-                Text("Retrieved: ${it.atZone(ZoneId.of("Asia/Kolkata")).toLocalDateTime()} IST",
+                Text(it.relativeAgeLabel(),
                     color = Muted, fontSize = 9.sp)
             }
         }
