@@ -29,7 +29,7 @@ object TejHqOhlcvSyncManager {
         val sameDataset = previousSettings.exchange.equals(normalizedExchange, ignoreCase = true) &&
             previousSettings.symbol.equals(normalizedSymbol, ignoreCase = true)
         val existing = if (sameDataset) {
-            runCatching { TejHqOhlcvStore.load(context).orEmpty() }.getOrElse { emptyList() }
+            runCatching { TejHqOhlcvStore.load(context, normalizedExchange, normalizedSymbol).orEmpty() }.getOrElse { emptyList() }
         } else emptyList()
         val fetchFrom = if (incremental && sameDataset) {
             TejHqOhlcvStore.latestDate(existing)?.minusDays(7)?.coerceAtLeast(from) ?: from
@@ -38,7 +38,7 @@ object TejHqOhlcvSyncManager {
             normalizedExchange, normalizedSymbol, fetchFrom, to
         )
         val merged = if (incremental) OhlcvCsvResearch.merge(existing, fetched) else fetched
-        TejHqOhlcvStore.save(context, merged)
+        TejHqOhlcvStore.save(context, normalizedExchange, normalizedSymbol, merged)
         TejHqOhlcvStore.saveSettings(
             context,
             OhlcvSourceSettings(
