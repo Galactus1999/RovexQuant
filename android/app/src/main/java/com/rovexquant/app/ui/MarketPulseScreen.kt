@@ -148,7 +148,15 @@ fun MarketPulseScreen(
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Text("Market Pulse", color = MaterialTheme.colorScheme.onBackground, fontSize = 25.sp, fontWeight = FontWeight.Bold)
-                StatusPill(if (streamStatus.startsWith("Live")) "LIVE" else "EOD / DELAYED", if (streamStatus.startsWith("Live")) Mint else Gold)
+                StatusPill(
+                    when {
+                        streamStatus.startsWith("Live") -> "LIVE"
+                        streamStatus.startsWith("Connected") -> "CONNECTED"
+                        streamStatus.contains("stale", ignoreCase = true) -> "STALE"
+                        else -> "OFFLINE"
+                    },
+                    if (streamStatus.startsWith("Live")) Mint else Gold
+                )
             }
         }
         item {
@@ -202,7 +210,7 @@ fun MarketPulseScreen(
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     Text(
-                        eodSnapshot?.tradingDate ?: eodSnapshotStatus.take(32),
+                        eodSnapshot?.tradingDate ?: if (isRefreshing) "Loading" else "Unavailable",
                         color = if (eodSnapshot == null) Gold else Muted,
                         fontSize = 9.sp,
                         modifier = Modifier.weight(1f)
@@ -220,8 +228,8 @@ fun MarketPulseScreen(
                     "NIFTY 50",
                     nifty?.lastPrice?.let { String.format(Locale.US, "%.2f", it) } ?: "—",
                     nifty?.let {
-                        if (it.quality == "VALID" && isFresh(it)) "LIVE" else "STALE · ${it.quality}"
-                    } ?: "Awaiting verified tick",
+                        if (it.quality == "VALID" && isFresh(it)) "LIVE" else "STALE"
+                    } ?: "—",
                     modifier = Modifier.weight(1f)
                 )
                 MetricTile(
