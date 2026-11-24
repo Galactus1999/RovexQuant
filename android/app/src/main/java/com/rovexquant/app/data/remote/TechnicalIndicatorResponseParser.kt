@@ -2,6 +2,7 @@ package com.rovexquant.app.data.remote
 
 import com.rovexquant.app.data.model.TechnicalIndicators
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 
 /**
@@ -18,7 +19,11 @@ internal fun parseTechnicalIndicatorsResponse(
     require(body.toByteArray(Charsets.UTF_8).size <= 2 * 1024 * 1024) {
         "Indicator response exceeds the 2 MB mobile safety limit."
     }
-    val json = JSONObject(body)
+    val json = try {
+        JSONObject(body)
+    } catch (failure: JSONException) {
+        throw IllegalArgumentException("Backend indicator response is not valid JSON.", failure)
+    }
 
     fun parseSeries(array: JSONArray?, label: String): List<Double?> {
         require(array != null && array.length() == barCount) {

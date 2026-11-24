@@ -1,10 +1,14 @@
-package com.rovexquant.app.data.remote
+package com.rovexquant.app
 
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.rovexquant.app.data.remote.parseTechnicalIndicatorsResponse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
+import org.junit.runner.RunWith
 
-class TechnicalIndicatorResponseParserTest {
+@RunWith(AndroidJUnit4::class)
+class TechnicalIndicatorResponseParserInstrumentedTest {
     private fun payload(
         sma: String = "[null,2.0]",
         rsi: String = "[null,50.0]",
