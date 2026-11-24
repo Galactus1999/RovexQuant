@@ -66,12 +66,12 @@ object OhlcvCsvResearch {
         return bars
     }
 
-    /** Merge daily bars by exchange trading date; incoming rows replace overlaps. */
+    /** Merge bars by exact instant; incoming rows replace overlaps without collapsing intraday candles. */
     fun merge(existing: List<OhlcvBar>, incoming: List<OhlcvBar>): List<OhlcvBar> {
         require(existing.size + incoming.size <= 100_000) { "Merged dataset exceeds the 100,000-row safety limit" }
-        val byDate = java.util.TreeMap<java.time.LocalDate, OhlcvBar>()
-        (existing + incoming).forEach { bar -> byDate[bar.timestamp.toLocalDate()] = bar }
-        return byDate.values.toList()
+        val byInstant = java.util.TreeMap<java.time.Instant, OhlcvBar>()
+        (existing + incoming).forEach { bar -> byInstant[bar.timestamp.toInstant()] = bar }
+        return byInstant.values.toList()
     }
 
     /** Serialize validated bars into the same strict local CSV format used by the scanner. */
