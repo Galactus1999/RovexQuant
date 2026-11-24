@@ -14,7 +14,7 @@ import httpx
 
 _MASTER_URL = "https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz"
 _KEY_PATTERN = re.compile(r"^NSE_INDEX\|[A-Za-z0-9 _&()./-]{1,80}$")
-_EQUITY_KEY_PATTERN = re.compile(r"^NSE_EQ\|INE[A-Z0-9]{9}$")
+_EQUITY_KEY_PATTERN = re.compile(r"^NSE_EQ\|IN[A-Z0-9]{10}$")
 _CACHE_TTL_SECONDS = 6 * 60 * 60
 _MAX_MASTER_BYTES = 100 * 1024 * 1024
 _cache: list[dict[str, str]] = []
