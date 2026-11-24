@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -128,6 +129,8 @@ class QuantDashboardRegressionTest {
         }
         composeRule.waitForIdle()
         composeRule.onAllNodesWithTag("instrument.chart.indicator.rsi.pane").assertCountEquals(1)
+        composeRule.onNodeWithTag("instrument.chart.indicator.rsi.pane.plot")
+            .assert(hasContentDescription("non-null plotted samples", substring = true))
         composeRule.onNodeWithTag("instrument.chart.indicator.rsi.toggle").performScrollTo().performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("instrument.chart.indicator.rsi.toggle").assertIsNotSelected()
@@ -143,6 +146,8 @@ class QuantDashboardRegressionTest {
         }
         composeRule.waitForIdle()
         composeRule.onAllNodesWithTag("instrument.chart.indicator.macd.pane").assertCountEquals(1)
+        composeRule.onNodeWithTag("instrument.chart.indicator.macd.pane.plot")
+            .assert(hasContentDescription("non-null plotted samples", substring = true))
         composeRule.waitForIdle()
         clickIndicator("atr")
         composeRule.waitForIdle()
@@ -152,6 +157,8 @@ class QuantDashboardRegressionTest {
         }
         composeRule.waitForIdle()
         composeRule.onAllNodesWithTag("instrument.chart.indicator.atr.pane").assertCountEquals(1)
+        composeRule.onNodeWithTag("instrument.chart.indicator.atr.pane.plot")
+            .assert(hasContentDescription("non-null plotted samples", substring = true))
         composeRule.waitForIdle()
         clickIndicator("adx")
         composeRule.waitForIdle()
@@ -161,6 +168,8 @@ class QuantDashboardRegressionTest {
         }
         composeRule.waitForIdle()
         composeRule.onAllNodesWithTag("instrument.chart.indicator.adx.pane").assertCountEquals(1)
+        composeRule.onNodeWithTag("instrument.chart.indicator.adx.pane.plot")
+            .assert(hasContentDescription("non-null plotted samples", substring = true))
         composeRule.waitForIdle()
         for (key in listOf("sma", "ema", "bollinger")) {
             clickIndicator(key)
