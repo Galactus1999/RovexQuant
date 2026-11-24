@@ -219,12 +219,6 @@ private fun MacroSummaryContent(summary: MacroResearchSummary) {
             }
         }
     }
-    if (summary.providerErrors.isNotEmpty()) {
-        Spacer(Modifier.height(8.dp))
-        summary.providerErrors.take(3).forEach { issue ->
-            Text(issue.substringBefore(":").replace('_', ' ') + " unavailable", color = Gold, fontSize = 9.sp)
-        }
-    }
 }
 
 @Composable
