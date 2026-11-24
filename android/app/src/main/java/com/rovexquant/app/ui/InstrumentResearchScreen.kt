@@ -183,6 +183,7 @@ fun InstrumentResearchScreen(
         val windowSize = minOf(10_000, bars.size)
         val startIndex = bars.size - windowSize
         val requestBars = bars.subList(startIndex, bars.size).toList()
+        indicators = null
         indicatorsLoading = true
         indicatorsError = null
         try {
@@ -294,7 +295,8 @@ fun InstrumentResearchScreen(
             indicatorsLoading -> Text("Calculating indicators on the backend…", color = Muted, fontSize = 9.sp)
             indicatorsError != null -> Text("Indicators unavailable: $indicatorsError", color = Coral, fontSize = 9.sp)
             indicators != null -> Text(
-                "Deterministic backend indicators · ${indicators!!.barCount} bars · ${bars[indicators!!.startIndex].timestamp.toLocalDate()} onward",
+                "Deterministic backend indicators · ${indicators!!.barCount} bars · " +
+                    "${bars.getOrNull(indicators!!.startIndex)?.timestamp?.toLocalDate()?.toString() ?: "coverage pending"} onward",
                 color = Muted,
                 fontSize = 9.sp
             )
