@@ -100,9 +100,9 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
             TerminalHeader(
                 status = when {
                     state.streamStatus.startsWith("Live") -> "Live data"
-                    state.streamStatus.contains("stale", ignoreCase = true) -> "Stale data"
-                    state.streamStatus.startsWith("Connected") -> "Connected"
-                    else -> "Market data unavailable"
+                    state.streamStatus.contains("stale", ignoreCase = true) -> "Delayed data"
+                    state.streamStatus.startsWith("Connected") -> "Waiting for quotes"
+                    else -> "Data unavailable"
                 },
                 onSignOut = workspace::signOut,
                 onOpenSettings = { showSettings = true },
