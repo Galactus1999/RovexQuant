@@ -4,8 +4,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Test
 import org.junit.Assert.assertThrows
+import org.junit.Test
 import java.time.OffsetDateTime
 
 class ChartSeriesMapperTest {
@@ -82,7 +82,10 @@ class ChartSeriesMapperTest {
         val instrument = InstrumentCatalog.resolve("RELIANCE")
         val outOfOrder = listOf(bar("2025-01-02"), bar("2025-01-01"))
         assertThrows(IllegalArgumentException::class.java) {
-            ChartSeriesMapper.map(MarketOhlcvSeries(instrument, outOfOrder, volumeAvailable = true, adjustmentStatus = "Raw"))
+            ChartSeriesMapper.map(MarketOhlcvSeries(
+                instrument = instrument, bars = outOfOrder,
+                volumeAvailable = true, adjustmentStatus = "Raw"
+            ))
         }
 
         val duplicateDate = listOf(
@@ -93,7 +96,10 @@ class ChartSeriesMapperTest {
             )
         )
         assertThrows(IllegalArgumentException::class.java) {
-            ChartSeriesMapper.map(MarketOhlcvSeries(instrument, duplicateDate, volumeAvailable = true, adjustmentStatus = "Raw"))
+            ChartSeriesMapper.map(MarketOhlcvSeries(
+                instrument = instrument, bars = duplicateDate,
+                volumeAvailable = true, adjustmentStatus = "Raw"
+            ))
         }
     }
 
@@ -102,12 +108,18 @@ class ChartSeriesMapperTest {
         val instrument = InstrumentCatalog.resolve("RELIANCE")
         assertThrows(IllegalArgumentException::class.java) {
             ChartSeriesMapper.map(
-                MarketOhlcvSeries(instrument, listOf(bar("2025-01-01", high = 99.0)), true, "Raw")
+                MarketOhlcvSeries(
+                    instrument = instrument, bars = listOf(bar("2025-01-01", high = 99.0)),
+                    volumeAvailable = true, adjustmentStatus = "Raw"
+                )
             )
         }
         assertThrows(IllegalArgumentException::class.java) {
             ChartSeriesMapper.map(
-                MarketOhlcvSeries(instrument, listOf(bar("2025-01-01", volume = -1L)), true, "Raw")
+                MarketOhlcvSeries(
+                    instrument = instrument, bars = listOf(bar("2025-01-01", volume = -1L)),
+                    volumeAvailable = true, adjustmentStatus = "Raw"
+                )
             )
         }
     }
@@ -123,7 +135,10 @@ class ChartSeriesMapperTest {
         )
         assertThrows(IllegalArgumentException::class.java) {
             ChartSeriesMapper.map(
-                MarketOhlcvSeries(forged, listOf(bar("2025-01-01")), false, "Invalid route")
+                MarketOhlcvSeries(
+                    instrument = forged, bars = listOf(bar("2025-01-01")),
+                    volumeAvailable = false, adjustmentStatus = "Invalid route"
+                )
             )
         }
     }
