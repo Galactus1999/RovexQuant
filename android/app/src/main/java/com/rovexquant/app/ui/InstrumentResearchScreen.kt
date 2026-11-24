@@ -584,7 +584,10 @@ private fun InstrumentOverviewPanel(
     fun percent(value: Double?): String = value?.takeIf { it.isFinite() }
         ?.let { String.format(Locale.US, "%+.2f%%", it) } ?: "—"
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(
+        modifier = Modifier.testTag("instrument.overview.panel"),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         Text(
             "INSTRUMENT OVERVIEW",
             color = MaterialTheme.colorScheme.onBackground,
