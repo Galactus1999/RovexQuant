@@ -85,7 +85,7 @@ fun MacroEventResearchScreen(session: QuantSession, repository: QuantDataReposit
         item {
             TerminalCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Eyebrow("P3 · independent exchange verification")
+                    Eyebrow("DATA CHECK")
                     StatusPill(state.integrity?.status ?: if (state.integrityLoading) "CHECKING" else "NOT CHECKED", if (state.integrity?.status == "MATCHED") Mint else Gold)
                 }
                 Text("Market data integrity", color = MaterialTheme.colorScheme.onBackground,
@@ -106,7 +106,7 @@ fun MacroEventResearchScreen(session: QuantSession, repository: QuantDataReposit
                             color = Gold, fontSize = 10.sp)
                     }
                 } ?: Text(
-                    if (state.integrityLoading) "No report loaded yet." else "No official reconciliation report is stored yet.",
+                    if (state.integrityLoading) "No report loaded yet." else "No verification report yet.",
                     color = Muted, fontSize = 10.sp
                 )
             }
@@ -133,7 +133,7 @@ fun MacroEventResearchScreen(session: QuantSession, repository: QuantDataReposit
         }
         item {
             TerminalCard {
-                Eyebrow("Deterministic event study · persisted EOD bars")
+                Eyebrow("EVENT STUDY")
                 Text("Test a dated event against a stock and benchmark",
                     color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold)
@@ -167,7 +167,23 @@ private fun MacroSummaryContent(summary: MacroResearchSummary) {
     if (summary.persistedObservationCount > 0) {
         Text("${summary.persistedObservationCount} observations saved", color = Muted, fontSize = 9.sp)
     }
-    summary.providerStatuses.forEach { Text(it, color = if (it.contains("FAILED")) Coral else Muted, fontSize = 9.sp) }
+    summary.providerStatuses.forEach { status ->
+        val parts = status.split(" · ")
+        val provider = when (parts.firstOrNull()?.uppercase()) {
+            "WORLD_BANK" -> "World Bank"
+            "RBIH_DBIE_MIRROR" -> "RBI data"
+            "FRED" -> "FRED"
+            "AMFI" -> "AMFI NAV"
+            else -> parts.firstOrNull().orEmpty().replace('_', ' ')
+        }
+        val state = parts.getOrNull(1)?.lowercase()?.replace('_', ' ').orEmpty()
+        val count = parts.getOrNull(2).orEmpty()
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(provider, color = Muted, fontSize = 9.sp)
+            Text(listOf(state, count).filter { it.isNotBlank() }.joinToString(" · "),
+                color = if (state == "failed") Coral else Muted, fontSize = 9.sp)
+        }
+    }
     if (summary.worldBankSeries.isEmpty()) {
         Text("No World Bank observations returned.", color = Muted, fontSize = 10.sp)
     } else {
