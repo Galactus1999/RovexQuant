@@ -66,6 +66,32 @@ object OhlcvCsvResearch {
         return bars
     }
 
+    /** Merge daily bars by exchange trading date; incoming rows replace overlaps. */
+    fun merge(existing: List<OhlcvBar>, incoming: List<OhlcvBar>): List<OhlcvBar> {
+        require(existing.size + incoming.size <= 100_000) { "Merged dataset exceeds the 100,000-row safety limit" }
+        val byDate = java.util.TreeMap<java.time.LocalDate, OhlcvBar>()
+        (existing + incoming).forEach { bar -> byDate[bar.timestamp.toLocalDate()] = bar }
+        return byDate.values.toList()
+    }
+
+    /** Serialize validated bars into the same strict local CSV format used by the scanner. */
+    fun toCsv(bars: List<OhlcvBar>): String {
+        require(bars.isNotEmpty()) { "No OHLCV bars to save" }
+        val ordered = bars.sortedBy { it.timestamp }
+        require(ordered.size <= 100_000) { "Dataset exceeds the 100,000-row safety limit" }
+        return buildString {
+            append("timestamp,open,high,low,close,volume\\n")
+            ordered.forEach { bar ->
+                append(bar.timestamp).append(',')
+                    .append(bar.open).append(',')
+                    .append(bar.high).append(',')
+                    .append(bar.low).append(',')
+                    .append(bar.close).append(',')
+                    .append(bar.volume).append('\\n')
+            }
+        }
+    }
+
     fun summarize(bars: List<OhlcvBar>): OhlcvResearchSummary {
         require(bars.isNotEmpty()) { "No OHLCV bars to analyse" }
         val closes = bars.map { it.close }
