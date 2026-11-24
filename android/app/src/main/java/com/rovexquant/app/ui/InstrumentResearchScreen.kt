@@ -530,6 +530,21 @@ fun InstrumentResearchScreen(
                 }
             }
         }
+        InstrumentOverviewPanel(
+            symbol = identity?.canonicalSymbol ?: symbol,
+            isIndex = identity?.instrumentType == com.rovexquant.app.domain.InstrumentType.BROAD_MARKET_INDEX ||
+                identity?.instrumentType == com.rovexquant.app.domain.InstrumentType.SECTOR_INDEX,
+            bars = bars,
+            visibleBars = visible,
+            interval = selectedInterval,
+            quote = quoteSnapshot,
+            quoteLoading = quoteLoading,
+            quoteError = quoteError,
+            intelligence = intelligenceFeed,
+            intelligenceLoading = intelligenceLoading,
+            intelligenceError = intelligenceError,
+            onOpenUrl = { url -> uriHandler.openUri(url) }
+        )
         error?.let {
             Text(it, color = Coral, fontSize = 10.sp, modifier = Modifier.padding(top = 8.dp))
         }
