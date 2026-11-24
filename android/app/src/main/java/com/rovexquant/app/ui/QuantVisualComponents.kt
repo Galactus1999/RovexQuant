@@ -118,7 +118,7 @@ fun MarketBreadthBar(advances: Int, declines: Int, unchanged: Int, modifier: Mod
 }
 
 @Composable
-fun SectorHeatmapTile(
+fun SectorHeatmapCell(
     label: String,
     changePercent: Double?,
     fresh: Boolean,
