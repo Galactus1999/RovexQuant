@@ -40,6 +40,8 @@ class TechnicalIndicatorsTest {
         assertEquals(2, result.localIndexForSourceBar(9))
         assertEquals(null, result.localIndexForSourceBar(6))
         assertEquals(null, result.localIndexForSourceBar(10))
+        assertEquals(null, result.localIndexForSourceBar(Int.MIN_VALUE))
+        assertEquals(null, result.localIndexForSourceBar(Int.MAX_VALUE))
     }
 
     @Test
