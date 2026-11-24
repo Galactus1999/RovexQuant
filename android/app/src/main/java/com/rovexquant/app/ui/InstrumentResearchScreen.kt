@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -56,10 +57,12 @@ fun InstrumentResearchScreen(symbol: String, displayName: String, repository: Qu
         val cutoff = when (range) { "1M" -> today.minusMonths(1); "3M" -> today.minusMonths(3); "6M" -> today.minusMonths(6); "1Y" -> today.minusYears(1); else -> null }
         if (cutoff == null) bars else bars.filter { !it.timestamp.toLocalDate().isBefore(cutoff) }
     }
-    Column(Modifier.fillMaxSize().background(Ink).padding(16.dp)) {
+    Column(Modifier.fillMaxSize().background(Ink).padding(16.dp).testTag("instrument.research.screen")) {
         TextButton(onClick = onBack) { Text("← Back to Pulse") }
         Text(symbol, color = MaterialTheme.colorScheme.onBackground, fontSize = 25.sp, fontWeight = FontWeight.Bold)
-        Text(displayName, color = Muted, fontSize = 11.sp)
+        if (displayName.isNotBlank() && !displayName.equals(symbol, ignoreCase = true)) {
+            Text(displayName, color = Muted, fontSize = 11.sp)
+        }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
             listOf("1M", "3M", "6M", "1Y", "ALL").forEach { p -> FilterChip(selected = range == p, onClick = { range = p }, label = { Text(p) }) }
