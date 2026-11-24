@@ -50,11 +50,14 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
     val state by workspace.uiState.collectAsStateWithLifecycle()
     var selected by remember { mutableStateOf(TerminalSection.PULSE) }
     var showSettings by remember { mutableStateOf(false) }
+    var showDeveloperDiagnostics by remember { mutableStateOf(false) }
+    var developerTapCount by remember { mutableIntStateOf(0) }
     var showInstrumentSearch by remember { mutableStateOf(false) }
     var selectedInstrument by remember { mutableStateOf<Pair<String, String>?>(null) }
-    BackHandler(enabled = showInstrumentSearch || showSettings || selectedInstrument != null) {
+    BackHandler(enabled = showInstrumentSearch || showSettings || selectedInstrument != null || showDeveloperDiagnostics) {
         when {
             showInstrumentSearch -> showInstrumentSearch = false
+            showDeveloperDiagnostics -> showDeveloperDiagnostics = false
             showSettings -> showSettings = false
             else -> selectedInstrument = null
         }
@@ -102,7 +105,17 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
                     else -> "Market data unavailable"
                 },
                 onSignOut = workspace::signOut,
-                onOpenSettings = { showSettings = true }
+                onOpenSettings = { showSettings = true },
+                onDeveloperTap = {
+                    developerTapCount += 1
+                    if (developerTapCount >= 5) {
+                        developerTapCount = 0
+                        showDeveloperDiagnostics = true
+                        selected = TerminalSection.INTELLIGENCE
+                        showSettings = false
+                        selectedInstrument = null
+                    }
+                }
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(
@@ -112,7 +125,15 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
             }
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            if (showSettings) {
+            if (showDeveloperDiagnostics) {
+                IntelligenceCentreScreen(
+                    session = activeSession,
+                    repository = workspace.repository,
+                    equityInstruments = state.equities,
+                    indexKeys = state.indexKeys,
+                    developerMode = true
+                )
+            } else if (showSettings) {
                 SettingsScreen(
                     session = activeSession,
                     repository = workspace.repository,
