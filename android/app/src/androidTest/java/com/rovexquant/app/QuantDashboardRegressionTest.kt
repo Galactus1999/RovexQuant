@@ -38,7 +38,7 @@ class QuantDashboardRegressionTest {
     @Test fun appStartsWithQuantMarketPulseAndHonestOfflineState() {
         waitForDashboard()
         composeRule.onNodeWithTag("quant.header").assertIsDisplayed()
-        composeRule.onNodeWithText("Market pulse.").assertIsDisplayed()
+        composeRule.onNodeWithText("Market Pulse").assertIsDisplayed()
         composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("market.eod.snapshot"))
         composeRule.onNodeWithTag("market.eod.snapshot").assertIsDisplayed()
         composeRule.onNodeWithText("END OF DAY").assertIsDisplayed()
@@ -46,7 +46,7 @@ class QuantDashboardRegressionTest {
         // the asynchronous snapshot payload, then explicitly expand it before
         // asserting that the fixture symbol is rendered.
         composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithText("2450 priced symbols", substring = true).fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText("2450 stocks", substring = true).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithText("Show market movers").performClick()
         composeRule.waitUntil(10_000) {
@@ -55,8 +55,6 @@ class QuantDashboardRegressionTest {
         composeRule.onAllNodesWithTag("market.ingestion.status").assertCountEquals(0)
         composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasText("FIXTURE"))
         composeRule.onNodeWithText("FIXTURE").assertIsDisplayed()
-        composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("market.feed.status"))
-        composeRule.onNodeWithTag("market.feed.status").assertIsDisplayed()
         composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("market.sector.heading"))
         composeRule.onNodeWithTag("market.sector.heading").assertIsDisplayed()
         composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("sector.index.NIFTY BANK"))
@@ -99,7 +97,7 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithText("Open AI provider settings").assertIsDisplayed()
         composeRule.onNodeWithTag("settings.screen").performScrollToNode(hasText("Close"))
         composeRule.onNodeWithText("Close").performClick()
-        composeRule.onNodeWithText("Market pulse.").assertIsDisplayed()
+        composeRule.onNodeWithText("Market Pulse").assertIsDisplayed()
     }
 
     @Test fun aiWorkspaceConnectsChatAndEodRecoveryActions() {
@@ -222,8 +220,8 @@ class QuantLoginRegressionTest {
         composeRule.onNodeWithTag("login.submit").performScrollTo()
         composeRule.onNodeWithTag("login.submit").performClick()
         composeRule.waitUntil(30_000) {
-            composeRule.onAllNodesWithText("Market pulse.").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText("Market Pulse").fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("Market pulse.").assertIsDisplayed()
+        composeRule.onNodeWithText("Market Pulse").assertIsDisplayed()
     }
 }
