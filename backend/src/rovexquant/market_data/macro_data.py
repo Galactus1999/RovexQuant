@@ -189,13 +189,13 @@ async def fetch_amfi_nav(search: str = "", limit: int = 50) -> dict[str, Any]:
         nav_index = next((index for name, index in header.items()
                           if name in {"net asset value", "nav"}), None)
         date_index = header.get("date")
-        if nav_index is None or date_index is None:
+        if nav_index is None or date_index is None or max(nav_index, date_index) >= len(fields):
             if len(fields) >= 8:
                 nav_index, date_index = 6, 7
-            else:
+            elif len(fields) >= 6:
                 nav_index, date_index = 4, 5
-        if max(nav_index, date_index) >= len(fields):
-            continue
+            else:
+                continue
         try:
             nav = float(fields[nav_index])
             nav_date = fields[date_index]
