@@ -76,7 +76,7 @@ def normalize_nse_index_master(raw: bytes) -> list[dict[str, str]]:
 
 
 def normalize_nse_equity_master(raw: bytes) -> list[dict[str, str]]:
-    """Return verified NSE cash-equity instruments (EQ and trade-to-trade BE)."""
+    """Return verified NSE cash-equity and ETF instruments from the BOD master."""
     if len(raw) > _MAX_MASTER_BYTES:
         raise InstrumentMasterError("Upstox NSE instrument master exceeds the size limit")
     try:
@@ -100,7 +100,7 @@ def normalize_nse_equity_master(raw: bytes) -> list[dict[str, str]]:
     for record in records:
         if not isinstance(record, dict):
             continue
-        if record.get("segment") != "NSE_EQ" or record.get("instrument_type") not in {"EQ", "BE"}:
+        if record.get("segment") != "NSE_EQ" or record.get("instrument_type") not in {"EQ", "BE", "ETF"}:
             continue
         key, name = record.get("instrument_key"), record.get("name")
         symbol, isin = record.get("trading_symbol"), record.get("isin")
