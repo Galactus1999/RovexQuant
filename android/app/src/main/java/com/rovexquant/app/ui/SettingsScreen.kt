@@ -228,6 +228,7 @@ fun SettingsScreen(
                             ingestionError = null
                             try {
                                 ingestionStatus = repository.fetchMarketIngestionStatus(session, "nse")
+                                dataHealth = repository.fetchMarketDataHealth(session, "NSE")
                             } catch (cancelled: CancellationException) {
                                 throw cancelled
                             } catch (failure: Exception) {
