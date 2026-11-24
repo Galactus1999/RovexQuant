@@ -209,9 +209,10 @@ private fun MacroSummaryContent(summary: MacroResearchSummary) {
 
 @Composable
 private fun EventStudyContent(result: EventStudyResult) {
+    var showDetails by remember(result) { mutableStateOf(false) }
     Spacer(Modifier.height(10.dp))
     Eyebrow("${result.exchange} · ${result.symbol} · ${result.eventDate}")
-    Text("${result.anchorDate} → ${result.lastPostEventDate} · ${result.postBarsUsed} post-event bars",
+    Text("${result.anchorDate} → ${result.lastPostEventDate}",
         color = Muted, fontSize = 9.sp)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         EventMetric("Pre-event", result.preEventReturn, Modifier.weight(1f))
@@ -220,34 +221,26 @@ private fun EventStudyContent(result: EventStudyResult) {
     if (result.marketAdjustedReturn != null) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             EventMetric("Market-adjusted", result.marketAdjustedReturn, Modifier.weight(1f))
-            EventMetric("Cumulative abnormal", result.cumulativeAbnormalReturn, Modifier.weight(1f))
+            EventMetric("Abnormal", result.cumulativeAbnormalReturn, Modifier.weight(1f))
         }
-        Text("Benchmark ${result.benchmarkSymbol ?: "—"} · ${result.benchmarkMatches} aligned observations · ETF proxy where used",
+    }
+    TextButton(onClick = { showDetails = !showDetails }) {
+        Text(if (showDetails) "Hide details" else "Details")
+    }
+    if (showDetails) {
+        Text("Benchmark ${result.benchmarkSymbol ?: "—"} · ${result.benchmarkMatches} matched bars",
             color = Muted, fontSize = 9.sp)
-    } else {
-        Text("No benchmark-relative result was calculated.", color = Gold, fontSize = 10.sp)
-    }
-    Text("Method: ${result.method} · Price basis: ${result.priceBasis}", color = Muted, fontSize = 9.sp)
-    if (result.isin != null) {
-        Text(
-            "Point-in-time identity: ${result.exchange}:${result.symbolAsOfAnchor ?: result.symbol} · ISIN ${result.isin} · valid from ${result.symbolValidFrom ?: "—"} to ${result.symbolValidTo ?: "current"}",
-            color = Muted, fontSize = 9.sp, lineHeight = 13.sp
-        )
-        Text("Identity source: ${result.symbolHistoryProvider ?: "historical symbol archive"}", color = Muted, fontSize = 8.sp)
-    }
-    if (result.corporateActions.isNotEmpty()) {
-        Spacer(Modifier.height(8.dp))
-        Eyebrow("Corporate actions within ±60 days")
-        result.corporateActions.forEach { action ->
-            Text(
-                "${action.exDate} · ${action.actionType.uppercase()} · ${action.rawSubject.ifBlank { action.companyName }}",
-                color = Gold, fontSize = 9.sp, lineHeight = 13.sp
-            )
+        Text("Method: ${result.method} · Price basis: ${result.priceBasis}", color = Muted, fontSize = 9.sp)
+        if (result.isin != null) {
+            Text("ISIN ${result.isin} · historical symbol ${result.symbolAsOfAnchor ?: result.symbol}",
+                color = Muted, fontSize = 9.sp)
         }
-    } else {
-        Text("No corporate actions found in the stored ±60-day window.", color = Muted, fontSize = 9.sp)
+        result.corporateActions.forEach { action ->
+            Text("${action.exDate} · ${action.actionType.uppercase()} · ${action.rawSubject.ifBlank { action.companyName }}",
+                color = Gold, fontSize = 9.sp)
+        }
+        result.limitations.forEach { Text(it, color = Muted, fontSize = 9.sp, lineHeight = 13.sp) }
     }
-    result.limitations.forEach { Text("• $it", color = Muted, fontSize = 9.sp, lineHeight = 13.sp) }
 }
 
 @Composable
