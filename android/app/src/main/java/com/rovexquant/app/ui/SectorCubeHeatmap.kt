@@ -15,6 +15,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -32,7 +33,6 @@ import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
-import kotlin.math.sqrt
 
 data class SectorHeatmapTile(
     val label: String,
@@ -240,7 +240,7 @@ private fun SectorCubeHeatmap(
     }
 }
 
-private fun drawFace(points: List<Offset>, color: Color) {
+private fun DrawScope.drawFace(points: List<Offset>, color: Color) {
     if (points.size != 4) return
     val path = Path().apply {
         moveTo(points[0].x, points[0].y)
