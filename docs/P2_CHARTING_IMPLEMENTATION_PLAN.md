@@ -110,3 +110,29 @@ P2 is complete only when the chart is connected to real validated P1-routed hist
 The current backend exposes authenticated `POST /api/v1/research/indicators`. It accepts aligned close/high/low arrays up to 10,000 observations, configurable SMA/EMA/RSI/Bollinger/ATR/ADX periods, and returns aligned deterministic arrays; MACD is also returned. ATR and ADX are emitted only when both high and low arrays are supplied. This route is already rate-limited. P2 Android integration must add a typed repository/API call rather than duplicate indicator formulas in chart JavaScript. The chart history limit (100,000) is therefore distinct from the current indicator request limit (10,000); the UI must disclose the calculation window or use a bounded visible-window request with sufficient warm-up history. Do not silently pretend that indicators cover more history than was submitted.
 
 The Android wrapper executes chart calls asynchronously in WebView. Its documentation warns that bridge errors may otherwise be thrown on the main thread and crash the app. Any adopted wrapper integration must register and test its error listener, make disposal/recreation lifecycle-safe, and verify that a stale callback cannot update a disposed chart.
+
+
+## Implementation audit — 24 November 2026
+
+### Findings in the pre-P2 instrument screen
+- The existing instrument research chart was a close-price polyline, not OHLC candlesticks. It did not render open/high/low candle bodies.
+- The old Canvas path iterated every visible source bar; selecting ALL could expose the renderer to the full 100,000-bar storage limit.
+- The on-screen text advertised drag-to-inspect although selection was tap-based; pan was implemented through transform gestures.
+- The typed chart mapper was initially not connected to the instrument chart or cache persistence path.
+- The P1 sync manager could merge cached and newly fetched rows and persist them without chart-contract validation first.
+
+### Repairs now present on the P2 branch
+- Added renderer-neutral `ChartSeriesData` and strict `ChartSeriesMapper` validation, including Asia/Kolkata exchange-date normalization, OHLC invariants, ordered/unique dates, maximum history and volume-source consistency.
+- Connected the instrument research screen to mapped/validated chart data.
+- Added a native Compose OHLC candlestick renderer with wicks, candle bodies, SMA 20/50 overlays, volume only when supplied, OHLC inspection, crosshair, pinch zoom, pan and reset/overview controls.
+- Indicator arrays are computed on `Dispatchers.Default`, not in the Compose draw path.
+- Capped the visible render window at 2,000 candles to prevent an ALL-range gesture from forcing a 100,000-element Canvas draw; older history remains accessible by panning.
+- The history sync manager validates cached history, fetched rows and the merged result before persistence. A malformed cache is discarded for the incremental merge path so the requested history is fetched afresh. An empty incremental response preserves a valid existing cache.
+- Removed the duplicate interim candlestick renderer after selecting the validated-data renderer.
+
+### Still incomplete — do not mark P2 complete
+- The preferred TradingView Android wrapper has not been added. The native Compose renderer is an interim, dependency-free implementation pending a controlled wrapper compatibility spike.
+- SMA 20/50 are the only currently wired chart overlays. EMA, Bollinger Bands, RSI, MACD, ATR and ADX are not yet integrated into Android chart panes.
+- The Android client does not yet call the backend `/api/v1/research/indicators` endpoint through a typed repository/API contract.
+- No Android renderer interaction tests, index/equity chart emulator test, real-device performance profile, fullscreen, multi-instrument comparison or event markers have passed yet.
+- The exact latest branch head must pass a fresh complete CI run. An earlier run was cancelled after subsequent branch pushes; do not treat it as verification of the latest head.
