@@ -81,6 +81,7 @@ fun MarketPulseScreen(
 ) {
     val activeSession = session
     var equitySearch by remember { mutableStateOf("") }
+    var equityFilter by remember { mutableStateOf("ALL") }
     var isRefreshing by remember { mutableStateOf(false) }
     var showEodMovers by remember { mutableStateOf(false) }
     var showAllSectors by remember { mutableStateOf(false) }
@@ -104,10 +105,20 @@ fun MarketPulseScreen(
             status.contains("still running")
     }
 
-    val visibleEquities = remember(equityInstruments, equitySearch) {
+    val visibleEquities = remember(equityInstruments, equitySearch, equityFilter, ticks) {
         val query = equitySearch.trim().uppercase()
-        if (query.isBlank()) equityInstruments else equityInstruments.filter {
+        val searched = if (query.isBlank()) equityInstruments else equityInstruments.filter {
             it.tradingSymbol.uppercase().contains(query) || it.name.uppercase().contains(query)
+        }
+        val filtered = when (equityFilter) {
+            "GAINERS" -> searched.filter { ticks[it.instrumentKey]?.changePercent?.let { change -> change > 0.0 } == true }
+            "LOSERS" -> searched.filter { ticks[it.instrumentKey]?.changePercent?.let { change -> change < 0.0 } == true }
+            else -> searched
+        }
+        when (equityFilter) {
+            "GAINERS" -> filtered.sortedByDescending { ticks[it.instrumentKey]?.changePercent ?: Double.NEGATIVE_INFINITY }
+            "LOSERS" -> filtered.sortedBy { ticks[it.instrumentKey]?.changePercent ?: Double.POSITIVE_INFINITY }
+            else -> filtered.sortedByDescending { ticks[it.instrumentKey]?.changePercent ?: Double.NEGATIVE_INFINITY }
         }
     }
     val nifty = indexKeys["NIFTY 50"]?.let { ticks[it] }
@@ -140,7 +151,12 @@ fun MarketPulseScreen(
         modifier = Modifier.fillMaxSize()
     ) {
         LazyColumn(modifier = Modifier.fillMaxSize().testTag("market.pulse.list"), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
-        item { SectionHeading("The market, without the noise", "Market pulse.", "A clean overview of indices, breadth, sectors and your tracked universe.") }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text("Market Pulse", color = MaterialTheme.colorScheme.onBackground, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                StatusPill(if (streamStatus.startsWith("Live")) "LIVE" else "EOD / DELAYED", if (streamStatus.startsWith("Live")) Mint else Gold)
+            }
+        }
         item {
             TerminalCard {
                 Row(
@@ -148,7 +164,7 @@ fun MarketPulseScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                 ) {
-                    Eyebrow("Latest NSE market data")
+                    Eyebrow("NSE · EOD")
                     StatusPill("END OF DAY", Gold)
                 }
                 Text(
@@ -159,27 +175,16 @@ fun MarketPulseScreen(
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    eodSnapshot?.let {
-                        "${if (it.dataOrigin == "POSTGRESQL") "PostgreSQL" else "Direct provider fallback · not persisted"} · ${it.provider} · ${it.tradingDate} · ${it.pricedSymbols} priced symbols"
-                    } ?: "Automatically retrieving the latest available NSE trading session from TejHQ.",
+                    eodSnapshot?.let { "${it.tradingDate} · ${it.pricedSymbols} stocks" } ?: "—",
                     color = Muted, fontSize = 10.sp, lineHeight = 15.sp
                 )
-                if (eodSnapshot == null) {
-                    Text(
-                        "The app retrieves the latest available trading session after login. This is EOD data, not a live quote feed.",
-                        color = Muted, fontSize = 10.sp, lineHeight = 15.sp
-                    )
-                } else {
+                if (eodSnapshot != null) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         EodBreadthStat("Advances", eodSnapshot.advances, Mint, Modifier.weight(1f))
                         EodBreadthStat("Declines", eodSnapshot.declines, Coral, Modifier.weight(1f))
                         EodBreadthStat("Unchanged", eodSnapshot.unchanged, Muted, Modifier.weight(1f))
                     }
                     Spacer(Modifier.height(5.dp))
-                    Text(
-                        "${eodSnapshot.totalRows} source rows · ${eodSnapshot.equitySeriesRows} EQ-series breadth rows · EOD only",
-                        color = Muted, fontSize = 9.sp
-                    )
                     val moverCount = eodSnapshot.topGainers.size + eodSnapshot.topLosers.size + eodSnapshot.mostActiveByVolume.size
                     if (moverCount > 0) {
                         androidx.compose.material3.TextButton(onClick = { showEodMovers = !showEodMovers }) {
@@ -203,7 +208,7 @@ fun MarketPulseScreen(
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     Text(
-                        eodSnapshotStatus,
+                        eodSnapshot?.tradingDate ?: eodSnapshotStatus.take(32),
                         color = if (eodSnapshot == null) Gold else Muted,
                         fontSize = 9.sp,
                         modifier = Modifier.weight(1f)
@@ -212,83 +217,6 @@ fun MarketPulseScreen(
                         onClick = onRefreshEodSnapshot,
                         modifier = Modifier.testTag("market.eod.refresh")
                     ) { Text("Refresh") }
-                }
-            }
-        }
-        item {
-            TerminalCard {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                ) {
-                    Eyebrow("Persistent PostgreSQL ingestion")
-                    StatusPill(
-                        marketIngestionStatus?.status ?: "UNKNOWN",
-                        when (marketIngestionStatus?.status) {
-                            "SUCCEEDED" -> Mint
-                            "FAILED", "EMPTY" -> Coral
-                            else -> Gold
-                        }
-                    )
-                }
-                Text(
-                    "Database collection health",
-                    modifier = Modifier.testTag("market.ingestion.status"),
-                    color = MaterialTheme.colorScheme.onBackground,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    marketIngestionStatusLabel,
-                    color = Muted,
-                    fontSize = 10.sp,
-                    lineHeight = 15.sp
-                )
-                val persistedDate = marketIngestionStatus?.lastSuccessfulTradingDate
-                if (persistedDate != null) {
-                    Text(
-                        "Persisted EOD data · $persistedDate · " +
-                            "${marketIngestionStatus?.lastSuccessfulRows ?: 0} rows · " +
-                            "${marketIngestionStatus?.lastSuccessfulProvider ?: "source unknown"}",
-                        color = Mint,
-                        fontSize = 10.sp,
-                        lineHeight = 15.sp
-                    )
-                } else {
-                    Text(
-                        "No successful EOD batch is recorded in PostgreSQL yet. A live quote connection does not prove historical data has been persisted.",
-                        color = Gold,
-                        fontSize = 10.sp,
-                        lineHeight = 15.sp
-                    )
-                }
-                if (marketIngestionStatus?.status == "FAILED") {
-                    Text(
-                        "Latest run error · ${marketIngestionStatus?.errorCode ?: "unknown"}: " +
-                            (marketIngestionStatus?.errorMessage ?: "No safe error detail supplied."),
-                        color = Coral,
-                        fontSize = 9.sp,
-                        lineHeight = 14.sp
-                    )
-                }
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                ) {
-                    Text(
-                        marketIngestionStatus?.let {
-                            "Latest run · ${it.rowsUpserted} rows processed · ${it.rowsSkipped} skipped"
-                        } ?: "Waiting for backend status",
-                        color = Muted,
-                        fontSize = 9.sp,
-                        modifier = Modifier.weight(1f)
-                    )
-                    androidx.compose.material3.TextButton(
-                        onClick = onRefreshMarketIngestionStatus,
-                        modifier = Modifier.testTag("market.ingestion.refresh")
-                    ) { Text("Check") }
                 }
             }
         }
@@ -318,53 +246,17 @@ fun MarketPulseScreen(
                 MetricTile(
                     "Adv / Decl",
                     eodSnapshot?.let { "${it.advances} / ${it.declines}" } ?: "— / —",
-                    eodSnapshot?.let { "${it.pricedSymbols} priced EQ symbols" } ?: "Awaiting EOD snapshot",
+                    eodSnapshot?.let { "${it.unchanged} unchanged" } ?: "—",
                     accent = Gold,
                     modifier = Modifier.weight(1f)
                 )
-                MetricTile(
-                    "Signals",
-                    "—",
-                    "Signal generation awaits verified live-feed and strategy checks",
-                    accent = Coral,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-        item {
-            TerminalCard {
-                Eyebrow("Market structure")
-                Spacer(Modifier.height(8.dp))
-                Text("Index chart will appear here", color = MaterialTheme.colorScheme.onBackground, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(5.dp))
-                Text("No placeholder prices or synthetic candles. Connect an authorised feed or load a permitted historical dataset to render a chart.", color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
-                Spacer(Modifier.height(16.dp))
-                Column(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(PanelRaised)
-                        .testTag("market.feed.status").padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
-                    Text("SOURCE · UPSTOX V3 · $streamStatus", color = Muted, fontSize = 9.sp, letterSpacing = .5.sp, fontWeight = FontWeight.Bold)
-                    Text("EXCHANGE · $exchangeClock UTC    RECEIVED · $receiveClock UTC", color = Muted, fontSize = 8.sp)
-                    Text(
-                        "TICK QUALITY · ${latestTick?.let {
-                            if (it.quality == "VALID" && isFresh(it)) "VALID" else "STALE / ${it.quality}"
-                        } ?: "NO VERIFIED TICK"}",
-                        color = latestTick?.let { if (it.quality == "VALID" && isFresh(it)) Mint else Gold } ?: Muted,
-                        fontSize = 8.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
             }
         }
         item {
             Column {
                 Text("Sector performance", color = MaterialTheme.colorScheme.onBackground, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("market.sector.heading"))
                 Spacer(Modifier.height(4.dp))
-                Text(
-                    "Live NSE sector-index performance · $liveSectorCount / ${coreSectorIndices.size} fresh benchmarks · strongest first",
-                    color = Muted, fontSize = 11.sp, lineHeight = 16.sp
-                )
+                Text("$liveSectorCount / ${coreSectorIndices.size} live", color = Muted, fontSize = 10.sp)
             }
         }
         items(rankedSectors.take(if (showAllSectors) rankedSectors.size else 4), key = { it.benchmark }) { sector ->
@@ -378,21 +270,16 @@ fun MarketPulseScreen(
                         Text(sector.benchmark, color = Muted, fontSize = 9.sp, letterSpacing = .5.sp, modifier = Modifier.testTag("sector.index.${sector.benchmark}"))
                     }
                     StatusPill(
-                        when {
-                            quote == null && instrumentKey == null -> "Not listed"
-                            quote == null -> "No tick"
-                            quote.quality != "VALID" -> quote.quality
-                            !isFresh(quote) -> "Stale"
-                            else -> "Live"
-                        },
-                        if (quote?.quality == "VALID" && isFresh(quote)) Mint else Gold
+                        quote?.takeIf { it.quality == "VALID" && isFresh(it) }?.changePercent
+                            ?.let { String.format(Locale.US, "%+.2f%%", it) }
+                            ?: if (instrumentKey == null) "N/A" else "—",
+                        quote?.changePercent?.let { if (it >= 0) Mint else Coral } ?: Gold
                     )
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    SectorMetric("INDEX", sector.benchmark)
                     SectorMetric("LTP", quote?.lastPrice?.let { String.format(Locale.US, "%.2f", it) } ?: "—")
-                    SectorMetric("CHANGE", quote?.changePercent?.let { String.format(Locale.US, "%+.2f%%", it) } ?: "—")
-                    SectorMetric("QUALITY", quote?.quality ?: "—")
                 }
             }
         }
@@ -416,16 +303,20 @@ fun MarketPulseScreen(
                     singleLine = true,
                     label = { Text("Search symbol or company") }
                 )
-                Text(
-                    "The official NSE cash-equity master is subscribed in LTPC mode. Quotes appear only after verified exchange ticks arrive.",
-                    color = Muted,
-                    fontSize = 10.sp,
-                    lineHeight = 15.sp
-                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("ALL", "GAINERS", "LOSERS").forEach { filter ->
+                        androidx.compose.material3.FilterChip(
+                            selected = equityFilter == filter,
+                            onClick = { equityFilter = filter },
+                            label = { Text(filter) },
+                            modifier = Modifier.testTag("market.equity.filter.$filter")
+                        )
+                    }
+                }
             }
         }
         if (equityInstruments.isEmpty()) {
-            item { EmptyPanel("NSE equity universe unavailable", "Check the official instrument master and backend connectivity. Index streaming can still operate independently.") }
+            item { EmptyPanel("NSE equities unavailable", "—") }
         }
         items(visibleEquities.take(if (showAllEquities || equitySearch.isNotBlank()) 100 else 12), key = { it.instrumentKey }) { instrument ->
             val quote = ticks[instrument.instrumentKey]
@@ -463,7 +354,7 @@ fun MarketPulseScreen(
                 }
             }
         }
-        item { Text("Only verified, fresh ticks are eligible for signals.", color = Muted, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 4.dp)) }
+        
         }
     }
 }
