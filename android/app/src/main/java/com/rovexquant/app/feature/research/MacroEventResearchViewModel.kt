@@ -41,7 +41,10 @@ class MacroEventResearchViewModel(
     private var eventJob: Job? = null
 
     init {
-        refreshMacro()
+        // Load only the lightweight stored integrity status on entry.
+        // Macro refresh is an explicit user action: it fans out to several
+        // providers and writes to PostgreSQL, so do not run it concurrently
+        // with the initial database status read on a cold backend.
         refreshIntegrity()
     }
 
