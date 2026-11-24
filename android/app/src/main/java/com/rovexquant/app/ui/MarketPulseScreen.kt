@@ -262,7 +262,16 @@ fun MarketPulseScreen(
         items(rankedSectors.take(if (showAllSectors) rankedSectors.size else 4), key = { it.benchmark }) { sector ->
             val instrumentKey = indexKeys[sector.benchmark]
             val quote = instrumentKey?.let { ticks[it] }
-            TerminalCard {
+            val move = quote?.changePercent?.takeIf { quote.quality == "VALID" && isFresh(quote) }
+            val sectorTint = when {
+                move == null -> Panel
+                move >= 0.0 -> Mint.copy(alpha = .10f)
+                else -> Coral.copy(alpha = .12f)
+            }
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+                    .background(sectorTint).padding(14.dp)
+            ) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(sector.sector, color = MaterialTheme.colorScheme.onBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
