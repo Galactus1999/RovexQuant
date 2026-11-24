@@ -58,6 +58,24 @@ class OhlcvCsvResearchTest {
         assertTrue(runCatching { OhlcvCsvResearch.parse(duplicate) }.isFailure)
     }
 
+    @Test fun fetchedBarsSerializeAndRoundTripThroughLocalCsv() {
+        val bars = OhlcvCsvResearch.parse(risingCsv())
+        val serialized = OhlcvCsvResearch.toCsv(bars)
+        assertTrue(serialized.contains("\\n"))
+        val restored = OhlcvCsvResearch.parse(serialized)
+        assertEquals(bars.size, restored.size)
+        assertEquals(bars.last().timestamp, restored.last().timestamp)
+        assertEquals(bars.last().close, restored.last().close, 0.0001)
+    }
+
+    @Test fun incrementalMergeReplacesOverlappingTradingDateAndKeepsHistory() {
+        val original = OhlcvCsvResearch.parse(risingCsv(3))
+        val revised = original.last().copy(close = original.last().close + 5.0)
+        val merged = OhlcvCsvResearch.merge(original, listOf(revised))
+        assertEquals(3, merged.size)
+        assertEquals(revised.close, merged.last().close, 0.0001)
+    }
+
     @Test fun indicatorWarmupIsExplicitForShortDatasets() {
         val csv = "timestamp,open,high,low,close,volume\n2025-01-01T09:15:00Z,100,102,99,101,1000"
         val summary = OhlcvCsvResearch.summarize(OhlcvCsvResearch.parse(csv))
