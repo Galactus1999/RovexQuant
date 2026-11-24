@@ -174,7 +174,7 @@ fun SettingsScreen(
         item {
             TerminalCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Eyebrow("Database & data health")
+                    Eyebrow("Database health")
                     StatusPill(
                         dataHealth?.overallStatus ?: if (ingestionLoading) "Checking" else "Unavailable",
                         when (dataHealth?.overallStatus) {
@@ -185,7 +185,9 @@ fun SettingsScreen(
                     )
                 }
                 Text(
-                    dataHealth?.let { "EOD · ${it.eod.status} · ${it.eod.records ?: 0} rows" } ?: "Status unavailable",
+                    ingestionStatus?.lastSuccessfulTradingDate?.let {
+                        "EOD · $it · ${ingestionStatus?.lastSuccessfulRows ?: 0} rows"
+                    } ?: dataHealth?.let { "EOD · ${it.eod.status} · ${it.eod.records ?: 0} rows" } ?: "Status unavailable",
                     color = MaterialTheme.colorScheme.onBackground,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold
@@ -194,28 +196,6 @@ fun SettingsScreen(
                     dataHealth?.let { "Reconciliation · ${it.reconciliation.status}" } ?: "",
                     color = Muted,
                     fontSize = 10.sp
-                )
-            }
-        }
-        item {
-            TerminalCard {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Eyebrow("Database connection")
-                    StatusPill(
-                        ingestionStatus?.status ?: if (ingestionLoading) "Checking" else "Unavailable",
-                        when (ingestionStatus?.status) {
-                            "SUCCEEDED" -> Mint
-                            "FAILED", "EMPTY" -> Coral
-                            else -> Gold
-                        }
-                    )
-                }
-                Text(
-                    ingestionStatus?.lastSuccessfulTradingDate?.let { "EOD · $it · ${ingestionStatus?.lastSuccessfulRows ?: 0} rows" }
-                        ?: ingestionStatus?.status?.replace('_', ' ') ?: "Status unavailable",
-                    color = MaterialTheme.colorScheme.onBackground,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold
                 )
                 ingestionError?.let { Text(it, color = Coral, fontSize = 10.sp) }
                 ingestionStatus?.errorMessage?.takeIf { ingestionStatus?.status == "FAILED" }?.let {
