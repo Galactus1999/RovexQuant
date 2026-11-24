@@ -133,19 +133,32 @@ class QuantRepository(context: Context) : QuantDataRepository {
                 TejHqOhlcvClient.fetch(instrument.exchange, instrument.providerSymbol, from, to)
             OhlcvProvider.NSE_INDICES_PORTAL ->
                 NiftyIndicesOhlcvClient.fetch(instrument, from, to)
+            OhlcvProvider.UPSTOX_V3_INTRADAY -> {
+                require(instrument.interval.isIntraday) { "Upstox V3 provider requires an intraday timeframe." }
+                val session = QuantSessionStore.load(appContext)
+                    ?: throw IllegalStateException("Sign in again before requesting intraday candles.")
+                QuantApi.fetchIntradayOhlcv(
+                    session, instrument.exchange, instrument.providerSymbol, instrument.interval.key, from, to
+                )
+            }
         }
         MarketOhlcvSeries(
             instrument = instrument,
             bars = bars,
             retrievedAt = Instant.now(),
-            volumeAvailable = instrument.provider == OhlcvProvider.TEJHQ_EOD,
+            volumeAvailable = instrument.instrumentType == com.rovexquant.app.domain.InstrumentType.EQUITY,
             adjustmentStatus = when (instrument.provider) {
                 OhlcvProvider.TEJHQ_EOD -> "Raw end-of-day bhavcopy prices; corporate-action adjustment not applied"
                 OhlcvProvider.NSE_INDICES_PORTAL -> "Price Return Index OHLC; dividends are not included"
+                OhlcvProvider.UPSTOX_V3_INTRADAY -> "Raw intraday OHLCV; corporate-action adjustment not applied"
             },
-            providerNote = if (instrument.provider == OhlcvProvider.NSE_INDICES_PORTAL) {
-                "Official NSE Indices website-backed historical form; its underlying request contract is undocumented and may change."
-            } else null
+            providerNote = when (instrument.provider) {
+                OhlcvProvider.NSE_INDICES_PORTAL ->
+                    "Official NSE Indices website-backed historical form; its underlying request contract is undocumented and may change."
+                OhlcvProvider.UPSTOX_V3_INTRADAY ->
+                    "Upstox V3 historical/intraday candles; server-side read-only Analytics Token; interval history is provider-limited."
+                OhlcvProvider.TEJHQ_EOD -> null
+            }
         )
     }
 
