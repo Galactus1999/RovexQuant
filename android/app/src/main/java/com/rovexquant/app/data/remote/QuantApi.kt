@@ -609,6 +609,10 @@ object QuantApi {
                 if (status == "FAILED") {
                     errors += "$provider: ${item.optString("error", "refresh failed")}"
                 }
+                val warnings = item.optJSONArray("warnings") ?: JSONArray()
+                for (warningIndex in 0 until warnings.length()) {
+                    errors += "$provider: ${warnings.optString(warningIndex)}"
+                }
             }
         }
         return MacroResearchSummary(
