@@ -169,7 +169,7 @@ fun SettingsScreen(
             }
         }
         item {
-            TerminalCard(modifier = Modifier.testTag("settings.database.health")) {
+            TerminalCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Eyebrow("Database connection")
                     StatusPill(
