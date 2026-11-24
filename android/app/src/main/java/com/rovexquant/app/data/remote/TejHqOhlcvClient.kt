@@ -7,6 +7,9 @@ import org.json.JSONObject
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
+import java.util.Locale
+import java.io.ByteArrayOutputStream
+import okhttp3.ResponseBody
 import java.util.concurrent.TimeUnit
 
 /**
@@ -33,9 +36,9 @@ object TejHqOhlcvClient {
         from: LocalDate,
         to: LocalDate
     ): List<OhlcvBar> {
-        val market = exchange.trim().lowercase()
+        val market = exchange.trim().lowercase(Locale.ROOT)
         require(market == "nse" || market == "bse") { "Choose NSE or BSE." }
-        val ticker = symbol.trim().uppercase()
+        val ticker = symbol.trim().uppercase(Locale.ROOT)
         require(ticker.matches(Regex("[A-Z0-9][A-Z0-9&-]{0,29}"))) {
             "Enter a valid exchange trading symbol, without .NS or .BO."
         }
@@ -66,11 +69,18 @@ object TejHqOhlcvClient {
             if (body.contentLength() > MAX_RESPONSE_BYTES) {
                 throw IllegalStateException("Historical response exceeds the 12 MB safety limit.")
             }
-            val text = body.string()
-            require(text.toByteArray(Charsets.UTF_8).size <= MAX_RESPONSE_BYTES) {
-                "Historical response exceeds the 12 MB safety limit."
+            val json = JSONObject(readBounded(body))
+            val meta = json.optJSONObject("meta")
+            meta?.optString("symbol")?.takeIf { it.isNotBlank() && it != "null" }?.let {
+                require(it.trim().uppercase(Locale.ROOT) == ticker) {
+                    "TejHQ response symbol does not match the requested instrument."
+                }
             }
-            val json = JSONObject(text)
+            meta?.optString("exchange")?.takeIf { it.isNotBlank() && it != "null" }?.let {
+                require(it.trim().lowercase(Locale.ROOT) == market) {
+                    "TejHQ response exchange does not match the requested exchange."
+                }
+            }
             val rows = json.optJSONArray("data")
                 ?: throw IllegalStateException("TejHQ response has no OHLCV data array.")
             require(rows.length() <= MAX_ROWS) { "History exceeds the $MAX_ROWS-bar mobile limit." }
@@ -81,6 +91,9 @@ object TejHqOhlcvClient {
                     ?: throw IllegalStateException("TejHQ returned a malformed OHLCV row.")
                 val date = runCatching { LocalDate.parse(row.optString("date")) }
                     .getOrElse { throw IllegalStateException("TejHQ returned an invalid trading date.") }
+                require(!date.isBefore(from) && !date.isAfter(to)) {
+                    "TejHQ returned a trading date outside the requested range."
+                }
                 require(previousDate == null || date.isAfter(previousDate)) {
                     "TejHQ history contains duplicate or out-of-order trading dates."
                 }
@@ -111,5 +124,23 @@ object TejHqOhlcvClient {
             if (output.isEmpty()) throw IllegalStateException("No trading bars were available for this date range.")
             return output
         }
+    }
+
+    private fun readBounded(body: ResponseBody): String {
+        val output = ByteArrayOutputStream()
+        body.byteStream().use { input ->
+            val buffer = ByteArray(8 * 1024)
+            var total = 0
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                total += count
+                if (total > MAX_RESPONSE_BYTES) {
+                    throw IllegalStateException("Historical response exceeds the 12 MB safety limit.")
+                }
+                output.write(buffer, 0, count)
+            }
+        }
+        return String(output.toByteArray(), Charsets.UTF_8)
     }
 }

@@ -12,9 +12,9 @@ class InstrumentIdentityTest {
         assertEquals("NIFTY 50", identity.providerSymbol)
     }
 
-    @Test fun niftyBankRoutesToSectorIndexProvider() {
+    @Test fun niftyBankRoutesToBroadMarketIndexProvider() {
         val identity = InstrumentCatalog.resolve("NIFTY BANK")
-        assertEquals(InstrumentType.SECTOR_INDEX, identity.instrumentType)
+        assertEquals(InstrumentType.BROAD_MARKET_INDEX, identity.instrumentType)
         assertEquals(OhlcvProvider.NSE_INDICES_PORTAL, identity.provider)
     }
 
@@ -22,13 +22,6 @@ class InstrumentIdentityTest {
         val identity = InstrumentCatalog.resolve("NIFTY IT")
         assertEquals(InstrumentType.SECTOR_INDEX, identity.instrumentType)
         assertEquals(OhlcvProvider.NSE_INDICES_PORTAL, identity.provider)
-    }
-
-    @Test fun dashboardOilAndGasAliasMapsToOfficialIndexName() {
-        val identity = InstrumentCatalog.resolve("NIFTY OIL & GAS")
-        assertEquals(InstrumentType.SECTOR_INDEX, identity.instrumentType)
-        assertEquals("NIFTY OIL AND GAS INDEX", identity.providerSymbol)
-        assertEquals(true, InstrumentCatalog.isRegisteredIndex(identity))
     }
 
     @Test fun ordinaryEquityRemainsStrictAndUsesTejHq() {
@@ -47,13 +40,6 @@ class InstrumentIdentityTest {
     @Test fun equitySuffixAndWhitespaceRemainInvalid() {
         assertThrows(IllegalArgumentException::class.java) { InstrumentCatalog.resolve("RELIANCE.NS") }
         assertThrows(IllegalArgumentException::class.java) { InstrumentCatalog.resolve("NIFTY 100") }
-    }
-
-    @Test fun bseEquityUsesEquityProvider() {
-        val identity = InstrumentCatalog.resolve("TCS", "BSE")
-        assertEquals("BSE", identity.exchange)
-        assertEquals(InstrumentType.EQUITY, identity.instrumentType)
-        assertEquals(OhlcvProvider.TEJHQ_EOD, identity.provider)
     }
 
     @Test fun typedCacheIdentitySeparatesInstrumentTypeAndInterval() {

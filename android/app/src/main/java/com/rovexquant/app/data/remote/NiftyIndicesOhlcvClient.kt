@@ -4,6 +4,7 @@ import com.rovexquant.app.domain.InstrumentIdentity
 import com.rovexquant.app.domain.InstrumentCatalog
 import com.rovexquant.app.domain.OhlcvBar
 import java.io.IOException
+import java.io.ByteArrayOutputStream
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
@@ -16,6 +17,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.ResponseBody
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -135,11 +137,7 @@ object NiftyIndicesOhlcvClient {
             if (body.contentLength() > MAX_RESPONSE_BYTES) {
                 throw IOException("NSE Indices response exceeded the 4 MB safety limit.")
             }
-            val raw = body.string()
-            if (raw.toByteArray(Charsets.UTF_8).size > MAX_RESPONSE_BYTES) {
-                throw IOException("NSE Indices response exceeded the 4 MB safety limit.")
-            }
-            val envelope = JSONObject(raw)
+            val envelope = JSONObject(readBounded(body))
             val encodedRows = envelope.optString("d")
             if (encodedRows.isBlank() || encodedRows == "false" || encodedRows == "null") {
                 return emptyList()
@@ -156,6 +154,15 @@ object NiftyIndicesOhlcvClient {
                     ?: throw IOException("NSE Indices returned a malformed OHLC row.")
                 val dateText = firstValue(row, "HistoricalDate", "DATE", "date")
                 val date = parseDate(dateText)
+                if (date.isBefore(from) || date.isAfter(to)) {
+                    throw IOException("NSE Indices returned a date outside the requested range.")
+                }
+                val rowName = listOf("indexName", "INDEX_NAME", "Index Name")
+                    .map { row.optString(it).trim() }
+                    .firstOrNull { it.isNotEmpty() && it != "null" }
+                if (rowName != null && !rowName.equals(indexName, ignoreCase = true)) {
+                    throw IOException("NSE Indices response contained a different index than requested.")
+                }
                 fun price(vararg keys: String): Double {
                     val value = firstValue(row, *keys).replace(",", "").toDoubleOrNull()
                     if (value == null || !value.isFinite() || value <= 0.0) {
@@ -186,6 +193,24 @@ object NiftyIndicesOhlcvClient {
             }
             return parsed
         }
+    }
+
+    private fun readBounded(body: ResponseBody): String {
+        val output = ByteArrayOutputStream()
+        body.byteStream().use { input ->
+            val buffer = ByteArray(8 * 1024)
+            var total = 0
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                total += count
+                if (total > MAX_RESPONSE_BYTES) {
+                    throw IOException("NSE Indices response exceeded the 4 MB safety limit.")
+                }
+                output.write(buffer, 0, count)
+            }
+        }
+        return String(output.toByteArray(), Charsets.UTF_8)
     }
 
     private fun firstValue(row: JSONObject, vararg keys: String): String {
