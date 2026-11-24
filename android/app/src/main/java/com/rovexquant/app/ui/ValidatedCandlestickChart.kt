@@ -74,6 +74,12 @@ internal fun ValidatedCandlestickChart(
     val sma20 = averages?.first.orEmpty()
     val sma50 = averages?.second.orEmpty()
     val selected = candles.getOrNull(selectedIndex.coerceIn(candles.indices))
+    val visiblePriceBounds = remember(visible) {
+        if (visible.isEmpty()) null else visible.minOf { it.low } to visible.maxOf { it.high }
+    }
+    val visibleMaxVolume = remember(data.volumeBars, safeStart, safeEnd) {
+        data.volumeBars?.subList(safeStart, safeEnd)?.maxOfOrNull { it.value }?.coerceAtLeast(1L) ?: 1L
+    }
 
     Column {
         selected?.let { candle ->
@@ -107,6 +113,7 @@ internal fun ValidatedCandlestickChart(
 
         Canvas(
             Modifier.fillMaxWidth()
+                .testTag("instrument.chart.candles")
                 .height(if (showVolume && data.volumeAvailable) 250.dp else 215.dp)
                 .pointerInput(candles, safeStart, safeEnd) {
                     detectTapGestures { point ->
@@ -139,8 +146,9 @@ internal fun ValidatedCandlestickChart(
                 }
         ) {
             if (visible.isEmpty()) return@Canvas
-            val low = visible.minOf { it.low }
-            val high = visible.maxOf { it.high }
+            val bounds = visiblePriceBounds ?: return@Canvas
+            val low = bounds.first
+            val high = bounds.second
             val spread = (high - low).takeIf { it > 0.0 } ?: max(high * 0.001, 0.01)
             val hasVolume = showVolume && data.volumeBars != null
             val volumeHeight = if (hasVolume) size.height * 0.22f else 0f
@@ -178,8 +186,8 @@ internal fun ValidatedCandlestickChart(
             fun drawOverlay(values: List<Double?>, color: Color) {
                 val path = Path()
                 var started = false
-                values.forEachIndexed { globalIndex, value ->
-                    if (globalIndex !in safeStart until safeEnd || value == null) return@forEachIndexed
+                for (globalIndex in safeStart until safeEnd) {
+                    val value = values.getOrNull(globalIndex) ?: continue
                     val x = (globalIndex - safeStart + 0.5f) * step
                     if (!started) {
                         path.moveTo(x, y(value))
@@ -196,10 +204,9 @@ internal fun ValidatedCandlestickChart(
             if (hasVolume) {
                 val volumes = data.volumeBars!!
                 val visibleVolumes = volumes.subList(safeStart, safeEnd)
-                val maxVolume = visibleVolumes.maxOfOrNull { it.value }?.coerceAtLeast(1L) ?: 1L
                 visible.forEachIndexed { localIndex, candle ->
                     val volume = visibleVolumes[localIndex].value
-                    val height = (volume.toDouble() / maxVolume * volumeHeight).toFloat()
+                    val height = (volume.toDouble() / visibleMaxVolume * volumeHeight).toFloat()
                     val x = (localIndex + 0.5f) * step
                     drawRect(
                         color = if (candle.close >= candle.open) ChartUp.copy(alpha = 0.72f)
