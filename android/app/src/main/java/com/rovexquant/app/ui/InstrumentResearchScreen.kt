@@ -7,6 +7,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
@@ -39,7 +40,12 @@ fun InstrumentResearchScreen(symbol: String, displayName: String, repository: Qu
         loading = true
         error = null
         val today = LocalDate.now(ZoneId.of("Asia/Kolkata"))
-        val imported = withContext(Dispatchers.IO) { runCatching { TejHqOhlcvStore.load(context).orEmpty() }.getOrDefault(emptyList()) }
+        val settings = TejHqOhlcvStore.settings(context)
+        val imported = withContext(Dispatchers.IO) {
+            if (settings.symbol.equals(symbol, ignoreCase = true) && settings.exchange.equals("nse", ignoreCase = true)) {
+                runCatching { TejHqOhlcvStore.load(context).orEmpty() }.getOrDefault(emptyList())
+            } else emptyList()
+        }
         val fetched = withContext(Dispatchers.IO) { runCatching { repository.fetchTejHqOhlcv("nse", symbol, today.minusYears(3), today) } }
         bars = fetched.getOrNull()?.takeIf { it.isNotEmpty() } ?: imported
         if (bars.isEmpty()) error = fetched.exceptionOrNull()?.message ?: "No OHLCV history found. Fetch this symbol in Research Lab."
