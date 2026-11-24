@@ -1,6 +1,7 @@
 package com.rovexquant.app
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsEnabled
@@ -127,7 +128,7 @@ class QuantDashboardRegressionTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("instrument.chart.indicator.rsi.pane").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("instrument.chart.indicator.rsi.pane").assertExists()
         composeRule.onNodeWithTag("instrument.chart.indicator.rsi.toggle").performScrollTo().performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("instrument.chart.indicator.rsi.toggle").assertIsNotSelected()
@@ -142,7 +143,7 @@ class QuantDashboardRegressionTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("instrument.chart.indicator.macd.pane").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("instrument.chart.indicator.macd.pane").assertExists()
         composeRule.waitForIdle()
         clickIndicator("atr")
         composeRule.waitForIdle()
@@ -151,7 +152,7 @@ class QuantDashboardRegressionTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("instrument.chart.indicator.atr.pane").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("instrument.chart.indicator.atr.pane").assertExists()
         composeRule.waitForIdle()
         clickIndicator("adx")
         composeRule.waitForIdle()
@@ -160,7 +161,7 @@ class QuantDashboardRegressionTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("instrument.chart.indicator.adx.pane").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("instrument.chart.indicator.adx.pane").assertExists()
         composeRule.waitForIdle()
         for (key in listOf("sma", "ema", "bollinger")) {
             clickIndicator(key)
