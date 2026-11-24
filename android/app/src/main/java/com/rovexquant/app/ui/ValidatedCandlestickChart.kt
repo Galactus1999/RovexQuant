@@ -266,6 +266,16 @@ internal fun ValidatedCandlestickChart(
 
         val first = visible.firstOrNull()?.time.orEmpty()
         val last = visible.lastOrNull()?.time.orEmpty()
+        if (visible.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().testTag("instrument.chart.time.labels"),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(chartAxisLabel(visible.first().time), color = Color(0xFF9AA8B8), fontSize = 9.sp)
+                Text(chartAxisLabel(visible[visible.size / 2].time), color = Color(0xFF9AA8B8), fontSize = 9.sp)
+                Text(chartAxisLabel(visible.last().time), color = Color(0xFF9AA8B8), fontSize = 9.sp)
+            }
+        }
         Text(
             "$first  —  $last   ·   ${visible.size} candles",
             color = Color(0xFF9AA8B8),
@@ -288,6 +298,13 @@ internal fun ValidatedCandlestickChart(
     }
 }
 
+
+private fun chartAxisLabel(value: String): String {
+    if (!value.contains('T')) return value.takeLast(5)
+    val date = value.take(10).substring(5)
+    val time = value.substringAfter('T').take(5)
+    return "$date $time"
+}
 
 @Composable
 private fun IndicatorPane(
