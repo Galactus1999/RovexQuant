@@ -63,6 +63,8 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithText("View all sector benchmarks").performClick()
         composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("sector.index.NIFTY BANK"))
         composeRule.onNodeWithTag("sector.index.NIFTY BANK").assertIsDisplayed()
+        composeRule.onNodeWithTag("sector.index.NIFTY BANK").performClick()
+        composeRule.onNodeWithText("NIFTY BANK").assertIsDisplayed()
     }
 
     @Test fun bottomNavigationOpensAllWorkspacesAndSectorCoverage() {
