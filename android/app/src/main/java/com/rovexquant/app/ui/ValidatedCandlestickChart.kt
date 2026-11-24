@@ -300,9 +300,11 @@ private fun IndicatorPane(
     tag: String = "instrument.chart.indicator.pane"
 ) {
     val lineColors = listOf(Color(0xFF55C9F3), Color(0xFFFFC857), Color(0xFFB39DDB))
-    Column(Modifier.fillMaxWidth()) {
+    // Tag the pane container, not only the drawing surface, so UI tests and accessibility
+    // tooling can observe the pane even when its Canvas has not entered the viewport.
+    Column(Modifier.fillMaxWidth().testTag(tag)) {
         Text(title, color = Color(0xFFE6EDF5), fontSize = 10.sp)
-        Canvas(Modifier.fillMaxWidth().height(104.dp).testTag(tag)) {
+        Canvas(Modifier.fillMaxWidth().height(104.dp)) {
             val count = (globalEnd - globalStart).coerceAtLeast(0)
             if (count == 0 || size.width <= 0f) return@Canvas
             val samples = buildList {

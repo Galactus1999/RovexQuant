@@ -1,6 +1,7 @@
 package com.rovexquant.app
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertTextContains
@@ -100,6 +101,8 @@ class QuantDashboardRegressionTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("instrument.chart.indicator.rsi.toggle").performScrollTo().performClick()
         composeRule.waitForIdle()
+        // Prove the control state changed before waiting for its dependent pane.
+        composeRule.onNodeWithTag("instrument.chart.indicator.rsi.toggle").assertIsOn()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("instrument.chart.indicator.rsi.pane")
                 .fetchSemanticsNodes().isNotEmpty()
