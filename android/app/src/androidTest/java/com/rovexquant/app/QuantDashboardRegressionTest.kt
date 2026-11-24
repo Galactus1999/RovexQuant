@@ -67,7 +67,7 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("market.eod.snapshot"))
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("market.eod.snapshot").assertIsDisplayed()
-        composeRule.onNodeWithText("END OF DAY").assertIsDisplayed()
+        composeRule.onNodeWithText("EOD").assertIsDisplayed()
         // The EOD card intentionally collapses mover rows by default. Wait for
         // the asynchronous snapshot payload, then explicitly expand it before
         // asserting that the fixture symbol is rendered.
@@ -227,8 +227,11 @@ class QuantDashboardRegressionTest {
         waitForDashboard()
         composeRule.onNodeWithText("Scan").performClick()
         composeRule.onNodeWithText("Strategy scanner.").assertIsDisplayed()
-        composeRule.onNodeWithTag("scanner.list").performScrollToNode(hasText("No local dataset loaded"))
-        composeRule.onNodeWithText("No local dataset loaded").assertIsDisplayed()
+        composeRule.onNodeWithTag("scanner.list")
+            .performScrollToNode(hasText("Your risk / reward canvas is ready when historical data is loaded."))
+        composeRule.onNodeWithText("Your risk / reward canvas is ready when historical data is loaded.")
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("＋ Import CSV").assertIsDisplayed()
         composeRule.onNodeWithText("More").performClick()
         composeRule.onNodeWithText("Signals").performClick()
         composeRule.onNodeWithText("Signal centre.").assertIsDisplayed()
@@ -268,6 +271,10 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("scanner.list").performScrollToNode(hasText("Open AI data recovery"))
         composeRule.onNodeWithText("Open AI data recovery").performClick()
         composeRule.onNodeWithText("Quant Intelligence.").assertIsDisplayed()
+        composeRule.onNodeWithText("Model settings").performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("Groq", substring = true).fetchSemanticsNodes().isNotEmpty()
+        }
         composeRule.onNodeWithText("Groq", substring = true).assertIsDisplayed()
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.model"))
         composeRule.onNodeWithTag("ai.model").performTextInput("test-model")
