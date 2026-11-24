@@ -70,7 +70,6 @@ def test_upstox_v3_resolves_index_and_never_marks_index_volume_available(monkeyp
 
 
 def test_nifty_prefixed_etf_resolves_as_equity_not_index(monkeypatch):
-    monkeypatch.setattr(upstox_candles, "get_nse_analytics_token", lambda: "fake-token", raising=False)
     monkeypatch.setattr(upstox_candles, "get_nse_index_instruments", lambda: asyncio.sleep(0, result=[{
         "instrument_key": "NSE_INDEX|Nifty 50",
         "name": "Nifty 50",
