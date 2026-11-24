@@ -201,6 +201,7 @@ fun InstrumentResearchScreen(
         if (bars.isEmpty()) {
             indicators = null
             indicatorsError = null
+            indicatorsNotice = null
             indicatorsLoading = false
             return@LaunchedEffect
         }
@@ -210,38 +211,34 @@ fun InstrumentResearchScreen(
         indicators = null
         indicatorsLoading = true
         indicatorsError = null
+        indicatorsNotice = null
         try {
-            val result = withContext(Dispatchers.IO) {
-                repository.fetchTechnicalIndicators(requestBars, startIndex)
+            // Compute locally first so chart controls become usable immediately,
+            // even if the remote backend is sleeping, offline or rate-limited.
+            val local = withContext(Dispatchers.Default) {
+                TechnicalIndicatorCalculator.calculate(requestBars, startIndex)
             }
-            require(result.startIndex == startIndex && result.barCount == requestBars.size) {
-                "Backend indicator coverage does not match the requested OHLC window."
-            }
-            indicators = result
-            indicatorsSource = "BACKEND"
-            indicatorsNotice = null
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (backendFailure: Exception) {
-            // The chart tools remain functional offline. The local engine mirrors
-            // the backend formulas and preserves identical warm-up/index semantics.
+            indicators = local
+            indicatorsSource = "LOCAL"
             try {
-                val fallback = withContext(Dispatchers.Default) {
-                    TechnicalIndicatorCalculator.calculate(requestBars, startIndex)
+                val remote = withContext(Dispatchers.IO) {
+                    repository.fetchTechnicalIndicators(requestBars, startIndex)
                 }
-                require(fallback.startIndex == startIndex && fallback.barCount == requestBars.size) {
-                    "Local indicator coverage does not match the requested OHLC window."
+                require(remote.startIndex == startIndex && remote.barCount == requestBars.size) {
+                    "Backend indicator coverage does not match the requested OHLC window."
                 }
-                indicators = fallback
-                indicatorsSource = "LOCAL"
-                indicatorsNotice = backendFailure.message ?: "Backend indicator service unavailable."
-                indicatorsError = null
+                indicators = remote
+                indicatorsSource = "BACKEND"
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (fallbackFailure: Exception) {
-                indicators = null
-                indicatorsError = "Backend: ${backendFailure.message ?: "unavailable"} · Local: ${fallbackFailure.message ?: "calculation failed"}"
+            } catch (backendFailure: Exception) {
+                indicatorsNotice = backendFailure.message ?: "Backend indicator service unavailable."
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            indicators = null
+            indicatorsError = failure.message ?: "Local indicator calculation failed."
         } finally {
             indicatorsLoading = false
         }
@@ -398,7 +395,11 @@ fun InstrumentResearchScreen(
             )
         }
         when {
-            indicatorsLoading -> Text("Calculating indicators on the backend…", color = Muted, fontSize = 9.sp)
+            indicatorsLoading -> Text(
+                if (indicators != null) "Local indicators ready · syncing backend calculation…"
+                else "Calculating indicators…",
+                color = Muted, fontSize = 9.sp
+            )
             indicatorsError != null -> Text("Indicators unavailable: $indicatorsError", color = Coral, fontSize = 9.sp)
             indicators != null -> Text(
                 "${if (indicatorsSource == "BACKEND") "Backend" else "Offline local fallback"} indicators · ${indicators!!.barCount} bars · " +
