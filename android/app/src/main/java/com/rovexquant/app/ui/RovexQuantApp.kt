@@ -48,7 +48,10 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
     val state by workspace.uiState.collectAsStateWithLifecycle()
     var selected by remember { mutableStateOf(TerminalSection.PULSE) }
     var showSettings by remember { mutableStateOf(false) }
-    BackHandler(enabled = showSettings) { showSettings = false }
+    var selectedInstrument by remember { mutableStateOf<Pair<String, String>?>(null) }
+    BackHandler(enabled = showSettings || selectedInstrument != null) {
+        if (showSettings) showSettings = false else selectedInstrument = null
+    }
 
     if (state.restoringSession) {
         Box(Modifier.fillMaxSize().background(Ink), contentAlignment = Alignment.Center) {
@@ -90,6 +93,14 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
                     onOpenAiSettings = { showSettings = false; selected = TerminalSection.AI },
                     onOpenMarketPulse = { showSettings = false; selected = TerminalSection.PULSE }
                 )
+            } else if (selectedInstrument != null) {
+                val instrument = selectedInstrument!!
+                InstrumentResearchScreen(
+                    symbol = instrument.first,
+                    displayName = instrument.second,
+                    repository = workspace.repository,
+                    onBack = { selectedInstrument = null }
+                )
             } else {
             AnimatedContent(targetState = selected, label = "workspaceTransition") { destination ->
                 when (destination) {
@@ -102,7 +113,8 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
                         onReconnect = workspace::reconnectMarketStream,
                         eodSnapshot = state.eodSnapshot,
                         eodSnapshotStatus = state.eodSnapshotStatus,
-                        onRefreshEodSnapshot = workspace::refreshEodSnapshot
+                        onRefreshEodSnapshot = workspace::refreshEodSnapshot,
+                        onOpenInstrument = { symbol, name -> selectedInstrument = symbol to name }
                     )
                     TerminalSection.SCANNER -> StrategyScannerScreen(onOpenAi = { selected = TerminalSection.AI })
                     TerminalSection.SIGNALS -> SignalsScreen()
