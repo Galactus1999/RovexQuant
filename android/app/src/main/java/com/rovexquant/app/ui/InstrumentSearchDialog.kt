@@ -152,7 +152,8 @@ fun InstrumentSymbolPicker(
     testTag: String,
     equities: List<MarketEquityInstrument>,
     indexKeys: Map<String, String>,
-    placeholder: String = "Search by name or symbol"
+    placeholder: String = "Search by name or symbol",
+    enabled: Boolean = true
 ) {
     var showSearch by remember(testTag) { mutableStateOf(false) }
     Row(
@@ -163,6 +164,7 @@ fun InstrumentSymbolPicker(
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
+            enabled = enabled,
             modifier = Modifier.weight(1f).testTag(testTag),
             singleLine = true,
             label = { Text(label) },
@@ -170,6 +172,7 @@ fun InstrumentSymbolPicker(
         )
         TextButton(
             onClick = { showSearch = true },
+            enabled = enabled,
             modifier = Modifier.testTag("$testTag.find")
         ) { Text("Find") }
     }
