@@ -613,7 +613,7 @@ object QuantApi {
             fredConfigured = (0 until providerRows.length()).asSequence()
                 .mapNotNull { providerRows.optJSONObject(it) }
                 .firstOrNull { it.optString("provider") == "FRED" }
-                ?.optBoolean("configured", false) == true,
+                ?.optBoolean("configured", false),
             fredSeriesCount = fredSeries.size,
             providerErrors = errors,
             persistedObservationCount = history?.optInt("count") ?: 0,
