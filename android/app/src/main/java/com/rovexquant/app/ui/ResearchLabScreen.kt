@@ -154,12 +154,12 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
     }
 
     LazyColumn(modifier = Modifier.fillMaxSize().testTag("research.lab.list"), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { SectionHeading("Test the idea before risking capital", "Research lab.", "Use official NSE research tools on demand or import permitted historical OHLCV data for transparent local analysis.") }
+        item { SectionHeading("RESEARCH", "Research lab.", "") }
         if (session != null && repository != null) {
             item { NseMcpResearchPanel(session, repository) }
             item {
                 TerminalCard {
-                    Eyebrow("EOD event study · historical only")
+                    Eyebrow("Event study")
                     OutlinedTextField(
                         value = eventSymbol,
                         onValueChange = { eventSymbol = it.take(40).uppercase() },
@@ -167,17 +167,15 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
-                    OutlinedTextField(
+                    EventDatePickerField(
                         value = eventDate,
-                        onValueChange = { eventDate = it.take(10) },
-                        label = { Text("Event date · YYYY-MM-DD") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                        onValueChange = { eventDate = it },
+                        modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = benchmarkSymbol,
                         onValueChange = { benchmarkSymbol = it.take(40).uppercase() },
-                        label = { Text("Optional benchmark symbol in EOD database") },
+                        label = { Text("Benchmark · optional") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
@@ -294,7 +292,7 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
         } else {
             item { EmptyPanel("No historical dataset loaded", "Import a licensed OHLCV CSV to calculate trend, momentum and breakout conditions on-device. Your imported dataset is stored privately on this device.") }
         }
-        item { EmptyPanel("Data integrity first", "Naive timestamps, duplicate or unordered rows, invalid OHLC ranges, negative volume and oversized files are rejected. Imported data is never labelled live.") }
+
     }
 }
 
