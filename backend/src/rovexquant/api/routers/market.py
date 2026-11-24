@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field, model_validator
 
 from rovexquant.api.dependencies import require_market_gateway
@@ -25,6 +25,8 @@ from rovexquant.market_data.service import (
     provider_status,
 )
 from rovexquant.market_data.streaming import StreamError, stream_upstox_market_data
+from rovexquant.market_data.upstox_candles import UpstoxCandleError, fetch_intraday_candles
+from rovexquant.security.request_controls import backtest_rate_limit
 from rovexquant.security.dependencies import require_app_session
 
 router = APIRouter()
@@ -114,6 +116,26 @@ async def app_market_equity_instruments():
     except InstrumentMasterError as error:
         from fastapi import HTTPException
 
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+@router.get(
+    "/api/v1/app/market/candles/{exchange}/{symbol}",
+    dependencies=[Depends(require_app_session), Depends(backtest_rate_limit)],
+)
+async def app_intraday_market_candles(
+    exchange: str,
+    symbol: str,
+    interval: str = Query(..., min_length=2, max_length=3),
+    from_date: date = Query(..., alias="from"),
+    to_date: __import__("datetime").date = Query(..., alias="to"),
+):
+    """Return validated NSE intraday candles using the server-side Upstox token vault."""
+    try:
+        return await fetch_intraday_candles(
+            exchange, symbol, interval, from_date, to_date
+        )
+    except UpstoxCandleError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
 
