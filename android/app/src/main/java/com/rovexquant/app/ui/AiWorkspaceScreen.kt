@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.QuantSession
@@ -33,7 +34,12 @@ import java.time.ZoneId
 import java.util.Locale
 
 @Composable
-fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
+fun AiWorkspaceScreen(
+    session: QuantSession,
+    repository: QuantDataRepository,
+    equityInstruments: List<MarketEquityInstrument> = emptyList(),
+    indexKeys: Map<String, String> = emptyMap()
+) {
     val scope = rememberCoroutineScope()
     var providersLoading by remember { mutableStateOf(true) }
     var providers by remember { mutableStateOf(emptyList<com.rovexquant.app.data.model.AiProvider>()) }
@@ -405,12 +411,14 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                     color = MaterialTheme.colorScheme.onBackground, fontSize = 12.sp, lineHeight = 18.sp
                 )
                 Spacer(Modifier.height(10.dp))
-                OutlinedTextField(
+                InstrumentSymbolPicker(
                     value = symbol,
-                    onValueChange = { symbol = it.uppercase().filter { ch -> ch.isLetterOrDigit() || ch == '-' || ch == '&' }.take(30) },
-                    label = { Text("NSE/BSE trading symbol") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().testTag("ai.recovery.symbol")
+                    onValueChange = { symbol = it.uppercase().take(40) },
+                    label = "NSE/BSE trading symbol",
+                    testTag = "ai.recovery.symbol",
+                    equities = if (exchange == "NSE") equityInstruments else emptyList(),
+                    indexKeys = if (exchange == "NSE") indexKeys else emptyMap(),
+                    enabled = exchange == "NSE"
                 )
                 Spacer(Modifier.height(7.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
