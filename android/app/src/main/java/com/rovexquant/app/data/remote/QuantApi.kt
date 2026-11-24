@@ -596,7 +596,13 @@ object QuantApi {
             worldBankSeries = macroSeries,
             amfiNavCount = amfi?.optInt("result_count") ?: 0,
             amfiExamples = navs,
-            fredConfigured = fredSeries.isNotEmpty(),
+            // Configuration is a backend runtime property, not proof that at least
+            // one FRED observation has already been persisted. A valid key can be
+            // configured while the upstream request or DB persistence is failing.
+            fredConfigured = (0 until providerRows.length()).asSequence()
+                .mapNotNull { providerRows.optJSONObject(it) }
+                .firstOrNull { it.optString("provider") == "FRED" }
+                ?.optBoolean("configured", false) == true,
             fredSeriesCount = fredSeries.size,
             providerErrors = errors,
             persistedObservationCount = history?.optInt("count") ?: 0,
