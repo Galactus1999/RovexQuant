@@ -179,6 +179,7 @@ fun InstrumentResearchScreen(
         ) {
             listOf("1M", "3M", "6M", "1Y", "3Y", "ALL").forEach { period ->
                 FilterChip(
+                    enabled = !refreshing,
                     selected = range == period,
                     onClick = {
                         range = period
