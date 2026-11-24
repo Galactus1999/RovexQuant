@@ -53,6 +53,9 @@ async def refresh_macro_sources() -> dict[str, Any]:
         try:
             persisted = persist_macro_payload(name, payload)
             persisted["configured"] = bool(payload.get("configured", True))
+            warnings = payload.get("provider_warnings")
+            if isinstance(warnings, list) and warnings:
+                persisted["warnings"] = [str(item)[:200] for item in warnings[:5]]
             providers.append(persisted)
         except Exception as persist_error:
             message = str(persist_error)[:240] or "Provider persistence failed"
