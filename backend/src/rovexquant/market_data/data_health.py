@@ -115,7 +115,7 @@ def get_market_data_health(exchange: str = "NSE") -> dict[str, Any]:
             ).fetchone()
             macro_rows = connection.execute(
                 """
-                SELECT DISTINCT ON (provider) provider, status, rows_upserted,
+                SELECT DISTINCT ON (provider) provider, status, rows_seen, rows_upserted,
                        completed_at, error_message
                 FROM macro_ingestion_runs ORDER BY provider, started_at DESC
                 """,
@@ -165,7 +165,11 @@ def get_market_data_health(exchange: str = "NSE") -> dict[str, Any]:
     }
     macro = [{
         "provider": row[0], "status": row[1], "rows": int(row[2]),
-        "updated_at": row[3], "detail": row[4],
+        "updated_at": row[4],
+        "detail": (
+            f"{int(row[3])} new rows inserted in this run"
+            + (f"; {row[5]}" if row[5] else "")
+        ),
     } for row in macro_rows]
     intelligence = {
         "status": intelligence_row[0] if intelligence_row else "NOT_RUN",
