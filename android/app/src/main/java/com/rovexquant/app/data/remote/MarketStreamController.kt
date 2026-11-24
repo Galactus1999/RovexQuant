@@ -5,7 +5,7 @@ import android.os.Looper
 import com.rovexquant.app.data.model.MarketTick
 import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.data.repository.MarketStream
-import kotlinx.coroutines.BufferOverflow
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
