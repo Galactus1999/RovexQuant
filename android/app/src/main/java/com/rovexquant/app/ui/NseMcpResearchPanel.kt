@@ -282,6 +282,8 @@ fun NseMcpResearchPanel(
                                 try {
                                     val response = repository.callNseMcpTool(session, server, chosen.name, generatedArguments.toString())
                                     result = response
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
                                 } catch (failure: Exception) {
                                     error = "Research data is delayed. Try again."
                                 } finally {
