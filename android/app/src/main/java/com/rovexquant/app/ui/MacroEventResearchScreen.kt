@@ -4,6 +4,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -23,6 +28,9 @@ import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.data.repository.QuantDataRepository
 import com.rovexquant.app.feature.research.MacroEventResearchViewModel
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 import java.util.Locale
 
 @Composable
@@ -49,9 +57,9 @@ fun MacroEventResearchScreen(session: QuantSession, repository: QuantDataReposit
     ) {
         item {
             SectionHeading(
-                "Macro regime · event attribution",
+                "RESEARCH",
                 "Macro & Event Research",
-                "Official macro series and deterministic EOD event windows. Descriptive research, not causal claims or trading instructions."
+                ""
             )
         }
         item {
@@ -62,13 +70,9 @@ fun MacroEventResearchScreen(session: QuantSession, repository: QuantDataReposit
                 }
                 Text("Macroeconomic indicators", color = MaterialTheme.colorScheme.onBackground,
                     fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "GDP growth, inflation, exports, current account and per-capita energy use · annual/official release cadence",
-                    color = Muted, fontSize = 10.sp, lineHeight = 15.sp
-                )
                 Button(onClick = model::refreshMacro, enabled = !state.macroLoading,
                     modifier = Modifier.fillMaxWidth().testTag("macro.refresh")) {
-                    Text(if (state.macroLoading) "Retrieving official series…" else "Refresh macro data")
+                    Text(if (state.macroLoading) "Loading…" else "Refresh")
                 }
                 if (state.macroLoading && state.macro == null) {
                     CircularProgressIndicator(color = Mint, modifier = Modifier.align(Alignment.CenterHorizontally))
@@ -86,13 +90,9 @@ fun MacroEventResearchScreen(session: QuantSession, repository: QuantDataReposit
                 }
                 Text("Market data integrity", color = MaterialTheme.colorScheme.onBackground,
                     fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "Displays the latest stored comparison of TejHQ EOD bars against an authorized official NSE/BSE bhavcopy. This status check does not download exchange files or start a new reconciliation; a new run requires approved source access and an explicit reconciliation job.",
-                    color = Muted, fontSize = 10.sp, lineHeight = 15.sp
-                )
                 Button(onClick = model::refreshIntegrity, enabled = !state.integrityLoading,
                     modifier = Modifier.fillMaxWidth().testTag("integrity.refresh")) {
-                    Text(if (state.integrityLoading) "Checking source evidence…" else "Refresh integrity status")
+                    Text(if (state.integrityLoading) "Checking…" else "Refresh status")
                 }
                 state.integrityError?.let { EmptyPanel("Integrity status unavailable", it, Coral) }
                 state.integrity?.latestReport?.let { report ->
@@ -101,74 +101,34 @@ fun MacroEventResearchScreen(session: QuantSession, repository: QuantDataReposit
                         Text("${report.matchedRows}/${report.officialRows} matched", color = MaterialTheme.colorScheme.onBackground,
                             fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
-                    Text(
-                        "Value mismatches ${report.mismatchRows} · missing stored ${report.missingReferenceRows} · extra stored ${report.missingOfficialRows}",
-                        color = if (report.status == "MATCHED") Mint else Gold, fontSize = 9.sp
-                    )
-                    report.differences.take(8).forEach { diff ->
-                        Text(
-                            "${diff.kind}: ${diff.symbol} ${diff.series} ${diff.field ?: ""} · official ${diff.officialValue ?: "—"} / stored ${diff.storedValue ?: "—"}",
-                            color = Gold, fontSize = 9.sp, lineHeight = 13.sp
-                        )
+                    if (report.mismatchRows > 0 || report.missingReferenceRows > 0 || report.missingOfficialRows > 0) {
+                        Text("${report.mismatchRows} mismatches · ${report.missingReferenceRows} missing · ${report.missingOfficialRows} extra",
+                            color = Gold, fontSize = 10.sp)
                     }
-                    Text("Source: ${report.sourceUrl}", color = Muted, fontSize = 8.sp, lineHeight = 12.sp)
                 } ?: Text(
                     if (state.integrityLoading) "No report loaded yet." else "No official reconciliation report is stored yet.",
                     color = Muted, fontSize = 10.sp
                 )
-                state.integrity?.derivedBackfills?.takeIf { it.isNotEmpty() }?.let { derivedBackfills ->
-                    Spacer(Modifier.height(8.dp))
-                    Eyebrow("Adjusted prices · corporate actions · symbol history")
-                    derivedBackfills.forEach { derived ->
-                        Text(
-                            "${if (derived.year == 0) "ALL" else derived.year} · ${derived.datasetKind} · ${derived.status} · ${derived.rowsSeen} rows scanned",
-                            color = if (derived.status == "SUCCEEDED") Mint else Gold, fontSize = 9.sp
-                        )
-                    }
-                }
-                state.integrity?.backfills?.takeIf { it.isNotEmpty() }?.let { backfills ->
-                    Spacer(Modifier.height(8.dp))
-                    Eyebrow("Historical Parquet imports")
-                    backfills.forEach { backfill ->
-                        Text(
-                            "${backfill.year} · ${backfill.status} · ${backfill.rowsSeen} rows scanned · ${backfill.rowsUpserted} rows upserted",
-                            color = if (backfill.status == "SUCCEEDED") Mint else Gold, fontSize = 9.sp
-                        )
-                    }
-                }
             }
         }
 
         item {
             TerminalCard {
-                Eyebrow("United States · FRED")
+                Eyebrow("FRED")
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Cross-market macro context", color = MaterialTheme.colorScheme.onBackground,
-                        fontWeight = FontWeight.SemiBold)
+                    Text("US macro data", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold)
                     StatusPill(
                         when {
                             state.macro?.fredConfigured == null -> "UNKNOWN"
-                            state.macro?.fredConfigured == true -> "CONFIGURED"
-                            else -> "NOT CONFIGURED"
+                            state.macro?.fredConfigured == true -> "READY"
+                            else -> "SETUP NEEDED"
                         },
                         if (state.macro?.fredConfigured == true) Mint else Gold
                     )
                 }
-                Text(
-                    when {
-                        state.macro?.fredConfigured == null ->
-                            "FRED configuration could not be determined because the backend refresh did not return provider status. Tap Refresh macro data after the backend is reachable."
-                        state.macro?.fredConfigured == true ->
-                            "FRED_API_KEY is configured on the backend. ${state.macro?.fredSeriesCount ?: 0} series have persisted observations; check provider status below for retrieval or persistence failures."
-                        else ->
-                            "The backend reports FRED_API_KEY is not configured. Add it to the deployed backend environment and redeploy."
-                    },
-                    color = Muted, fontSize = 10.sp, lineHeight = 15.sp
-                )
-                Text(
-                    "AMFI NAV examples are mutual-fund NAV observations, not equity prices or stock-market returns.",
-                    color = Gold, fontSize = 10.sp, lineHeight = 15.sp
-                )
+                if (state.macro?.fredConfigured == true) {
+                    Text("${state.macro?.fredSeriesCount ?: 0} series available", color = Muted, fontSize = 10.sp)
+                }
             }
         }
         item {
@@ -180,17 +140,17 @@ fun MacroEventResearchScreen(session: QuantSession, repository: QuantDataReposit
                 OutlinedTextField(value = state.symbol, onValueChange = model::setSymbol,
                     label = { Text("NSE symbol") }, placeholder = { Text("RELIANCE") },
                     singleLine = true, modifier = Modifier.fillMaxWidth().testTag("event.symbol"))
-                OutlinedTextField(value = state.eventDate, onValueChange = model::setEventDate,
-                    label = { Text("Event date (YYYY-MM-DD)") }, placeholder = { Text("2026-10-15") },
-                    singleLine = true, modifier = Modifier.fillMaxWidth().testTag("event.date"))
+                EventDatePickerField(
+                    value = state.eventDate,
+                    onValueChange = model::setEventDate,
+                    modifier = Modifier.fillMaxWidth().testTag("event.date")
+                )
                 OutlinedTextField(value = state.benchmarkSymbol, onValueChange = model::setBenchmarkSymbol,
                     label = { Text("Benchmark symbol (optional)") }, placeholder = { Text("NIFTYBEES (ETF proxy)") },
                     singleLine = true, modifier = Modifier.fillMaxWidth().testTag("event.benchmark"))
-                Text("Uses up to 10 pre-event and 10 post-event trading bars. Benchmark matching is by trading date.",
-                    color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
                 Button(onClick = model::runEventStudy, enabled = !state.eventLoading,
                     modifier = Modifier.fillMaxWidth().testTag("event.run")) {
-                    Text(if (state.eventLoading) "Calculating…" else "Run event-window study")
+                    Text(if (state.eventLoading) "Running…" else "Run study")
                 }
                 if (state.eventLoading && state.eventStudy == null) {
                     CircularProgressIndicator(color = Mint, modifier = Modifier.align(Alignment.CenterHorizontally))
@@ -199,24 +159,13 @@ fun MacroEventResearchScreen(session: QuantSession, repository: QuantDataReposit
                 state.eventStudy?.let { EventStudyContent(it) }
             }
         }
-        item {
-            TerminalCard {
-                Eyebrow("Methodology and limits")
-                Text(
-                    "Event-window returns are descriptive. Even benchmark-adjusted results do not establish causation. Results depend on the event date supplied by the researcher, stored bar coverage, corporate-action treatment and benchmark alignment.",
-                    color = Muted, fontSize = 10.sp, lineHeight = 15.sp
-                )
-            }
-        }
     }
 }
 
 @Composable
 private fun MacroSummaryContent(summary: MacroResearchSummary) {
-    Text("Retrieved ${summary.retrievedAt}", color = Muted, fontSize = 9.sp)
     if (summary.persistedObservationCount > 0) {
-        Spacer(Modifier.height(6.dp))
-        Eyebrow("Durable macro archive · ${summary.persistedObservationCount} observations · RBI mirror series ${summary.rbiDbieSeriesCount}")
+        Text("${summary.persistedObservationCount} observations saved", color = Muted, fontSize = 9.sp)
     }
     summary.providerStatuses.forEach { Text(it, color = if (it.contains("FAILED")) Coral else Muted, fontSize = 9.sp) }
     if (summary.worldBankSeries.isEmpty()) {
@@ -234,7 +183,6 @@ private fun MacroSummaryContent(summary: MacroResearchSummary) {
                         fontSize = 11.sp, fontWeight = FontWeight.Bold
                     )
                 }
-                Text("${item.frequency} · ${item.source}", color = Muted, fontSize = 9.sp)
             }
         }
     }
@@ -253,7 +201,9 @@ private fun MacroSummaryContent(summary: MacroResearchSummary) {
     }
     if (summary.providerErrors.isNotEmpty()) {
         Spacer(Modifier.height(8.dp))
-        summary.providerErrors.forEach { Text("• $it", color = Gold, fontSize = 9.sp, lineHeight = 13.sp) }
+        summary.providerErrors.take(3).forEach { issue ->
+            Text(issue.substringBefore(":").replace('_', ' ') + " unavailable", color = Gold, fontSize = 9.sp)
+        }
     }
 }
 
@@ -310,4 +260,43 @@ private fun EventMetric(label: String, value: Double?, modifier: Modifier = Modi
             fontSize = 14.sp, fontWeight = FontWeight.Bold
         )
     }
+}
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EventDatePickerField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var show by remember { mutableStateOf(false) }
+    val selected = remember(value) { runCatching { LocalDate.parse(value) }.getOrNull() }
+    val state = rememberDatePickerState(
+        initialSelectedDateMillis = selected?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli()
+    )
+    OutlinedTextField(
+        value = value,
+        onValueChange = {},
+        readOnly = true,
+        modifier = modifier,
+        label = { Text("Event date") },
+        placeholder = { Text("Choose date") },
+        trailingIcon = {
+            TextButton(onClick = { show = true }) { Text("Calendar") }
+        },
+        singleLine = true
+    )
+    if (show) DatePickerDialog(
+        onDismissRequest = { show = false },
+        confirmButton = {
+            TextButton(onClick = {
+                state.selectedDateMillis?.let { millis ->
+                    onValueChange(Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate().toString())
+                }
+                show = false
+            }) { Text("Apply") }
+        },
+        dismissButton = { TextButton(onClick = { show = false }) { Text("Cancel") } }
+    ) { DatePicker(state = state) }
 }
