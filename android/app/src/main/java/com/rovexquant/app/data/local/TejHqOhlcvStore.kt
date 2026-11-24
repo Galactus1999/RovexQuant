@@ -60,11 +60,15 @@ object TejHqOhlcvStore {
     }
 
     private fun seriesFile(context: Context, exchange: String, symbol: String): File {
+        return File(context.filesDir, cacheFileName(exchange, symbol))
+    }
+
+    internal fun cacheFileName(exchange: String, symbol: String): String {
         val normalizedExchange = exchange.trim().uppercase(Locale.ROOT)
         val normalizedSymbol = symbol.trim().uppercase(Locale.ROOT)
         require(exchangePattern.matches(normalizedExchange)) { "Invalid exchange identifier." }
         require(symbolPattern.matches(normalizedSymbol)) { "Invalid trading symbol." }
-        return File(context.filesDir, "ohlcv_${normalizedExchange}_${normalizedSymbol}.csv")
+        return "ohlcv_${normalizedExchange}_${normalizedSymbol}.csv"
     }
 
     private fun writeAtomically(destination: File, bars: List<OhlcvBar>) {
