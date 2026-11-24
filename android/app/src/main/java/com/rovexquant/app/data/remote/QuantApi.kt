@@ -9,6 +9,7 @@ import com.rovexquant.app.data.model.AiStrategyEvidence
 import com.rovexquant.app.data.model.EodMarketSnapshot
 import com.rovexquant.app.data.model.EodStockMove
 import com.rovexquant.app.data.model.IntelligenceFeed
+import com.rovexquant.app.data.model.InstrumentQuoteSnapshot
 import com.rovexquant.app.data.model.IntelligenceSource
 import com.rovexquant.app.data.model.IssuerMapping
 import com.rovexquant.app.data.model.MarketEvent
@@ -185,6 +186,51 @@ object QuantApi {
         }
     }
 
+
+    fun fetchInstrumentQuote(session: QuantSession, symbol: String): InstrumentQuoteSnapshot? {
+        require(symbol.isNotBlank() && symbol.length <= 80) { "Enter a valid NSE instrument name or symbol." }
+        val body = JSONObject()
+            .put("provider_order", JSONArray().put("upstox"))
+            .put("instruments", JSONArray().put(JSONObject().put("symbol", symbol.trim())))
+            .toString()
+            .toRequestBody("application/json; charset=utf-8".toMediaType())
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/market/quotes")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .post(body)
+            .build()
+        http.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            require(text.toByteArray(Charsets.UTF_8).size <= 128 * 1024) {
+                "Instrument quote snapshot exceeds the 128 KB safety limit."
+            }
+            val root = JSONObject(text)
+            val rows = root.optJSONArray("quotes") ?: return null
+            val quote = rows.optJSONObject(0) ?: return null
+            fun optionalNumber(key: String): Double? =
+                quote.optDouble(key, Double.NaN).takeIf { it.isFinite() && it > 0.0 }
+            val high = optionalNumber("year_high")
+            val low = optionalNumber("year_low")
+            require(high == null || low == null || high >= low) {
+                "Market provider returned an invalid 52-week range."
+            }
+            val volume = quote.optLong("volume", -1L).takeIf { it >= 0L }
+            return InstrumentQuoteSnapshot(
+                symbol = quote.optString("symbol", symbol),
+                provider = quote.optString("provider", root.optString("provider", "unknown")),
+                lastPrice = optionalNumber("last_price"),
+                previousClose = optionalNumber("previous_close"),
+                changePercent = quote.optDouble("change_percent", Double.NaN).takeIf { it.isFinite() },
+                volume = volume,
+                yearHigh = high,
+                yearLow = low,
+                exchangeTimestamp = quote.optString("exchange_timestamp").takeIf { it.isNotBlank() && it != "null" },
+                receivedAt = quote.optString("received_at", root.optString("received_at")),
+                quality = quote.optString("quality", "UNKNOWN")
+            )
+        }
+    }
 
     fun fetchIntelligenceEvents(
         session: QuantSession,
