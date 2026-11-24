@@ -46,10 +46,11 @@ object TejHqOhlcvSyncManager {
             TejHqOhlcvStore.latestDate(existing)?.minusDays(7)?.coerceAtLeast(from) ?: from
         } else from
         val fetched = repository.fetchInstrumentOhlcv(instrument, fetchFrom, to)
-        ChartSeriesMapper.map(fetched)
+        if (fetched.bars.isNotEmpty()) ChartSeriesMapper.map(fetched)
         val merged = if (incremental && existing.isNotEmpty()) {
             OhlcvCsvResearch.merge(existing, fetched.bars)
         } else fetched.bars
+        require(merged.isNotEmpty()) { "No valid historical bars are available to save." }
         ChartSeriesMapper.map(fetched.copy(bars = merged))
         TejHqOhlcvStore.save(context, instrument, merged)
         TejHqOhlcvStore.markSynced(context, instrument)
