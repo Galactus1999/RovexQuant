@@ -28,9 +28,9 @@ fun SectionHeading(kicker: String, title: String, subtitle: String) {
     Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp)) {
         Text(kicker.uppercase(), color = Mint, fontSize = 9.sp, letterSpacing = 1.6.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(5.dp))
-        Text(title, color = MaterialTheme.colorScheme.onBackground, fontSize = 27.sp, lineHeight = 32.sp, fontWeight = FontWeight.Bold)
+        Text(title, color = MaterialTheme.colorScheme.onBackground, fontSize = 22.sp, lineHeight = 27.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(5.dp))
-        Text(subtitle, color = Muted, fontSize = 12.sp, lineHeight = 18.sp)
+        Text(subtitle, color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
     }
 }
 @Composable
@@ -39,7 +39,7 @@ fun Eyebrow(text: String) { Text(text.uppercase(), color = Mint, fontSize = 9.sp
 fun MetricTile(label: String, value: String, hint: String, accent: Color = Mint, modifier: Modifier = Modifier) {
     Column(modifier.clip(RoundedCornerShape(18.dp)).background(Panel).border(1.dp, Line, RoundedCornerShape(18.dp)).padding(14.dp)) {
         Text(label.uppercase(), color = Muted, fontSize = 9.sp, letterSpacing = .8.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(10.dp)); Text(value, color = accent, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp)); Text(value, color = accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(3.dp)); Text(hint, color = Muted, fontSize = 10.sp)
     }
 }
