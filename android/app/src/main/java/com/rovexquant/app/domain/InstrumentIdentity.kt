@@ -49,7 +49,7 @@ data class InstrumentIdentity(
         require(exchange.matches(Regex("^[A-Z]{2,8}$"))) { "Invalid exchange identity." }
         require(canonicalSymbol.isNotBlank() && canonicalSymbol.length <= 48) { "Invalid canonical instrument symbol." }
         require(providerSymbol.isNotBlank() && providerSymbol.length <= 64) { "Invalid provider symbol." }
-        require(canonicalSymbol.none { it == '/' || it.code == 92 }) { "Invalid instrument symbol." }
+        require(canonicalSymbol.none { it.code == 92 || it.isISOControl() }) { "Invalid instrument symbol." }
     }
 
     val cacheIdentity: String
