@@ -87,7 +87,7 @@ fun AiWorkspaceScreen(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
-            providerError = failure.message ?: "AI provider discovery failed."
+            providerError = "AI services are temporarily unavailable."
         } finally {
             providersLoading = false
         }
@@ -118,7 +118,7 @@ fun AiWorkspaceScreen(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
-                chatError = failure.message ?: "AI request failed."
+                chatError = "The research assistant is temporarily unavailable. Try again."
             } finally {
                 chatLoading = false
             }
@@ -146,7 +146,7 @@ fun AiWorkspaceScreen(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
-                briefError = failure.message ?: "EOD recovery failed."
+                briefError = "Historical data retrieval is temporarily unavailable."
             } finally {
                 briefLoading = false
             }
@@ -160,9 +160,9 @@ fun AiWorkspaceScreen(
     ) {
         item {
             SectionHeading(
-                "AI Studio · model and tool integrations",
+                "RESEARCH ASSISTANT",
                 "Quant Intelligence.",
-                "Connect model providers, test credentials, configure failover and run approved research tools. Verified market evidence remains authoritative."
+                "Explore market evidence, ask research questions and review source-backed analysis."
             )
         }
         item {
@@ -238,7 +238,7 @@ fun AiWorkspaceScreen(
                                     } catch (cancelled: CancellationException) {
                                         throw cancelled
                                     } catch (failure: Exception) {
-                                        credentialError = failure.message ?: "Unable to store provider credential."
+                                        credentialError = "Provider setup could not be completed. Try again."
                                     } finally {
                                         credentialSaving = false
                                     }
@@ -283,7 +283,7 @@ fun AiWorkspaceScreen(
                                 } catch (cancelled: CancellationException) {
                                     throw cancelled
                                 } catch (failure: Exception) {
-                                    providerTestStatus = "Connection failed: ${failure.message ?: "provider request failed"}"
+                                    providerTestStatus = "Provider unavailable. Try again later."
                                 } finally { providerTesting = false }
                             }
                         },
@@ -306,7 +306,7 @@ fun AiWorkspaceScreen(
                                     } catch (cancelled: CancellationException) {
                                         throw cancelled
                                     } catch (failure: Exception) {
-                                        credentialError = failure.message ?: "Unable to remove provider key."
+                                        credentialError = "Provider credential could not be removed. Try again."
                                     } finally { credentialDeleting = false }
                                 }
                             }
