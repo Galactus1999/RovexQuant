@@ -318,7 +318,9 @@ private fun MacroResearchToolPanel(
 @Composable
 private fun EodEventStudyToolPanel(
     session: QuantSession,
-    repository: QuantDataRepository
+    repository: QuantDataRepository,
+    equityInstruments: List<MarketEquityInstrument> = emptyList(),
+    indexKeys: Map<String, String> = emptyMap()
 ) {
     val scope = rememberCoroutineScope()
     var symbol by rememberSaveable { mutableStateOf("RELIANCE") }
