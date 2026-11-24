@@ -1,6 +1,7 @@
 package com.rovexquant.app
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertCountEquals
@@ -73,6 +74,23 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("instrument.chart.candles").assertIsDisplayed()
         composeRule.onAllNodesWithTag("instrument.chart.volume.toggle").assertCountEquals(0)
         composeRule.onNodeWithText("Traded volume is not published for this index series.").assertIsDisplayed()
+        composeRule.waitUntil(15_000) {
+            runCatching {
+                composeRule.onNodeWithTag("instrument.chart.indicator.rsi.toggle").assertIsEnabled()
+            }.isSuccess
+        }
+        composeRule.onNodeWithTag("instrument.chart.indicator.rsi.toggle").performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("instrument.chart.indicator.rsi.pane")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("instrument.chart.indicator.rsi.pane").assertIsDisplayed()
+        composeRule.onNodeWithTag("instrument.chart.indicator.macd.toggle").performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("instrument.chart.indicator.macd.pane")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("instrument.chart.indicator.macd.pane").assertIsDisplayed()
         composeRule.onNodeWithText("← Back to Pulse").performClick()
         composeRule.onNodeWithTag("market.pulse.list").assertIsDisplayed()
     }
