@@ -31,6 +31,8 @@ import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.data.repository.MarketStream
 import com.rovexquant.app.data.repository.QuantDataRepository
+import com.rovexquant.app.domain.OhlcvBar
+import java.time.LocalDate
 import com.rovexquant.app.feature.workspace.QuantWorkspaceViewModel
 import org.json.JSONObject
 
@@ -178,6 +180,10 @@ class FakeQuantRepository(
         )),
         limitations = listOf("Global news discovery is not primary-source verification.")
     )
+
+    override suspend fun fetchTejHqOhlcv(
+        exchange: String, symbol: String, from: LocalDate, to: LocalDate
+    ): List<OhlcvBar> = emptyList()
 
     override suspend fun fetchEventStudy(
         session: QuantSession, symbol: String, eventDate: String, benchmarkSymbol: String?
