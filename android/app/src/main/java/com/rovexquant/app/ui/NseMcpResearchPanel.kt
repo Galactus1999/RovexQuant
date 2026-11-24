@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -26,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -37,6 +40,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
 
 @Composable
 fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, onAttachToAi: ((String) -> Unit)? = null) {
@@ -45,7 +50,9 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
     var server by remember { mutableStateOf("bhavcopy") }
     var catalogs by remember { mutableStateOf<List<NseMcpCatalog>>(emptyList()) }
     var selectedTool by remember { mutableStateOf<NseMcpTool?>(null) }
-    var arguments by remember { mutableStateOf("{}") }
+    var formValues by remember(selectedTool?.name) { mutableStateOf(initialToolValues(selectedTool)) }
+    var showOptionalFields by remember(selectedTool?.name) { mutableStateOf(false) }
+    var showJsonPreview by remember { mutableStateOf(false) }
     var loadingCatalog by remember { mutableStateOf(false) }
     var calling by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -61,7 +68,9 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
         error = null
         result = null
         selectedTool = null
-        arguments = "{}"
+        formValues = initialToolValues(null)
+        showOptionalFields = false
+        showJsonPreview = false
         scope.launch {
             try {
                 val loaded = repository.fetchNseMcpTools(session, targetServer)
@@ -69,7 +78,9 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
                 val selectedServer = if (targetServer == "both") server else targetServer
                 val selected = loaded.firstOrNull { it.server == selectedServer }?.tools?.firstOrNull { it.readOnly }
                 selectedTool = selected
-                arguments = "{}"
+                formValues = initialToolValues(selected)
+                showOptionalFields = false
+                showJsonPreview = false
                 if (selected == null) error = loaded.firstOrNull { it.server == selectedServer }?.failure
                     ?: "NSE did not publish any eligible read-only tools for this source."
             } catch (cancelled: CancellationException) {
@@ -129,7 +140,9 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
                             enabled = !loadingCatalog && !calling,
                             onClick = {
                                 selectedTool = tool
-                                arguments = "{}"
+                                formValues = initialToolValues(tool)
+                                showOptionalFields = false
+                                showJsonPreview = false
                                 result = null
                                 error = null
                             },
@@ -139,33 +152,91 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
                 }
                 selectedTool?.let { tool ->
                     Text(tool.description.ifBlank { "No description supplied by NSE." }, color = Muted, fontSize = 10.sp, lineHeight = 15.sp, maxLines = 2)
-                    TextButton(onClick = { showSchema = !showSchema }) {
-                        Text(if (showSchema) "Hide input schema" else "View input schema")
+                    val properties = tool.inputSchema.optJSONObject("properties") ?: JSONObject()
+                    val required = tool.inputSchema.optJSONArray("required") ?: JSONArray()
+                    val fields = (0 until properties.length()).mapNotNull { properties.names()?.optString(it) }
+                    val requiredNames = (0 until required.length()).map { required.optString(it) }.toSet()
+                    val visibleFields = fields.filter { showOptionalFields || it in requiredNames }
+                    Text("RESEARCH PARAMETERS", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    if (fields.isEmpty()) {
+                        Text("This tool requires no parameters.", color = Muted, fontSize = 10.sp)
+                    } else {
+                        visibleFields.forEach { key ->
+                            val spec = properties.optJSONObject(key) ?: JSONObject()
+                            val label = key.replace(Regex("([a-z])([A-Z])"), "$1 $2")
+                                .replace('_', ' ').replaceFirstChar { it.uppercase() }
+                            val type = spec.optString("type", "string")
+                            val format = spec.optString("format")
+                            val enumValues = spec.optJSONArray("enum")
+                            val current = formValues[key].orEmpty()
+                            if (enumValues != null && enumValues.length() > 0) {
+                                Text(label + if (key in requiredNames) " · required" else " · optional",
+                                    color = Muted, fontSize = 10.sp)
+                                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    for (index in 0 until enumValues.length()) {
+                                        val option = enumValues.optString(index)
+                                        FilterChip(
+                                            selected = current == option,
+                                            enabled = !calling,
+                                            onClick = { formValues = formValues + (key to option) },
+                                            label = { Text(option) }
+                                        )
+                                    }
+                                }
+                            } else if (type == "boolean") {
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                    Checkbox(checked = current.equals("true", true), enabled = !calling,
+                                        onCheckedChange = { formValues = formValues + (key to it.toString()) })
+                                    Text(label, color = MaterialTheme.colorScheme.onBackground, fontSize = 11.sp)
+                                }
+                            } else {
+                                val hint = when {
+                                    key.contains("symbol", true) || key.contains("ticker", true) || key.contains("index", true) || key.contains("instrument", true) ->
+                                        "e.g. RELIANCE, NIFTY 50"
+                                    key.contains("date", true) || format == "date" -> "YYYY-MM-DD"
+                                    key.contains("time", true) || format == "date-time" -> "ISO-8601 timestamp"
+                                    key.contains("timespan", true) || key.contains("period", true) -> "e.g. 1d, 3d, 7d"
+                                    else -> spec.optString("description").take(90)
+                                }
+                                OutlinedTextField(
+                                    value = current,
+                                    onValueChange = { formValues = formValues + (key to it.take(240)) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    label = { Text(label + if (key in requiredNames) " · required" else " · optional") },
+                                    placeholder = { Text(hint) },
+                                    singleLine = true,
+                                    enabled = !calling
+                                )
+                            }
+                        }
+                        if (fields.any { it !in requiredNames }) {
+                            TextButton(onClick = { showOptionalFields = !showOptionalFields }) {
+                                Text(if (showOptionalFields) "Hide optional parameters" else "Show optional parameters")
+                            }
+                        }
                     }
-                    if (showSchema) {
-                        Text(
-                            tool.inputSchema.toString(2).take(5000),
-                            color = Cyan, fontSize = 9.sp, lineHeight = 13.sp
-                        )
+                    TextButton(onClick = { showJsonPreview = !showJsonPreview }) {
+                        Text(if (showJsonPreview) "Hide generated request" else "Preview generated request")
                     }
-                    OutlinedTextField(
-                        value = arguments,
-                        onValueChange = { arguments = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Tool arguments · JSON object") },
-                        minLines = 3,
-                        maxLines = 7,
-                        enabled = !calling
-                    )
+                    val generatedArguments = buildToolArguments(tool, formValues)
+                    if (showJsonPreview) {
+                        Text(generatedArguments.toString(2), color = Cyan, fontSize = 9.sp, lineHeight = 13.sp)
+                    }
                     Button(
                         onClick = {
                             val chosen = selectedTool ?: return@Button
+                            val missing = requiredNames.filter { formValues[it].isNullOrBlank() && properties.optJSONObject(it)?.has("default") != true }
+                            if (missing.isNotEmpty()) {
+                                error = "Complete required fields: " + missing.joinToString()
+                                return@Button
+                            }
                             calling = true
                             error = null
                             result = null
                             scope.launch {
                                 try {
-                                    val response = repository.callNseMcpTool(session, server, chosen.name, arguments)
+                                    val response = repository.callNseMcpTool(session, server, chosen.name, generatedArguments.toString())
                                     result = response
                                 } catch (failure: Exception) {
                                     error = failure.message ?: "NSE research request failed."
@@ -174,7 +245,8 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
                                 }
                             }
                         },
-                        enabled = !calling && !loadingCatalog && selectedTool != null,
+                        enabled = !calling && !loadingCatalog && selectedTool != null &&
+                            requiredNames.all { formValues[it].orEmpty().isNotBlank() || properties.optJSONObject(it)?.has("default") == true },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         if (calling) CircularProgressIndicator() else Text("Run research request")
@@ -225,4 +297,49 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
             )
         }
     }
+}
+
+
+private fun initialToolValues(tool: NseMcpTool?): Map<String, String> {
+    val properties = tool?.inputSchema?.optJSONObject("properties") ?: return emptyMap()
+    val values = linkedMapOf<String, String>()
+    val names = properties.names() ?: return values
+    for (index in 0 until names.length()) {
+        val key = names.optString(index)
+        val spec = properties.optJSONObject(key) ?: continue
+        val default = spec.opt("default")
+        values[key] = when {
+            default != null && default != JSONObject.NULL -> default.toString()
+            spec.optJSONArray("enum")?.length() == 1 -> spec.optJSONArray("enum")!!.optString(0)
+            else -> ""
+        }
+    }
+    return values
+}
+
+private fun buildToolArguments(tool: NseMcpTool, values: Map<String, String>): JSONObject {
+    val properties = tool.inputSchema.optJSONObject("properties") ?: JSONObject()
+    val result = JSONObject()
+    values.forEach { (key, raw) ->
+        if (raw.isBlank()) return@forEach
+        val spec = properties.optJSONObject(key) ?: JSONObject()
+        val type = spec.optString("type", "string")
+        val value: Any = when (type) {
+            "integer" -> raw.toLongOrNull() ?: return@forEach
+            "number" -> raw.toDoubleOrNull()?.takeIf { it.isFinite() } ?: return@forEach
+            "boolean" -> raw.equals("true", true)
+            "array" -> JSONArray(raw.split(',').map { it.trim() }.filter { it.isNotEmpty() })
+            else -> raw.trim()
+        }
+        result.put(key, value)
+    }
+    val required = tool.inputSchema.optJSONArray("required") ?: JSONArray()
+    for (index in 0 until required.length()) {
+        val key = required.optString(index)
+        if (!result.has(key)) {
+            val default = properties.optJSONObject(key)?.opt("default")
+            if (default != null && default != JSONObject.NULL) result.put(key, default)
+        }
+    }
+    return result
 }
