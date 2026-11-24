@@ -55,7 +55,7 @@ object TejHqOhlcvSyncManager {
         repository: QuantDataRepository
     ): List<OhlcvBar>? {
         val settings = TejHqOhlcvStore.settings(context)
-        if (!settings.autoSync || settings.lastSyncMillis > 0L &&
+        if (!settings.autoSync || settings.lastSyncMillis <= 0L ||
             System.currentTimeMillis() - settings.lastSyncMillis < AUTO_SYNC_INTERVAL_MILLIS
         ) return null
 
