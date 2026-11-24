@@ -16,6 +16,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rovexquant.app.data.model.QuantSession
+import com.rovexquant.app.data.model.MarketIngestionStatus
 import com.rovexquant.app.data.repository.QuantDataRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -36,6 +37,9 @@ fun SettingsScreen(
     var providersLoading by remember { mutableStateOf(true) }
     var configuredAiProviders by remember { mutableStateOf(0) }
     var providerError by remember { mutableStateOf<String?>(null) }
+    var ingestionStatus by remember { mutableStateOf<MarketIngestionStatus?>(null) }
+    var ingestionLoading by remember { mutableStateOf(false) }
+    var ingestionError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(session, repository) {
         try {
@@ -44,6 +48,17 @@ fun SettingsScreen(
             throw cancelled
         } catch (_: Exception) {
             tokenConfigured = null
+        }
+        try {
+            ingestionLoading = true
+            ingestionStatus = repository.fetchMarketIngestionStatus(session, "nse")
+            ingestionError = null
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            ingestionError = failure.message ?: "Database status unavailable"
+        } finally {
+            ingestionLoading = false
         }
         try {
             configuredAiProviders = repository.fetchAiProviders(session).count { it.configured }
@@ -67,8 +82,6 @@ fun SettingsScreen(
                     Eyebrow("Workspace configuration")
                     Text("Settings", color = MaterialTheme.colorScheme.onBackground,
                         fontSize = 27.sp, fontWeight = FontWeight.Bold)
-                    Text("Connections and research controls live here, not inside the market dashboard.",
-                        color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
                 }
                 TextButton(onClick = onBack) { Text("Close") }
             }
@@ -79,8 +92,7 @@ fun SettingsScreen(
                 Text("Authenticated backend", color = MaterialTheme.colorScheme.onBackground,
                     fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 Text(session.baseUrl, color = Muted, fontSize = 10.sp)
-                Text("The session is stored locally using the app's existing encrypted session store.",
-                    color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
+
             }
         }
         item {
@@ -98,8 +110,7 @@ fun SettingsScreen(
                 }
                 Text("Upstox Analytics Token", color = MaterialTheme.colorScheme.onBackground,
                     fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                Text("Read-only market data access. A stored token is not proof of a working feed; live status requires valid upstream ticks.",
-                    color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
+
                 OutlinedTextField(
                     value = tokenInput,
                     onValueChange = { tokenInput = it.take(4096); tokenError = null },
@@ -151,28 +162,67 @@ fun SettingsScreen(
                     )
                 }
                 providerError?.let { Text(it, color = Coral, fontSize = 10.sp) }
-                Text("Manage model providers, encrypted API credentials, model IDs, connection tests and failover in the AI workspace.",
-                    color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
+
                 Button(onClick = onOpenAiSettings, modifier = Modifier.fillMaxWidth()) {
                     Text("Open AI provider settings")
                 }
             }
         }
         item {
-            TerminalCard {
-                Eyebrow("Data and research")
-                Text("EOD, delayed exchange data, macro observations and live ticks are separate data classes. Freshness is based on the source observation, not merely the time a request completed.",
-                    color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
-                TextButton(onClick = onOpenMarketPulse, modifier = Modifier.fillMaxWidth()) {
-                    Text("Market data and ingestion status")
+            TerminalCard(modifier = Modifier.testTag("settings.database.health")) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Eyebrow("Database connection")
+                    StatusPill(
+                        ingestionStatus?.status ?: if (ingestionLoading) "Checking" else "Unavailable",
+                        when (ingestionStatus?.status) {
+                            "SUCCEEDED" -> Mint
+                            "FAILED", "EMPTY" -> Coral
+                            else -> Gold
+                        }
+                    )
+                }
+                Text(
+                    ingestionStatus?.lastSuccessfulTradingDate?.let { "EOD · $it · ${ingestionStatus?.lastSuccessfulRows ?: 0} rows" }
+                        ?: ingestionStatus?.status?.replace('_', ' ') ?: "Status unavailable",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                ingestionError?.let { Text(it, color = Coral, fontSize = 10.sp) }
+                ingestionStatus?.errorMessage?.takeIf { ingestionStatus?.status == "FAILED" }?.let {
+                    Text(it, color = Coral, fontSize = 10.sp)
+                }
+                Button(
+                    onClick = {
+                        if (!ingestionLoading) scope.launch {
+                            ingestionLoading = true
+                            ingestionError = null
+                            try {
+                                ingestionStatus = repository.fetchMarketIngestionStatus(session, "nse")
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (failure: Exception) {
+                                ingestionError = failure.message ?: "Database status unavailable"
+                            } finally {
+                                ingestionLoading = false
+                            }
+                        }
+                    },
+                    enabled = !ingestionLoading,
+                    modifier = Modifier.fillMaxWidth().testTag("settings.database.refresh")
+                ) {
+                    if (ingestionLoading) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    else Text("Refresh status")
                 }
             }
         }
         item {
-            EmptyPanel(
-                "Private research safeguards",
-                "Provider credentials remain server-side. Do not paste secrets into research queries. Respect provider rate limits, account entitlements and data-use terms. A green connection status does not imply data completeness."
-            )
+            TerminalCard {
+                Eyebrow("Data and research")
+                TextButton(onClick = onOpenMarketPulse, modifier = Modifier.fillMaxWidth()) {
+                    Text("Market data and ingestion status")
+                }
+            }
         }
     }
 }
