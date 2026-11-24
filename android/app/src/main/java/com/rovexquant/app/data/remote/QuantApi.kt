@@ -376,8 +376,8 @@ object QuantApi {
         }
         require(from <= to) { "Chart start date must not be after its end date." }
         val encodedSymbol = java.net.URLEncoder.encode(symbol.trim(), Charsets.UTF_8.name())
-        val url = "${session.baseUrl}/api/v1/app/market/candles/NSE/$encodedSymbol" +
-            "?interval=$interval&from=$from&to=$to"
+        val url = "${session.baseUrl}/api/v1/app/market/candles" +
+            "?exchange=NSE&symbol=$encodedSymbol&interval=$interval&from=$from&to=$to"
         val request = Request.Builder()
             .url(url)
             .header("Authorization", "Bearer ${session.accessToken}")
