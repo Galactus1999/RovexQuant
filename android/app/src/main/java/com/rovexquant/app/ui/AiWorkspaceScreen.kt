@@ -354,7 +354,6 @@ fun AiWorkspaceScreen(
                 credentialError?.let { GracefulErrorState("Provider setup unavailable. Try again.") }
             }
         }
-        }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionHeading("Connected research tools", "NSE MCP.", "Discover permitted read-only exchange research tools and explicitly attach a selected result to an AI request.")
