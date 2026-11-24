@@ -226,8 +226,9 @@ fun IntelligenceCentreScreen(session: QuantSession, repository: QuantDataReposit
                 }
             }
         }
-        item { MacroResearchToolPanel(session, repository) }
-        item { EodEventStudyToolPanel(session, repository) }
+        if (state.feed == null && state.error == null && !state.loading) {
+            item { EmptyPanel("No research run yet", "Choose a query and time window, then select Refresh intelligence. Macro observations and historical event studies are available in the separate Macro workspace.") }
+        }
     }
 }
 
