@@ -147,7 +147,7 @@ fun MacroEventResearchScreen(session: QuantSession, repository: QuantDataReposit
                         fontWeight = FontWeight.SemiBold)
                     StatusPill(
                         when {
-                            state.macro == null -> "NOT CHECKED"
+                            state.macro?.fredConfigured == null -> "UNKNOWN"
                             state.macro?.fredConfigured == true -> "CONFIGURED"
                             else -> "NOT CONFIGURED"
                         },
@@ -156,8 +156,8 @@ fun MacroEventResearchScreen(session: QuantSession, repository: QuantDataReposit
                 }
                 Text(
                     when {
-                        state.macro == null ->
-                            "FRED configuration has not yet been checked. Tap Refresh macro data to query the backend and retrieve US yields, Fed funds, CPI and dollar observations."
+                        state.macro?.fredConfigured == null ->
+                            "FRED configuration could not be determined because the backend refresh did not return provider status. Tap Refresh macro data after the backend is reachable."
                         state.macro?.fredConfigured == true ->
                             "FRED_API_KEY is configured on the backend. ${state.macro?.fredSeriesCount ?: 0} series have persisted observations; check provider status below for retrieval or persistence failures."
                         else ->
