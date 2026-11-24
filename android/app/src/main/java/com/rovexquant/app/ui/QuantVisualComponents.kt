@@ -130,8 +130,8 @@ fun SectorHeatmapCell(
     val value = changePercent
     val background = when {
         !fresh || value == null -> Color(0xFF263449)
-        value >= 0 -> VisualPositive.copy(alpha = (0.16f + (value.coerceAtMost(3.0) / 3.0 * .44f)).coerceIn(.16f, .60f))
-        else -> VisualNegative.copy(alpha = (0.16f + (kotlin.math.abs(value).coerceAtMost(3.0) / 3.0 * .44f)).coerceIn(.16f, .60f))
+        value >= 0 -> VisualPositive.copy(alpha = (0.16 + (value.coerceAtMost(3.0) / 3.0 * 0.44)).coerceIn(0.16, 0.60).toFloat())
+        else -> VisualNegative.copy(alpha = (0.16 + (kotlin.math.abs(value).coerceAtMost(3.0) / 3.0 * 0.44)).coerceIn(0.16, 0.60).toFloat())
     }
     Column(
         modifier.clip(RoundedCornerShape(10.dp)).background(background)
