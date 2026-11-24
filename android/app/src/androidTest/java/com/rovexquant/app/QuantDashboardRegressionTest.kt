@@ -76,7 +76,12 @@ class QuantDashboardRegressionTest {
             .performScrollTo().assertIsDisplayed()
         composeRule.onAllNodesWithTag("instrument.chart.volume.toggle").assertCountEquals(0)
         composeRule.onNodeWithText("← Back to Pulse").performClick()
-        composeRule.onNodeWithTag("market.pulse.list").assertIsDisplayed()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("market.pulse.list").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("market.pulse.list")
+            .performScrollToNode(hasTestTag("market.eod.snapshot"))
+        composeRule.onNodeWithTag("market.eod.snapshot").assertIsDisplayed()
     }
 
     @Test fun bottomNavigationOpensAllWorkspacesAndSectorCoverage() {
