@@ -61,7 +61,7 @@ class OhlcvCsvResearchTest {
     @Test fun fetchedBarsSerializeAndRoundTripThroughLocalCsv() {
         val bars = OhlcvCsvResearch.parse(risingCsv())
         val serialized = OhlcvCsvResearch.toCsv(bars)
-        assertTrue(serialized.contains("\\n"))
+        assertTrue(serialized.contains("\n"))
         val restored = OhlcvCsvResearch.parse(serialized)
         assertEquals(bars.size, restored.size)
         assertEquals(bars.last().timestamp, restored.last().timestamp)
