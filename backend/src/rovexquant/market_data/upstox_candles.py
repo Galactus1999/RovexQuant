@@ -11,7 +11,11 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-from rovexquant.market_data.instruments import get_nse_equity_instruments, get_nse_index_instruments
+from rovexquant.market_data.instruments import (
+    InstrumentMasterError,
+    get_nse_equity_instruments,
+    get_nse_index_instruments,
+)
 from rovexquant.market_data.upstox_credentials import get_upstox_analytics_token
 
 
@@ -48,10 +52,15 @@ async def resolve_nse_instrument_key(symbol: str) -> str:
     normalized = " ".join(symbol.strip().upper().split())
     if not normalized or len(normalized) > 80:
         raise UpstoxCandleError("A valid NSE company symbol or index name is required.", 422)
-    if normalized.startswith("NIFTY") or normalized.startswith("BANKNIFTY"):
-        records = await get_nse_index_instruments()
-    else:
-        records = await get_nse_equity_instruments()
+    try:
+        if normalized.startswith("NIFTY") or normalized.startswith("BANKNIFTY"):
+            records = await get_nse_index_instruments()
+        else:
+            records = await get_nse_equity_instruments()
+    except InstrumentMasterError as error:
+        raise UpstoxCandleError(
+            "The verified NSE instrument master is temporarily unavailable.", 503
+        ) from error
     matches = [
         record for record in records
         if normalized in {
@@ -89,7 +98,7 @@ def _parse_candles(payload: Any) -> list[dict[str, Any]]:
         opening, high, low, close = values
         if (
             not all(math.isfinite(value) and value > 0 for value in values)
-            or not math.isfinite(volume_number) or volume_number < 0
+            or not math.isfinite(volume_number) or volume_number < 0 or not volume_number.is_integer()
             or high < max(opening, close) or low > min(opening, close) or high < low
         ):
             raise UpstoxCandleError("Upstox returned an invalid OHLCV range.")
