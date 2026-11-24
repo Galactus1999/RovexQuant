@@ -147,12 +147,29 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
                     TerminalSection.SIGNALS -> SignalsScreen()
                     TerminalSection.LAB -> ResearchLabScreen(
                         session = activeSession,
-                        repository = workspace.repository
+                        repository = workspace.repository,
+                        equityInstruments = state.equities,
+                        indexKeys = state.indexKeys
                     )
                     TerminalSection.PORTFOLIO -> PortfolioScreen()
-                    TerminalSection.INTELLIGENCE -> IntelligenceCentreScreen(session = activeSession, repository = workspace.repository)
-                    TerminalSection.MACRO -> MacroEventResearchScreen(session = activeSession, repository = workspace.repository)
-                    TerminalSection.AI -> AiWorkspaceScreen(session = activeSession, repository = workspace.repository)
+                    TerminalSection.INTELLIGENCE -> IntelligenceCentreScreen(
+                        session = activeSession,
+                        repository = workspace.repository,
+                        equityInstruments = state.equities,
+                        indexKeys = state.indexKeys
+                    )
+                    TerminalSection.MACRO -> MacroEventResearchScreen(
+                        session = activeSession,
+                        repository = workspace.repository,
+                        equityInstruments = state.equities,
+                        indexKeys = state.indexKeys
+                    )
+                    TerminalSection.AI -> AiWorkspaceScreen(
+                        session = activeSession,
+                        repository = workspace.repository,
+                        equityInstruments = state.equities,
+                        indexKeys = state.indexKeys
+                    )
                 }
             }
             }
