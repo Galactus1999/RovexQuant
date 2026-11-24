@@ -16,7 +16,7 @@ import httpx
 
 WORLD_BANK_ENDPOINT = "https://api.worldbank.org/v2/country/IND/indicator"
 FRED_ENDPOINT = "https://api.stlouisfed.org/fred/series/observations"
-AMFI_NAV_ENDPOINT = "https://www.amfiindia.com/spages/NAVAll.txt"
+AMFI_NAV_ENDPOINT = "https://portal.amfiindia.com/spages/NAVAll.txt"
 
 WORLD_BANK_INDICATORS = {
     "gdp_growth": ("NY.GDP.MKTP.KD.ZG", "GDP growth (annual %)", "ANNUAL", "PERCENT"),
@@ -155,7 +155,11 @@ async def fetch_amfi_nav(search: str = "", limit: int = 50) -> dict[str, Any]:
     try:
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(20.0, connect=5.0),
-            headers={"User-Agent": "RovexQuant-Research/1.0"},
+            follow_redirects=True,
+            headers={
+                "User-Agent": "RovexQuant-Research/1.0",
+                "Accept": "text/plain, text/*;q=0.9, */*;q=0.5",
+            },
         ) as client:
             response = await client.get(AMFI_NAV_ENDPOINT)
             response.raise_for_status()
@@ -170,17 +174,38 @@ async def fetch_amfi_nav(search: str = "", limit: int = 50) -> dict[str, Any]:
         raise MacroProviderError("AMFI NAV report encoding was not recognized") from error
     retrieved = datetime.now(timezone.utc).isoformat()
     output = []
+    header: dict[str, int] = {}
     for line in content.splitlines():
         fields = [field.strip() for field in line.split(";")]
+        normalized = [" ".join(field.casefold().replace("_", " ").split()) for field in fields]
+        if fields and normalized[0] == "scheme code":
+            header = {name: index for index, name in enumerate(normalized) if name}
+            continue
         if len(fields) < 6 or not fields[0].isdigit():
             continue
+
+        # AMFI changed NAVAll.txt in August 2026 by inserting Plan and Option
+        # before NAV. Prefer the published header contract; retain legacy rows.
+        nav_index = next((index for name, index in header.items()
+                          if name in {"net asset value", "nav"}), None)
+        date_index = header.get("date")
+        if nav_index is None or date_index is None:
+            if len(fields) >= 8:
+                nav_index, date_index = 6, 7
+            else:
+                nav_index, date_index = 4, 5
+        if max(nav_index, date_index) >= len(fields):
+            continue
         try:
-            nav = float(fields[4])
-            if not math.isfinite(nav) or nav < 0 or not fields[5]:
+            nav = float(fields[nav_index])
+            nav_date = fields[date_index]
+            if not math.isfinite(nav) or nav < 0 or not nav_date:
                 continue
-        except ValueError:
+        except (TypeError, ValueError):
             continue
         scheme_name = fields[3]
+        if not scheme_name:
+            continue
         if cleaned and cleaned not in scheme_name.casefold() and cleaned != fields[0]:
             continue
         output.append({
@@ -189,9 +214,9 @@ async def fetch_amfi_nav(search: str = "", limit: int = 50) -> dict[str, Any]:
             "isin_dividend_reinvestment": fields[2] or None,
             "scheme_name": scheme_name[:240],
             "nav": nav,
-            "nav_date": fields[5],
+            "nav_date": nav_date,
             "source": "AMFI_NAVALL_DAILY_REPORT",
-            "source_url": "https://www.amfiindia.com/net-asset-value/nav-download",
+            "source_url": AMFI_NAV_ENDPOINT,
             "retrieved_at": retrieved,
             "data_mode": "DAILY_MUTUAL_FUND_NAV",
         })
