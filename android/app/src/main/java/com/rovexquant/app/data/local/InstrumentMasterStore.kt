@@ -92,7 +92,7 @@ object InstrumentMasterStore {
         val items = buildList {
             for (index in 0 until array.length()) {
                 val row = array.optJSONObject(index) ?: continue
-                map(row)?.let(::add)
+                map(row)?.let { add(it) }
             }
         }.distinctBy { it.toString() }
         if (items.isEmpty()) return null
