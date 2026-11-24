@@ -70,9 +70,11 @@ class QuantDashboardRegressionTest {
             composeRule.onAllNodesWithTag("instrument.chart.candles")
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithTag("instrument.chart.candles").assertIsDisplayed()
+        composeRule.onNodeWithText("Traded volume is not published for this index series.")
+            .performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("instrument.chart.candles")
+            .performScrollTo().assertIsDisplayed()
         composeRule.onAllNodesWithTag("instrument.chart.volume.toggle").assertCountEquals(0)
-        composeRule.onNodeWithText("Traded volume is not published for this index series.").assertIsDisplayed()
         composeRule.onNodeWithText("← Back to Pulse").performClick()
         composeRule.onNodeWithTag("market.pulse.list").assertIsDisplayed()
     }
