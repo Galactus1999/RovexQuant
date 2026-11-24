@@ -265,7 +265,7 @@ private fun EventMetric(label: String, value: Double?, modifier: Modifier = Modi
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EventDatePickerField(
+fun EventDatePickerField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier
