@@ -55,11 +55,11 @@ data class MarketOhlcvSeries(
  */
 object InstrumentCatalog {
     private val broadMarketIndices = setOf(
-        "NIFTY 50",
-        "NIFTY BANK"
+        "NIFTY 50"
     )
 
     private val sectorIndices = setOf(
+        "NIFTY BANK",
         "NIFTY AUTO",
         "NIFTY CAPITAL GOODS",
         "NIFTY CEMENT",

@@ -12,9 +12,9 @@ class InstrumentIdentityTest {
         assertEquals("NIFTY 50", identity.providerSymbol)
     }
 
-    @Test fun niftyBankRoutesToBroadMarketIndexProvider() {
+    @Test fun niftyBankRoutesToSectorIndexProvider() {
         val identity = InstrumentCatalog.resolve("NIFTY BANK")
-        assertEquals(InstrumentType.BROAD_MARKET_INDEX, identity.instrumentType)
+        assertEquals(InstrumentType.SECTOR_INDEX, identity.instrumentType)
         assertEquals(OhlcvProvider.NSE_INDICES_PORTAL, identity.provider)
     }
 
