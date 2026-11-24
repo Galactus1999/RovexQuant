@@ -1,7 +1,6 @@
 package com.rovexquant.app
 
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsEnabled
@@ -128,7 +127,7 @@ class QuantDashboardRegressionTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("instrument.chart.indicator.rsi.pane").assertExists()
+        composeRule.onAllNodesWithTag("instrument.chart.indicator.rsi.pane").assertCountEquals(1)
         composeRule.onNodeWithTag("instrument.chart.indicator.rsi.toggle").performScrollTo().performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("instrument.chart.indicator.rsi.toggle").assertIsNotSelected()
@@ -143,7 +142,7 @@ class QuantDashboardRegressionTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("instrument.chart.indicator.macd.pane").assertExists()
+        composeRule.onAllNodesWithTag("instrument.chart.indicator.macd.pane").assertCountEquals(1)
         composeRule.waitForIdle()
         clickIndicator("atr")
         composeRule.waitForIdle()
@@ -152,7 +151,7 @@ class QuantDashboardRegressionTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("instrument.chart.indicator.atr.pane").assertExists()
+        composeRule.onAllNodesWithTag("instrument.chart.indicator.atr.pane").assertCountEquals(1)
         composeRule.waitForIdle()
         clickIndicator("adx")
         composeRule.waitForIdle()
@@ -161,7 +160,7 @@ class QuantDashboardRegressionTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("instrument.chart.indicator.adx.pane").assertExists()
+        composeRule.onAllNodesWithTag("instrument.chart.indicator.adx.pane").assertCountEquals(1)
         composeRule.waitForIdle()
         for (key in listOf("sma", "ema", "bollinger")) {
             clickIndicator(key)
