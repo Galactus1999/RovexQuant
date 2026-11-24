@@ -25,7 +25,9 @@ from rovexquant.market_data.service import (
     provider_status,
 )
 from rovexquant.market_data.streaming import StreamError, stream_upstox_market_data
-from rovexquant.market_data.upstox_candles import UpstoxCandleError, fetch_intraday_candles
+from rovexquant.market_data.upstox_candles import (
+    UpstoxCandleError, fetch_intraday_candles, resolve_nse_instrument_key,
+)
 from rovexquant.security.dependencies import require_app_session
 from rovexquant.security.request_controls import backtest_rate_limit
 
@@ -56,15 +58,20 @@ class MarketQuotesRequest(BaseModel):
 
 
 async def _quote_response(request: MarketQuotesRequest) -> dict[str, object]:
-    instruments = [
-        QuoteInstrument(
+    instruments = []
+    for item in request.instruments:
+        instrument_key = item.upstox_instrument_key
+        if instrument_key is None and "upstox" in request.provider_order:
+            try:
+                instrument_key = await resolve_nse_instrument_key(item.symbol)
+            except UpstoxCandleError as error:
+                raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+        instruments.append(QuoteInstrument(
             symbol=item.symbol,
-            upstox_instrument_key=item.upstox_instrument_key,
+            upstox_instrument_key=instrument_key,
             dhan_exchange_segment=item.dhan_exchange_segment,
             dhan_security_id=item.dhan_security_id,
-        )
-        for item in request.instruments
-    ]
+        ))
     provider, quotes, fallback_used = await fetch_quotes(instruments, request.provider_order)
     quoted_symbols = {item.symbol for item in quotes}
     return {
