@@ -1,8 +1,8 @@
 package com.rovexquant.app
 
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
@@ -102,13 +102,19 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("instrument.chart.indicator.rsi.toggle").performScrollTo().performClick()
         composeRule.waitForIdle()
         // Prove the control state changed before waiting for its dependent pane.
-        composeRule.onNodeWithTag("instrument.chart.indicator.rsi.toggle").assertIsOn()
+        composeRule.onNodeWithTag("instrument.chart.indicator.rsi.toggle").assertIsSelected()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("instrument.chart.indicator.rsi.pane")
                 .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("instrument.chart.indicator.rsi.pane").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("instrument.chart.indicator.rsi.toggle").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("instrument.chart.indicator.rsi.toggle").assertIsNotSelected()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("instrument.chart.indicator.rsi.pane").fetchSemanticsNodes().isEmpty()
+        }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("instrument.chart.indicator.macd.toggle").performScrollTo().performClick()
         composeRule.waitForIdle()

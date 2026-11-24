@@ -417,42 +417,7 @@ object QuantApi {
             require(body.toByteArray(Charsets.UTF_8).size <= 2 * 1024 * 1024) {
                 "Indicator response exceeds the 2 MB mobile safety limit."
             }
-            val json = JSONObject(body)
-            val count = bars.size
-            fun parseSeries(array: JSONArray?, label: String): List<Double?> {
-                require(array != null && array.length() == count) {
-                    "Backend indicator '$label' is missing or misaligned with the requested OHLC bars."
-                }
-                return List(count) { index ->
-                    if (array.isNull(index)) null else {
-                        val value = array.optDouble(index, Double.NaN)
-                        require(value.isFinite()) {
-                            "Backend indicator '$label' contains a non-finite value at bar ${index + 1}."
-                        }
-                        value
-                    }
-                }
-            }
-            val macd = json.optJSONArray("macd")
-                ?: throw IllegalStateException("Backend indicator response is missing MACD arrays.")
-            require(macd.length() == 3) { "Backend MACD response must contain line, signal and histogram arrays." }
-            val bands = json.optJSONObject("bollinger_bands")
-                ?: throw IllegalStateException("Backend indicator response is missing Bollinger bands.")
-            return TechnicalIndicators(
-                startIndex = startIndex,
-                barCount = count,
-                sma = parseSeries(json.optJSONArray("sma"), "SMA"),
-                ema = parseSeries(json.optJSONArray("ema"), "EMA"),
-                rsi = parseSeries(json.optJSONArray("rsi"), "RSI"),
-                macdLine = parseSeries(macd.optJSONArray(0), "MACD line"),
-                macdSignal = parseSeries(macd.optJSONArray(1), "MACD signal"),
-                macdHistogram = parseSeries(macd.optJSONArray(2), "MACD histogram"),
-                bollingerUpper = parseSeries(bands.optJSONArray("upper"), "Bollinger upper"),
-                bollingerMiddle = parseSeries(bands.optJSONArray("middle"), "Bollinger middle"),
-                bollingerLower = parseSeries(bands.optJSONArray("lower"), "Bollinger lower"),
-                atr = parseSeries(json.optJSONArray("atr"), "ATR"),
-                adx = parseSeries(json.optJSONArray("adx"), "ADX")
-            )
+            return parseTechnicalIndicatorsResponse(body, startIndex, bars.size)
         }
     }
 

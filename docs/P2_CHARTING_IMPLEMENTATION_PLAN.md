@@ -140,16 +140,16 @@ The Android wrapper executes chart calls asynchronously in WebView. Its document
 
 ## P2.3 implementation batch — 24 November 2026
 
-**Implemented on `feature/p2-indicator-integration`; exact-head CI and emulator validation pending.**
+**Implemented on `feat/p2-indicator-integration`; exact-head CI and emulator validation pending.**
 
 - Added typed `TechnicalIndicators` and `TechnicalIndicatorPeriods` contracts. All arrays preserve backend null warm-up values, must be finite when populated, and must exactly match the requested bar count.
 - Added authenticated Android transport for `POST /api/v1/research/indicators`. Requests carry aligned close/high/low arrays, are bounded to 10,000 OHLC bars, and use the existing research timeout/client and session bearer token.
-- Response parsing validates SMA, EMA, RSI, all three MACD arrays, all three Bollinger arrays, ATR and ADX lengths and numeric values. No local formula fallback is used.
+- Response parsing is isolated in a pure, unit-testable parser. It validates payload size, required arrays, MACD arity, exact array lengths, JSON numeric types, finite values and source-window alignment. The typed model additionally rejects out-of-range RSI/ADX, negative ATR and unordered Bollinger bands. No local formula fallback is used.
 - Added the feature-facing repository port and `QuantRepository` IO/session coordination. The UI does not call `QuantApi` directly.
 - Instrument research requests indicators for the latest maximum 10,000 bars. The returned `startIndex` and count preserve alignment with the larger chart history; older bars are explicitly outside the indicator coverage window.
 - Replaced local chart SMA calculations with backend SMA/EMA/Bollinger overlays and added RSI, MACD, ATR and ADX subpanels. Controls are wired to actual renderer data, and the chart remains available if indicator calculation fails.
 - Added deterministic fake indicator fixtures for UI tests, model alignment/warm-up tests, and Android emulator assertions for RSI, MACD, ATR and ADX pane activation plus SMA/EMA/Bollinger control selection.
-- Added a backend API regression for all returned array lengths and the expected RSI, ATR, ADX and MACD warm-up indices.
+- Added backend API regression for all returned array lengths and expected RSI, ATR, ADX and MACD warm-up indices; added independent Wilder RSI edge cases, ATR gap handling and MACD histogram identity tests.
 - Moved the index volume-unavailable disclaimer into the visible chart controls area so it does not depend on selecting a candle or scrolling to the OHLC readout.
 
 ### P2.3 remaining verification and next batch

@@ -34,6 +34,25 @@ data class TechnicalIndicators(
         require(arrays.flatten().filterNotNull().all { it.isFinite() }) {
             "Indicator arrays cannot contain non-finite values."
         }
+        require(rsi.filterNotNull().all { it in 0.0..100.0 }) {
+            "RSI values must remain within the inclusive 0–100 range."
+        }
+        require(adx.filterNotNull().all { it in 0.0..100.0 }) {
+            "ADX values must remain within the inclusive 0–100 range."
+        }
+        require(atr.filterNotNull().all { it >= 0.0 }) {
+            "ATR values cannot be negative."
+        }
+        for (index in 0 until barCount) {
+            val upper = bollingerUpper[index]
+            val middle = bollingerMiddle[index]
+            val lower = bollingerLower[index]
+            if (upper != null && middle != null && lower != null) {
+                require(lower <= middle && middle <= upper) {
+                    "Bollinger bands must satisfy lower ≤ middle ≤ upper at bar ${index + 1}."
+                }
+            }
+        }
     }
 
     val endExclusive: Int get() = startIndex + barCount
