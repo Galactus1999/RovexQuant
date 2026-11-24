@@ -10,7 +10,7 @@ import java.nio.file.StandardCopyOption
 import org.json.JSONArray
 import org.json.JSONObject
 
-data class InstrumentMasterCache<T>(
+data class InstrumentMasterCache<T : Any>(
     val instruments: List<T>,
     val updatedAtMillis: Long
 )
@@ -76,7 +76,7 @@ object InstrumentMasterStore {
         write(context, "nse-indices.json", payload)
     }
 
-    private fun <T> read(
+    private fun <T : Any> read(
         context: Context,
         fileName: String,
         map: (JSONObject) -> T?
@@ -89,7 +89,7 @@ object InstrumentMasterStore {
         if (updatedAt <= 0L) return null
         val array = root.optJSONArray("instruments") ?: return null
         if (array.length() !in 1..MAX_INSTRUMENTS) return null
-        val items = buildList {
+        val items = buildList<T> {
             for (index in 0 until array.length()) {
                 val row = array.optJSONObject(index) ?: continue
                 map(row)?.let { add(it) }
