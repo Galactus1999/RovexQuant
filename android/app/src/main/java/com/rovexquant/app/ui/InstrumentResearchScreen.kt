@@ -20,6 +20,7 @@ import com.rovexquant.app.data.local.TejHqOhlcvSyncManager
 import com.rovexquant.app.data.repository.QuantDataRepository
 import com.rovexquant.app.data.model.TechnicalIndicators
 import com.rovexquant.app.domain.InstrumentCatalog
+import com.rovexquant.app.domain.OhlcvInterval
 import com.rovexquant.app.domain.TechnicalIndicatorCalculator
 import com.rovexquant.app.domain.ChartSeriesMapper
 import com.rovexquant.app.domain.ChartSeriesData
@@ -41,29 +42,37 @@ fun InstrumentResearchScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val identity = remember(symbol) { runCatching { InstrumentCatalog.resolve(symbol, "NSE") }.getOrNull() }
-    val identityError = remember(symbol) {
-        runCatching { InstrumentCatalog.resolve(symbol, "NSE") }.exceptionOrNull()?.message
+    var selectedIntervalKey by rememberSaveable(symbol) { mutableStateOf(OhlcvInterval.DAILY.key) }
+    val selectedInterval = remember(selectedIntervalKey) {
+        OhlcvInterval.entries.first { it.key == selectedIntervalKey }
     }
-    var series by remember(symbol) { mutableStateOf<MarketOhlcvSeries?>(null) }
-    var chartData by remember(symbol) { mutableStateOf<ChartSeriesData?>(null) }
-    var loading by remember(symbol) { mutableStateOf(true) }
-    var refreshing by remember(symbol) { mutableStateOf(false) }
-    var error by remember(symbol) { mutableStateOf<String?>(null) }
-    var range by rememberSaveable(symbol) { mutableStateOf("1Y") }
-    var volume by rememberSaveable(symbol) { mutableStateOf(true) }
-    var showSma by rememberSaveable(symbol) { mutableStateOf(false) }
-    var showEma by rememberSaveable(symbol) { mutableStateOf(false) }
-    var showBollinger by rememberSaveable(symbol) { mutableStateOf(false) }
-    var showRsi by rememberSaveable(symbol) { mutableStateOf(false) }
-    var showMacd by rememberSaveable(symbol) { mutableStateOf(false) }
-    var showAtr by rememberSaveable(symbol) { mutableStateOf(false) }
-    var showAdx by rememberSaveable(symbol) { mutableStateOf(false) }
-    var indicators by remember(symbol) { mutableStateOf<TechnicalIndicators?>(null) }
-    var indicatorsLoading by remember(symbol) { mutableStateOf(false) }
-    var indicatorsError by remember(symbol) { mutableStateOf<String?>(null) }
-    var indicatorsSource by remember(symbol) { mutableStateOf("BACKEND") }
-    var indicatorsNotice by remember(symbol) { mutableStateOf<String?>(null) }
+    val identity = remember(symbol, selectedInterval) {
+        runCatching { InstrumentCatalog.resolve(symbol, "NSE", selectedInterval) }.getOrNull()
+    }
+    val identityError = remember(symbol, selectedInterval) {
+        runCatching { InstrumentCatalog.resolve(symbol, "NSE", selectedInterval) }.exceptionOrNull()?.message
+    }
+    var series by remember(symbol, selectedIntervalKey) { mutableStateOf<MarketOhlcvSeries?>(null) }
+    var chartData by remember(symbol, selectedIntervalKey) { mutableStateOf<ChartSeriesData?>(null) }
+    var loading by remember(symbol, selectedIntervalKey) { mutableStateOf(true) }
+    var refreshing by remember(symbol, selectedIntervalKey) { mutableStateOf(false) }
+    var error by remember(symbol, selectedIntervalKey) { mutableStateOf<String?>(null) }
+    var range by rememberSaveable(symbol, selectedIntervalKey) {
+        mutableStateOf(if (selectedInterval.isIntraday) "5D" else "1Y")
+    }
+    var volume by rememberSaveable(symbol, selectedIntervalKey) { mutableStateOf(true) }
+    var showSma by rememberSaveable(symbol, selectedIntervalKey) { mutableStateOf(false) }
+    var showEma by rememberSaveable(symbol, selectedIntervalKey) { mutableStateOf(false) }
+    var showBollinger by rememberSaveable(symbol, selectedIntervalKey) { mutableStateOf(false) }
+    var showRsi by rememberSaveable(symbol, selectedIntervalKey) { mutableStateOf(false) }
+    var showMacd by rememberSaveable(symbol, selectedIntervalKey) { mutableStateOf(false) }
+    var showAtr by rememberSaveable(symbol, selectedIntervalKey) { mutableStateOf(false) }
+    var showAdx by rememberSaveable(symbol, selectedIntervalKey) { mutableStateOf(false) }
+    var indicators by remember(symbol, selectedIntervalKey) { mutableStateOf<TechnicalIndicators?>(null) }
+    var indicatorsLoading by remember(symbol, selectedIntervalKey) { mutableStateOf(false) }
+    var indicatorsError by remember(symbol, selectedIntervalKey) { mutableStateOf<String?>(null) }
+    var indicatorsSource by remember(symbol, selectedIntervalKey) { mutableStateOf("BACKEND") }
+    var indicatorsNotice by remember(symbol, selectedIntervalKey) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     suspend fun refreshSeries(fullHistory: Boolean = false) {
@@ -72,14 +81,19 @@ fun InstrumentResearchScreen(
         error = null
         try {
             val today = LocalDate.now(ZoneId.of("Asia/Kolkata"))
+            val from = when {
+                selected.interval.isIntraday -> today.minusDays(selected.interval.maximumHistoryDays)
+                fullHistory -> today.minusDays(6200)
+                else -> today.minusYears(3)
+            }
             val result = withContext(Dispatchers.IO) {
                 val fetched = TejHqOhlcvSyncManager.fetchAndSave(
                     context = context,
                     repository = repository,
                     instrument = selected,
-                    from = if (fullHistory) today.minusDays(6200) else today.minusYears(3),
+                    from = from,
                     to = today,
-                    incremental = !fullHistory
+                    incremental = selected.interval == OhlcvInterval.DAILY && !fullHistory
                 )
                 fetched to ChartSeriesMapper.map(fetched)
             }
@@ -96,6 +110,10 @@ fun InstrumentResearchScreen(
     }
 
     LaunchedEffect(identity) {
+        series = null
+        chartData = null
+        loading = true
+        error = null
         val selected = identity
         if (selected == null) {
             error = identityError ?: "Unsupported instrument identity."
@@ -113,11 +131,11 @@ fun InstrumentResearchScreen(
                         instrument = selected,
                         bars = cached,
                         retrievedAt = lastSync.takeIf { it > 0L }?.let(Instant::ofEpochMilli),
-                        volumeAvailable = selected.provider == com.rovexquant.app.domain.OhlcvProvider.TEJHQ_EOD,
-                        adjustmentStatus = if (selected.provider == com.rovexquant.app.domain.OhlcvProvider.TEJHQ_EOD) {
-                            "Raw end-of-day bhavcopy prices; corporate-action adjustment not applied"
-                        } else {
-                            "Price Return Index OHLC; dividends are not included"
+                        volumeAvailable = selected.instrumentType == com.rovexquant.app.domain.InstrumentType.EQUITY,
+                        adjustmentStatus = when (selected.provider) {
+                            com.rovexquant.app.domain.OhlcvProvider.TEJHQ_EOD -> "Raw end-of-day bhavcopy prices; corporate-action adjustment not applied"
+                            com.rovexquant.app.domain.OhlcvProvider.NSE_INDICES_PORTAL -> "Price Return Index OHLC; dividends are not included"
+                            com.rovexquant.app.domain.OhlcvProvider.UPSTOX_V3_INTRADAY -> "Raw intraday OHLCV; corporate-action adjustment not applied"
                         }
                     )
                     cachedSeries to ChartSeriesMapper.map(cachedSeries)
@@ -140,6 +158,8 @@ fun InstrumentResearchScreen(
     val visible = remember(bars, range) {
         val today = LocalDate.now(ZoneId.of("Asia/Kolkata"))
         val cutoff = when (range) {
+            "1D" -> today.minusDays(1)
+            "5D" -> today.minusDays(7)
             "1M" -> today.minusMonths(1)
             "3M" -> today.minusMonths(3)
             "6M" -> today.minusMonths(6)
@@ -162,8 +182,8 @@ fun InstrumentResearchScreen(
         } else {
             withContext(Dispatchers.Default) {
                 source.copy(
-                    candles = source.candles.filter { it.time >= firstDate && it.time <= lastDate },
-                    volumeBars = source.volumeBars?.filter { it.time >= firstDate && it.time <= lastDate }
+                    candles = source.candles.filter { it.time.take(10) >= firstDate && it.time.take(10) <= lastDate },
+                    volumeBars = source.volumeBars?.filter { it.time.take(10) >= firstDate && it.time.take(10) <= lastDate }
                 )
             }
         }
@@ -274,16 +294,35 @@ fun InstrumentResearchScreen(
         }
         Spacer(Modifier.height(10.dp))
         Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState())
+                .testTag("instrument.chart.timeframes"),
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            (OhlcvInterval.intraday + OhlcvInterval.DAILY).forEach { timeframe ->
+                FilterChip(
+                    enabled = !refreshing,
+                    selected = selectedInterval == timeframe,
+                    onClick = { selectedIntervalKey = timeframe.key },
+                    label = { Text(timeframe.displayLabel) },
+                    modifier = Modifier.testTag("instrument.chart.timeframe.${timeframe.key}")
+                )
+            }
+        }
+        Row(
             modifier = Modifier.horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(5.dp)
         ) {
-            listOf("1M", "3M", "6M", "1Y", "3Y", "ALL").forEach { period ->
+            val availableRanges = if (selectedInterval.isIntraday) {
+                if (selectedInterval.maximumHistoryDays <= 30L) listOf("1D", "5D", "1M")
+                else listOf("1D", "5D", "1M", "3M")
+            } else listOf("1M", "3M", "6M", "1Y", "3Y", "ALL")
+            availableRanges.forEach { period ->
                 FilterChip(
                     enabled = !refreshing,
                     selected = range == period,
                     onClick = {
                         range = period
-                        if (period == "ALL") {
+                        if (period == "ALL" && selectedInterval == OhlcvInterval.DAILY) {
                             val earliest = series?.bars?.firstOrNull()?.timestamp?.toLocalDate()
                             val target = LocalDate.now(ZoneId.of("Asia/Kolkata")).minusDays(6190)
                             if (earliest == null || earliest.isAfter(target)) {
