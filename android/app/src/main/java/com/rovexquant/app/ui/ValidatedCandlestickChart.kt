@@ -122,7 +122,7 @@ internal fun ValidatedCandlestickChart(
                         if (candles.isEmpty() || size.width <= 0 || zoom <= 0f) {
                             return@detectTransformGestures
                         }
-                        val oldCount = windowCount.coerceIn(1, candles.size)
+                        val oldCount = windowCount.coerceIn(1, minOf(candles.size, MAX_RENDERED_CHART_CANDLES))
                         val fraction = (centroid.x / size.width).coerceIn(0f, 1f)
                         val focalIndex = windowStart + fraction * oldCount
                         val minimumWindow = minOf(20, candles.size).coerceAtLeast(1)
