@@ -125,6 +125,39 @@ class ChartSeriesMapperTest {
     }
 
     @Test
+    fun normalizesTimestampsToIndianExchangeTradingDate() {
+        val instrument = InstrumentCatalog.resolve("NIFTY 50")
+        val utcTimestamp = OhlcvBar(
+            OffsetDateTime.parse("2025-01-01T20:00:00Z"),
+            100.0, 110.0, 95.0, 105.0, 0L
+        )
+        val mapped = ChartSeriesMapper.map(
+            MarketOhlcvSeries(
+                instrument = instrument,
+                bars = listOf(utcTimestamp),
+                volumeAvailable = false,
+                adjustmentStatus = "Price Return Index OHLC"
+            )
+        )
+        assertEquals("2025-01-02", mapped.candles.single().time)
+    }
+
+    @Test
+    fun rejectsNonZeroVolumeWhenSourceMarksVolumeUnavailable() {
+        val instrument = InstrumentCatalog.resolve("NIFTY 50")
+        assertThrows(IllegalArgumentException::class.java) {
+            ChartSeriesMapper.map(
+                MarketOhlcvSeries(
+                    instrument = instrument,
+                    bars = listOf(bar("2025-01-01", volume = 50L)),
+                    volumeAvailable = false,
+                    adjustmentStatus = "Price Return Index OHLC"
+                )
+            )
+        }
+    }
+
+    @Test
     fun rejectsForgedInstrumentProviderMapping() {
         val forged = InstrumentIdentity(
             exchange = "NSE",
