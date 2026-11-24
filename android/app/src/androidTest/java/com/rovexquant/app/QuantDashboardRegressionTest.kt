@@ -38,6 +38,17 @@ class QuantDashboardRegressionTest {
         }
     }
 
+    private fun clickIndicator(key: String) {
+        val tag = "instrument.chart.indicator.$key.toggle"
+        // The controls live in a nested horizontal scroller inside the screen's
+        // vertical scroller. Scroll the horizontal container itself so the
+        // pointer injected by performClick lands inside the clipped viewport.
+        composeRule.onNodeWithTag("instrument.chart.indicator.controls")
+            .performScrollToNode(hasTestTag(tag))
+        composeRule.onNodeWithTag(tag).assertIsDisplayed().performClick()
+        composeRule.waitForIdle()
+    }
+
     @Test fun appStartsWithQuantMarketPulseAndHonestOfflineState() {
         waitForDashboard()
         composeRule.waitForIdle()
@@ -99,7 +110,7 @@ class QuantDashboardRegressionTest {
             }.isSuccess
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("instrument.chart.indicator.rsi.toggle").performScrollTo().performClick()
+        clickIndicator("rsi")
         composeRule.waitForIdle()
         // Prove the control state changed before waiting for its dependent pane.
         composeRule.onNodeWithTag("instrument.chart.indicator.rsi.toggle").assertIsSelected()
@@ -116,7 +127,7 @@ class QuantDashboardRegressionTest {
             composeRule.onAllNodesWithTag("instrument.chart.indicator.rsi.pane").fetchSemanticsNodes().isEmpty()
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("instrument.chart.indicator.macd.toggle").performScrollTo().performClick()
+        clickIndicator("macd")
         composeRule.waitForIdle()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("instrument.chart.indicator.macd.pane")
@@ -125,7 +136,7 @@ class QuantDashboardRegressionTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("instrument.chart.indicator.macd.pane").performScrollTo().assertIsDisplayed()
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("instrument.chart.indicator.atr.toggle").performScrollTo().performClick()
+        clickIndicator("atr")
         composeRule.waitForIdle()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("instrument.chart.indicator.atr.pane")
@@ -134,7 +145,7 @@ class QuantDashboardRegressionTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("instrument.chart.indicator.atr.pane").performScrollTo().assertIsDisplayed()
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("instrument.chart.indicator.adx.toggle").performScrollTo().performClick()
+        clickIndicator("adx")
         composeRule.waitForIdle()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("instrument.chart.indicator.adx.pane")
@@ -144,10 +155,8 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("instrument.chart.indicator.adx.pane").performScrollTo().assertIsDisplayed()
         composeRule.waitForIdle()
         for (key in listOf("sma", "ema", "bollinger")) {
-            val toggle = composeRule.onNodeWithTag("instrument.chart.indicator.$key.toggle")
-            toggle.performScrollTo().performClick()
-            composeRule.waitForIdle()
-            toggle.assertIsSelected()
+            clickIndicator(key)
+            composeRule.onNodeWithTag("instrument.chart.indicator.$key.toggle").assertIsSelected()
         }
         composeRule.onNodeWithText("← Back to Pulse").performScrollTo().performClick()
         composeRule.waitForIdle()
