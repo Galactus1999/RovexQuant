@@ -30,6 +30,7 @@ object TejHqOhlcvStore {
     private const val KEY_FROM = "from"
     private const val KEY_AUTO = "auto_sync"
     private const val KEY_LAST_SYNC = "last_sync"
+    private const val KEY_SERIES_LAST_SYNC_PREFIX = "last_sync_"
     private const val FILE_NAME = OhlcvCsvResearch.STORAGE_FILE_NAME
     private val exchangePattern = Regex("^[A-Z0-9]{2,8}$")
     private val symbolPattern = Regex("^[A-Z0-9][A-Z0-9&._-]{0,39}$")
@@ -91,7 +92,10 @@ object TejHqOhlcvStore {
             symbol = prefs.getString(KEY_SYMBOL, "RELIANCE") ?: "RELIANCE",
             fromDate = prefs.getString(KEY_FROM, "2010-01-04") ?: "2010-01-04",
             autoSync = prefs.getBoolean(KEY_AUTO, true),
-            lastSyncMillis = prefs.getLong(KEY_LAST_SYNC, 0L)
+            lastSyncMillis = prefs.getLong(seriesLastSyncKey(
+                prefs.getString(KEY_EXCHANGE, "nse") ?: "nse",
+                prefs.getString(KEY_SYMBOL, "RELIANCE") ?: "RELIANCE"
+            ), prefs.getLong(KEY_LAST_SYNC, 0L))
         )
     }
 
@@ -105,16 +109,34 @@ object TejHqOhlcvStore {
     }
 
     fun markSynced(context: Context) {
+        val current = settings(context)
+        markSynced(context, current.exchange, current.symbol)
+    }
+
+    fun markSynced(context: Context, exchange: String, symbol: String) {
+        val now = System.currentTimeMillis()
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putLong(KEY_LAST_SYNC, System.currentTimeMillis())
+            .putLong(seriesLastSyncKey(exchange, symbol), now)
+            .putLong(KEY_LAST_SYNC, now)
             .apply()
     }
+
+    private fun seriesLastSyncKey(exchange: String, symbol: String): String =
+        KEY_SERIES_LAST_SYNC_PREFIX + exchange.trim().uppercase(Locale.ROOT) +
+            "_" + symbol.trim().uppercase(Locale.ROOT)
 
     fun clear(context: Context) {
         File(context.filesDir, FILE_NAME).delete()
         File(context.filesDir, "$FILE_NAME.tmp").delete()
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .remove(KEY_LAST_SYNC).apply()
+        context.filesDir.listFiles()?.filter {
+            it.isFile && it.name.startsWith("ohlcv_") &&
+                (it.name.endsWith(".csv") || it.name.endsWith(".csv.tmp"))
+        }?.forEach { it.delete() }
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val editor = prefs.edit().remove(KEY_LAST_SYNC)
+        prefs.all.keys.filter { it.startsWith(KEY_SERIES_LAST_SYNC_PREFIX) }
+            .forEach { editor.remove(it) }
+        editor.apply()
     }
 
     fun latestDate(bars: List<OhlcvBar>): LocalDate? =
