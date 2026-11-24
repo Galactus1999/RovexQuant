@@ -64,13 +64,17 @@ fun EmptyPanel(title: String, body: String, accent: Color = Cyan) {
     }
 }
 @Composable
-fun TerminalHeader(status: String = "Research · Offline", onSignOut: (() -> Unit)? = null) {
+fun TerminalHeader(status: String = "Research · Offline", onSignOut: (() -> Unit)? = null, onOpenSettings: (() -> Unit)? = null) {
     Row(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(40.dp).clip(RoundedCornerShape(13.dp)).background(PanelRaised), contentAlignment = Alignment.Center) { Text("Q", color = Mint, fontSize = 24.sp, fontWeight = FontWeight.Black) }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text("QUANT", color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp, fontWeight = FontWeight.Black, letterSpacing = 1.8.sp, modifier = Modifier.testTag("quant.header"))
             Text("INDIAN MARKET INTELLIGENCE", color = Muted, fontSize = 8.sp, letterSpacing = 1.25.sp)
+        }
+        if (onOpenSettings != null) {
+            Text("⚙", color = MaterialTheme.colorScheme.onBackground, fontSize = 20.sp,
+                modifier = Modifier.clickable { onOpenSettings() }.padding(horizontal = 8.dp).testTag("quant.settings.open"))
         }
         if (onSignOut != null) {
             Text("Sign out", color = Muted, fontSize = 9.sp, modifier = Modifier.clickable { onSignOut() }.padding(horizontal = 6.dp))
