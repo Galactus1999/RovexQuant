@@ -35,7 +35,7 @@ _INTERVALS = {
     "4h": ("hours", 4, 90),
 }
 _KEY_PATTERN = re.compile(
-    r"^(?:NSE_EQ\|INE[A-Z0-9]{9}|NSE_INDEX\|[A-Za-z0-9 _&()./-]{1,80})$"
+    r"^(?:NSE_EQ\|IN[A-Z0-9]{10}|NSE_INDEX\|[A-Za-z0-9 _&()./-]{1,80})$"
 )
 _MARKET_ZONE = ZoneInfo("Asia/Kolkata")
 _MAX_CANDLES = 20_000
