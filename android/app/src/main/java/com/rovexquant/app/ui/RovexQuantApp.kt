@@ -34,10 +34,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rovexquant.app.feature.workspace.QuantWorkspaceViewModel
 
-internal enum class TerminalSection(val label: String, val glyph: String) {
+private enum class TerminalSection(val label: String, val glyph: String) {
     PULSE("Pulse", "◈"), SCANNER("Scan", "⌕"), SIGNALS("Signals", "⌁"),
     LAB("Lab", "⌘"), PORTFOLIO("Portfolio", "▤"), INTELLIGENCE("Intel", "✦"),
-    MACRO("Macro", "◎"), AI("Chat", "◉"), RESEARCH("Research", "✧")
+    MACRO("Macro", "◎"), AI("Chat", "◉")
 }
 
 @Composable
@@ -107,8 +107,7 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
                                 TerminalSection.INTELLIGENCE -> IntelligenceCentreScreen(session = activeSession, repository = workspace.repository)
                                 TerminalSection.MACRO -> MacroEventResearchScreen(session = activeSession, repository = workspace.repository)
                                 TerminalSection.AI -> AiWorkspaceScreen(session = activeSession, repository = workspace.repository)
-                                TerminalSection.RESEARCH -> ResearchCopilotScreen(session = activeSession, repository = workspace.repository)
-                            }
+                                                            }
                         }
                     }
                 }
@@ -124,13 +123,13 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
 internal fun shouldUseNavigationRail(windowWidthDp: Int): Boolean = windowWidthDp >= 840
 
 @Composable
-internal fun TerminalNavigation(
+private fun TerminalNavigation(
     selected: TerminalSection,
     onSelect: (TerminalSection) -> Unit,
     vertical: Boolean = false
 ) {
     val primary = listOf(TerminalSection.PULSE, TerminalSection.SCANNER, TerminalSection.LAB, TerminalSection.INTELLIGENCE)
-    val secondary = listOf(TerminalSection.RESEARCH, TerminalSection.SIGNALS, TerminalSection.PORTFOLIO, TerminalSection.MACRO, TerminalSection.AI)
+    val secondary = listOf(TerminalSection.SIGNALS, TerminalSection.PORTFOLIO, TerminalSection.MACRO, TerminalSection.AI)
     var moreExpanded by remember { mutableStateOf(false) }
 
     if (vertical) {
@@ -146,7 +145,7 @@ internal fun TerminalNavigation(
                 Column(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp))
                         .background(if (active) Mint.copy(alpha = .12f) else PanelRaised)
-                        .semantics { contentDescription = "Open ${destination.label}"; selected = active }
+                        .semantics { contentDescription = "Open ${destination.label}"; this.selected = active }
                         .clickable(role = Role.Tab, onClickLabel = "Open ${destination.label}") { onSelect(destination) }
                         .padding(vertical = 9.dp), horizontalAlignment = Alignment.CenterHorizontally
                 ) {
