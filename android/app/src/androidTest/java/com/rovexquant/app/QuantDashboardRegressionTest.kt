@@ -84,13 +84,13 @@ class QuantDashboardRegressionTest {
             composeRule.onAllNodesWithTag("instrument.chart.indicator.rsi.pane")
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithTag("instrument.chart.indicator.rsi.pane").assertIsDisplayed()
+        composeRule.onNodeWithTag("instrument.chart.indicator.rsi.pane").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("instrument.chart.indicator.macd.toggle").performClick()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("instrument.chart.indicator.macd.pane")
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithTag("instrument.chart.indicator.macd.pane").assertIsDisplayed()
+        composeRule.onNodeWithTag("instrument.chart.indicator.macd.pane").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("← Back to Pulse").performClick()
         composeRule.onNodeWithTag("market.pulse.list").assertIsDisplayed()
     }
