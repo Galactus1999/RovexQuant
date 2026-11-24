@@ -100,6 +100,11 @@ class QuantDashboardRegressionTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("instrument.research.screen").assertIsDisplayed()
         composeRule.onNodeWithText("NIFTY BANK").assertIsDisplayed()
+        composeRule.onNodeWithTag("instrument.overview.panel").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("52-week high").assertIsDisplayed()
+        composeRule.onNodeWithText("52-week low").assertIsDisplayed()
+        composeRule.onNodeWithText("VALUATION & FUNDAMENTALS").assertIsDisplayed()
+        composeRule.onNodeWithText("RECENT NEWS & DEVELOPMENTS").assertIsDisplayed()
         composeRule.waitUntil(15_000) {
             composeRule.onAllNodesWithTag("instrument.chart.candles")
                 .fetchSemanticsNodes().isNotEmpty()
