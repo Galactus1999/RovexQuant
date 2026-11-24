@@ -69,9 +69,9 @@ fun IntelligenceCentreScreen(
     ) {
         item {
             SectionHeading(
-                "Research intelligence · evidence first",
-                "AI Intelligence Centre",
-                "Global developments translated into transparent Indian-sector exposure hypotheses. Chat is separate and optional."
+                if (developerMode) "DEVELOPER DIAGNOSTICS" else "RESEARCH INTELLIGENCE",
+                if (developerMode) "System health" else "AI Intelligence Centre",
+                if (developerMode) "Technical data-source diagnostics." else "Global developments translated into transparent Indian-sector exposure hypotheses."
             )
         }
         if (developerMode) {
@@ -272,7 +272,7 @@ private fun MacroResearchToolPanel(
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (failure: Exception) {
-                        error = failure.message ?: "Macro research request failed."
+                        error = "Macro data temporarily unavailable."
                     } finally {
                         loading = false
                     }
@@ -283,7 +283,7 @@ private fun MacroResearchToolPanel(
         ) {
             if (loading) CircularProgressIndicator(modifier = Modifier.size(16.dp)) else Text("Fetch macro observations")
         }
-        error?.let { Text(it, color = Coral, fontSize = 10.sp) }
+        error?.let { GracefulErrorState("Macro data delayed. Try again later.") }
         summary?.let { data ->
             Text("Retrieved ${data.retrievedAt.ifBlank { "timestamp not supplied" }}", color = Muted, fontSize = 9.sp)
             if (data.worldBankSeries.isEmpty()) {
@@ -310,9 +310,6 @@ private fun MacroResearchToolPanel(
             )
             data.amfiExamples.take(3).forEach { nav ->
                 Text("${nav.schemeName}: ₹${"%.4f".format(java.util.Locale.US, nav.nav)} · ${nav.navDate}", color = Muted, fontSize = 9.sp)
-            }
-            data.providerErrors.forEach { issue ->
-                Text("Partial source failure: $issue", color = Gold, fontSize = 9.sp, lineHeight = 13.sp)
             }
         }
     }
@@ -377,7 +374,7 @@ private fun EodEventStudyToolPanel(
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (failure: Exception) {
-                        error = failure.message ?: "Event study failed."
+                        error = "Event study unavailable. Check the inputs and retry."
                     } finally {
                         loading = false
                     }
@@ -388,7 +385,7 @@ private fun EodEventStudyToolPanel(
         ) {
             if (loading) CircularProgressIndicator(modifier = Modifier.size(16.dp)) else Text("Run event-window analysis")
         }
-        error?.let { Text(it, color = Coral, fontSize = 10.sp, lineHeight = 15.sp) }
+        error?.let { GracefulErrorState("Event study unavailable. Check the inputs and retry.") }
         result?.let { study ->
             Spacer(Modifier.height(8.dp))
             Text("${study.exchange}:${study.symbol} · event ${study.eventDate}", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Bold, fontSize = 13.sp)
