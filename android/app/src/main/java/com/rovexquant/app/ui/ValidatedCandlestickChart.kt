@@ -37,6 +37,7 @@ private val ChartUp = Color(0xFF27C58B)
 private val ChartDown = Color(0xFFFF6678)
 private val ChartGrid = Color(0xFF344052)
 private val ChartCrosshair = Color(0xFF9AA8B8)
+private const val MAX_RENDERED_CHART_CANDLES = 2_000
 
 /** Native Compose candlestick renderer; all input has already passed ChartSeriesMapper. */
 @Composable
@@ -58,7 +59,8 @@ internal fun ValidatedCandlestickChart(
         mutableIntStateOf(candles.lastIndex)
     }
 
-    val safeCount = windowCount.coerceIn(1, candles.size.coerceAtLeast(1))
+    val renderLimit = minOf(candles.size, MAX_RENDERED_CHART_CANDLES).coerceAtLeast(1)
+    val safeCount = windowCount.coerceIn(1, renderLimit)
     val safeStart = windowStart.coerceIn(0, (candles.size - safeCount).coerceAtLeast(0))
     val safeEnd = (safeStart + safeCount).coerceAtMost(candles.size)
     val visible = remember(candles, safeStart, safeEnd) {
@@ -95,12 +97,12 @@ internal fun ValidatedCandlestickChart(
                 }
             ) { Text("Reset view") }
             TextButton(
-                enabled = candles.isNotEmpty() && safeCount != candles.size,
+                enabled = candles.isNotEmpty() && safeCount != renderLimit,
                 onClick = {
-                    windowStart = 0
-                    windowCount = candles.size.coerceAtLeast(1)
+                    windowCount = renderLimit
+                    windowStart = (candles.size - renderLimit).coerceAtLeast(0)
                 }
-            ) { Text("Fit all") }
+            ) { Text("Max view · 2k") }
         }
 
         Canvas(
@@ -125,7 +127,7 @@ internal fun ValidatedCandlestickChart(
                         val focalIndex = windowStart + fraction * oldCount
                         val minimumWindow = minOf(20, candles.size).coerceAtLeast(1)
                         val nextCount = (oldCount / zoom).roundToInt()
-                            .coerceIn(minimumWindow, candles.size)
+                            .coerceIn(minimumWindow, minOf(candles.size, MAX_RENDERED_CHART_CANDLES))
                         val panBars = (pan.x / size.width) * nextCount
                         val nextStart = (focalIndex - fraction * nextCount - panBars)
                             .roundToInt().coerceIn(0, (candles.size - nextCount).coerceAtLeast(0))
@@ -226,8 +228,8 @@ internal fun ValidatedCandlestickChart(
             fontSize = 9.sp
         )
         Text(
-            if (data.volumeAvailable) "Candlesticks · volume bars · tap to inspect · pinch to zoom · drag to pan"
-            else "Candlesticks · index volume not published · tap to inspect · pinch to zoom · drag to pan",
+            if (data.volumeAvailable) "Candlesticks · volume bars · max 2,000 visible · pan to older history"
+            else "Candlesticks · index volume not published · max 2,000 visible · pan to older history",
             color = Color(0xFF9AA8B8),
             fontSize = 9.sp
         )
