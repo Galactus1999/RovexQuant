@@ -59,7 +59,7 @@ fun SettingsScreen(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
-            ingestionError = failure.message ?: "Database status unavailable"
+            ingestionError = "Data status temporarily unavailable."
         } finally {
             ingestionLoading = false
         }
@@ -68,7 +68,7 @@ fun SettingsScreen(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
-            providerError = failure.message ?: "AI provider status unavailable"
+            providerError = "AI service status temporarily unavailable."
         } finally {
             providersLoading = false
         }
@@ -137,7 +137,7 @@ fun SettingsScreen(
                             } catch (cancelled: CancellationException) {
                                 throw cancelled
                             } catch (failure: Exception) {
-                                tokenError = failure.message ?: "Unable to store the token."
+                                tokenError = "Credential could not be saved. Try again."
                             } finally {
                                 savingToken = false
                             }
