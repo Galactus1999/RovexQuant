@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.sp
 import com.rovexquant.app.data.local.TejHqOhlcvStore
 import com.rovexquant.app.data.local.TejHqOhlcvSyncManager
 import com.rovexquant.app.data.repository.QuantDataRepository
+import com.rovexquant.app.data.model.TechnicalIndicators
 import com.rovexquant.app.domain.InstrumentCatalog
 import com.rovexquant.app.domain.ChartSeriesMapper
 import com.rovexquant.app.domain.ChartSeriesData
@@ -50,8 +51,16 @@ fun InstrumentResearchScreen(
     var error by remember(symbol) { mutableStateOf<String?>(null) }
     var range by rememberSaveable(symbol) { mutableStateOf("1Y") }
     var volume by rememberSaveable(symbol) { mutableStateOf(true) }
-    var sma20 by rememberSaveable(symbol) { mutableStateOf(false) }
-    var sma50 by rememberSaveable(symbol) { mutableStateOf(false) }
+    var showSma by rememberSaveable(symbol) { mutableStateOf(false) }
+    var showEma by rememberSaveable(symbol) { mutableStateOf(false) }
+    var showBollinger by rememberSaveable(symbol) { mutableStateOf(false) }
+    var showRsi by rememberSaveable(symbol) { mutableStateOf(false) }
+    var showMacd by rememberSaveable(symbol) { mutableStateOf(false) }
+    var showAtr by rememberSaveable(symbol) { mutableStateOf(false) }
+    var showAdx by rememberSaveable(symbol) { mutableStateOf(false) }
+    var indicators by remember(symbol) { mutableStateOf<TechnicalIndicators?>(null) }
+    var indicatorsLoading by remember(symbol) { mutableStateOf(false) }
+    var indicatorsError by remember(symbol) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     suspend fun refreshSeries(fullHistory: Boolean = false) {
@@ -157,6 +166,44 @@ fun InstrumentResearchScreen(
         }
     }
     val latest = visible.lastOrNull()
+    val visibleStartIndex = remember(bars, visible) {
+        val firstDate = visible.firstOrNull()?.timestamp
+            ?.atZoneSameInstant(ZoneId.of("Asia/Kolkata"))?.toLocalDate()
+        if (firstDate == null) 0 else bars.indexOfFirst {
+            it.timestamp.atZoneSameInstant(ZoneId.of("Asia/Kolkata")).toLocalDate() == firstDate
+        }.coerceAtLeast(0)
+    }
+
+    LaunchedEffect(bars) {
+        if (bars.isEmpty()) {
+            indicators = null
+            indicatorsError = null
+            indicatorsLoading = false
+            return@LaunchedEffect
+        }
+        val windowSize = minOf(10_000, bars.size)
+        val startIndex = bars.size - windowSize
+        val requestBars = bars.subList(startIndex, bars.size).toList()
+        indicators = null
+        indicatorsLoading = true
+        indicatorsError = null
+        try {
+            val result = withContext(Dispatchers.IO) {
+                repository.fetchTechnicalIndicators(requestBars, startIndex)
+            }
+            require(result.startIndex == startIndex && result.barCount == requestBars.size) {
+                "Backend indicator coverage does not match the requested OHLC window."
+            }
+            indicators = result
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            indicators = null
+            indicatorsError = failure.message ?: "Backend indicator calculation is unavailable."
+        } finally {
+            indicatorsLoading = false
+        }
+    }
 
     Column(
         Modifier.fillMaxSize().background(Ink).padding(16.dp)
@@ -226,7 +273,10 @@ fun InstrumentResearchScreen(
                 )
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
             if (series?.volumeAvailable == true) {
                 FilterChip(
                     modifier = Modifier.testTag("instrument.chart.volume.toggle"),
@@ -235,8 +285,65 @@ fun InstrumentResearchScreen(
                     label = { Text("Volume") }
                 )
             }
-            FilterChip(selected = sma20, onClick = { sma20 = !sma20 }, label = { Text("SMA 20") })
-            FilterChip(selected = sma50, onClick = { sma50 = !sma50 }, label = { Text("SMA 50") })
+            FilterChip(
+                modifier = Modifier.testTag("instrument.chart.indicator.sma.toggle"),
+                enabled = indicators != null,
+                selected = showSma,
+                onClick = { showSma = !showSma },
+                label = { Text("SMA 20") }
+            )
+            FilterChip(
+                modifier = Modifier.testTag("instrument.chart.indicator.ema.toggle"),
+                enabled = indicators != null,
+                selected = showEma,
+                onClick = { showEma = !showEma },
+                label = { Text("EMA 20") }
+            )
+            FilterChip(
+                modifier = Modifier.testTag("instrument.chart.indicator.bollinger.toggle"),
+                enabled = indicators != null,
+                selected = showBollinger,
+                onClick = { showBollinger = !showBollinger },
+                label = { Text("Bollinger") }
+            )
+            FilterChip(
+                modifier = Modifier.testTag("instrument.chart.indicator.rsi.toggle"),
+                enabled = indicators != null,
+                selected = showRsi,
+                onClick = { showRsi = !showRsi },
+                label = { Text("RSI") }
+            )
+            FilterChip(
+                modifier = Modifier.testTag("instrument.chart.indicator.macd.toggle"),
+                enabled = indicators != null,
+                selected = showMacd,
+                onClick = { showMacd = !showMacd },
+                label = { Text("MACD") }
+            )
+            FilterChip(
+                modifier = Modifier.testTag("instrument.chart.indicator.atr.toggle"),
+                enabled = indicators != null,
+                selected = showAtr,
+                onClick = { showAtr = !showAtr },
+                label = { Text("ATR") }
+            )
+            FilterChip(
+                modifier = Modifier.testTag("instrument.chart.indicator.adx.toggle"),
+                enabled = indicators != null,
+                selected = showAdx,
+                onClick = { showAdx = !showAdx },
+                label = { Text("ADX") }
+            )
+        }
+        when {
+            indicatorsLoading -> Text("Calculating indicators on the backend…", color = Muted, fontSize = 9.sp)
+            indicatorsError != null -> Text("Indicators unavailable: $indicatorsError", color = Coral, fontSize = 9.sp)
+            indicators != null -> Text(
+                "Deterministic backend indicators · ${indicators!!.barCount} bars · " +
+                    "${bars.getOrNull(indicators!!.startIndex)?.timestamp?.toLocalDate()?.toString() ?: "coverage pending"} onward",
+                color = Muted,
+                fontSize = 9.sp
+            )
         }
         if (series?.volumeAvailable == false) {
             Text(
@@ -244,6 +351,14 @@ fun InstrumentResearchScreen(
                 color = Muted,
                 fontSize = 10.sp,
                 modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+
+        if (indicators != null && visibleStartIndex < indicators!!.startIndex) {
+            Text(
+                "Indicator coverage begins at ${bars.getOrNull(indicators!!.startIndex)?.timestamp?.toLocalDate() ?: "the latest 10,000 bars"}; older candles have no indicator values.",
+                color = Muted,
+                fontSize = 9.sp
             )
         }
         if (range == "ALL" && bars.isNotEmpty()) {
@@ -271,9 +386,16 @@ fun InstrumentResearchScreen(
                 chartVisibleData?.let { validated ->
                     ValidatedCandlestickChart(
                         data = validated,
+                        indicators = indicators,
+                        indicatorSourceOffset = visibleStartIndex,
                         showVolume = volume,
-                        showSma20 = sma20,
-                        showSma50 = sma50
+                        showSma = showSma,
+                        showEma = showEma,
+                        showBollinger = showBollinger,
+                        showRsi = showRsi,
+                        showMacd = showMacd,
+                        showAtr = showAtr,
+                        showAdx = showAdx
                     )
                 } ?: CircularProgressIndicator()
                 latest?.let {
