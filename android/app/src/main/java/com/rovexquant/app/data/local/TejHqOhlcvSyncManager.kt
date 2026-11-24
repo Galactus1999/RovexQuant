@@ -25,13 +25,13 @@ object TejHqOhlcvSyncManager {
     ): List<OhlcvBar> = withContext(Dispatchers.IO) {
         val normalizedExchange = exchange.trim().lowercase()
         val normalizedSymbol = symbol.trim().uppercase()
-        val previousSettings = TejHqOhlcvStore.settings(context)
-        val sameDataset = previousSettings.exchange.equals(normalizedExchange, ignoreCase = true) &&
-            previousSettings.symbol.equals(normalizedSymbol, ignoreCase = true)
-        val existing = if (sameDataset) {
-            runCatching { TejHqOhlcvStore.load(context, normalizedExchange, normalizedSymbol).orEmpty() }.getOrElse { emptyList() }
-        } else emptyList()
-        val fetchFrom = if (incremental && sameDataset) {
+        // Cache identity is the requested exchange+symbol, not the last-edited UI settings.
+        // This allows incremental refresh of any previously imported instrument without
+        // accidentally merging another symbol's bars.
+        val existing = runCatching {
+            TejHqOhlcvStore.load(context, normalizedExchange, normalizedSymbol).orEmpty()
+        }.getOrElse { emptyList() }
+        val fetchFrom = if (incremental) {
             TejHqOhlcvStore.latestDate(existing)?.minusDays(7)?.coerceAtLeast(from) ?: from
         } else from
         val fetched = repository.fetchTejHqOhlcv(
