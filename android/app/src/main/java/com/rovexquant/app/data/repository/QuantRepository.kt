@@ -19,6 +19,8 @@ import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.QuantSession
+import com.rovexquant.app.data.model.TechnicalIndicators
+import com.rovexquant.app.data.model.TechnicalIndicatorPeriods
 import com.rovexquant.app.data.remote.MarketStreamController
 import com.rovexquant.app.data.remote.QuantApi
 import com.rovexquant.app.data.remote.TejHqOhlcvClient
@@ -145,6 +147,17 @@ class QuantRepository(context: Context) : QuantDataRepository {
                 "Official NSE Indices website-backed historical form; its underlying request contract is undocumented and may change."
             } else null
         )
+    }
+
+    override suspend fun fetchTechnicalIndicators(
+        bars: List<OhlcvBar>,
+        startIndex: Int,
+        periods: TechnicalIndicatorPeriods
+    ): TechnicalIndicators = withContext(Dispatchers.IO) {
+        require(bars.size in 1..10_000) { "Indicator request window must contain at most 10,000 bars." }
+        val session = QuantSessionStore.load(appContext)
+            ?: throw IllegalStateException("Sign in again before calculating technical indicators.")
+        QuantApi.fetchTechnicalIndicators(session, bars, startIndex, periods)
     }
 
     override suspend fun fetchEventStudy(
