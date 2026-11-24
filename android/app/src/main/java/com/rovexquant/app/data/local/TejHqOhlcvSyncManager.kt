@@ -4,6 +4,9 @@ import android.content.Context
 import com.rovexquant.app.data.repository.QuantDataRepository
 import com.rovexquant.app.domain.OhlcvBar
 import com.rovexquant.app.domain.OhlcvCsvResearch
+import com.rovexquant.app.domain.InstrumentIdentity
+import com.rovexquant.app.domain.MarketOhlcvSeries
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.Dispatchers
@@ -11,6 +14,28 @@ import kotlinx.coroutines.withContext
 
 /** Coordinates one-symbol incremental refreshes without mixing provider or UI logic. */
 object TejHqOhlcvSyncManager {
+    suspend fun fetchAndSave(
+        context: Context,
+        repository: QuantDataRepository,
+        instrument: InstrumentIdentity,
+        from: LocalDate,
+        to: LocalDate,
+        incremental: Boolean
+    ): MarketOhlcvSeries = withContext(Dispatchers.IO) {
+        val existing = runCatching { TejHqOhlcvStore.load(context, instrument).orEmpty() }
+            .getOrElse { emptyList() }
+        val fetchFrom = if (incremental) {
+            TejHqOhlcvStore.latestDate(existing)?.minusDays(7)?.coerceAtLeast(from) ?: from
+        } else from
+        val fetched = repository.fetchInstrumentOhlcv(instrument, fetchFrom, to)
+        val merged = if (incremental && existing.isNotEmpty()) {
+            OhlcvCsvResearch.merge(existing, fetched.bars)
+        } else fetched.bars
+        TejHqOhlcvStore.save(context, instrument, merged)
+        TejHqOhlcvStore.markSynced(context, instrument)
+        fetched.copy(bars = merged, retrievedAt = Instant.now())
+    }
+
     private val marketZone = ZoneId.of("Asia/Kolkata")
     private const val AUTO_SYNC_INTERVAL_MILLIS = 12L * 60L * 60L * 1000L
 

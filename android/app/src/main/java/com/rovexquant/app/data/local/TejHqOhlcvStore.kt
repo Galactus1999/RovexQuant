@@ -2,6 +2,9 @@ package com.rovexquant.app.data.local
 
 import android.content.Context
 import com.rovexquant.app.domain.OhlcvBar
+import com.rovexquant.app.domain.InstrumentIdentity
+import com.rovexquant.app.domain.InstrumentType
+import com.rovexquant.app.domain.InstrumentCatalog
 import com.rovexquant.app.domain.OhlcvCsvResearch
 import java.io.File
 import java.nio.file.AtomicMoveNotSupportedException
@@ -37,10 +40,47 @@ object TejHqOhlcvStore {
 
     fun load(context: Context): List<OhlcvBar>? {
         val current = settings(context)
-        return load(context, current.exchange, current.symbol)
+        val typed = runCatching {
+            load(context, InstrumentCatalog.resolve(current.symbol, current.exchange))
+        }.getOrNull()
+        return typed ?: load(context, current.exchange, current.symbol)
             ?: File(context.filesDir, FILE_NAME).takeIf { it.isFile }
                 ?.readText(Charsets.UTF_8)?.let(OhlcvCsvResearch::parse)
     }
+
+    /** Typed cache identity includes exchange, instrument class, interval and canonical symbol. */
+    fun load(context: Context, instrument: InstrumentIdentity): List<OhlcvBar>? {
+        val file = File(context.filesDir, cacheFileName(instrument))
+        if (file.isFile) return OhlcvCsvResearch.parse(file.readText(Charsets.UTF_8))
+        // Read pre-typed equity cache files for backward compatibility; never use them for indices.
+        if (instrument.instrumentType == InstrumentType.EQUITY) {
+            val legacy = File(context.filesDir, cacheFileName(instrument.exchange, instrument.canonicalSymbol))
+            if (legacy.isFile) return OhlcvCsvResearch.parse(legacy.readText(Charsets.UTF_8))
+        }
+        return null
+    }
+
+    fun save(context: Context, instrument: InstrumentIdentity, bars: List<OhlcvBar>) {
+        writeAtomically(File(context.filesDir, cacheFileName(instrument)), bars)
+    }
+
+    internal fun cacheFileName(instrument: InstrumentIdentity): String {
+        val safeSymbol = instrument.canonicalSymbol.replace(Regex("[^A-Z0-9_-]"), "_")
+        return "ohlcv_${instrument.exchange}_${instrument.instrumentType.name}_${instrument.interval.key}_$safeSymbol.csv"
+    }
+
+    fun markSynced(context: Context, instrument: InstrumentIdentity) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putLong(typedSeriesLastSyncKey(instrument), System.currentTimeMillis())
+            .apply()
+    }
+
+    fun lastSyncedMillis(context: Context, instrument: InstrumentIdentity): Long =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getLong(typedSeriesLastSyncKey(instrument), 0L)
+
+    private fun typedSeriesLastSyncKey(instrument: InstrumentIdentity): String =
+        "last_sync_typed_" + cacheFileName(instrument).removePrefix("ohlcv_").removeSuffix(".csv")
 
     fun load(context: Context, exchange: String, symbol: String): List<OhlcvBar>? {
         val file = seriesFile(context, exchange, symbol)

@@ -22,6 +22,17 @@ class OhlcvCacheIdentityTest {
         )
     }
 
+    @Test fun typedCacheIdentityIncludesInstrumentTypeAndInterval() {
+        val equity = com.rovexquant.app.domain.InstrumentCatalog.resolve("RELIANCE")
+        val index = com.rovexquant.app.domain.InstrumentCatalog.resolve("NIFTY 50")
+        val equityFile = TejHqOhlcvStore.cacheFileName(equity)
+        val indexFile = TejHqOhlcvStore.cacheFileName(index)
+
+        assertEquals("ohlcv_NSE_EQUITY_1d_RELIANCE.csv", equityFile)
+        assertEquals("ohlcv_NSE_BROAD_MARKET_INDEX_1d_NIFTY_50.csv", indexFile)
+        assertNotEquals(equityFile, indexFile)
+    }
+
     @Test fun cacheIdentityRejectsPathTraversalAndInvalidSymbols() {
         listOf("../NSE", "NSE/../../cache", "").forEach { exchange ->
             assert(org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
