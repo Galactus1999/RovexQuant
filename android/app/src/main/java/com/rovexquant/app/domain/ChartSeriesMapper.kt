@@ -2,6 +2,7 @@ package com.rovexquant.app.domain
 
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 
 /** Renderer-neutral daily candle; time is an exchange trading date (ISO-8601). */
 data class ChartCandle(
@@ -40,6 +41,7 @@ data class ChartSeriesData(
  */
 object ChartSeriesMapper {
     const val MAX_CHART_BARS = 100_000
+    private val exchangeZone: ZoneId = ZoneId.of("Asia/Kolkata")
 
     fun map(series: MarketOhlcvSeries): ChartSeriesData {
         val instrument = series.instrument
@@ -59,6 +61,11 @@ object ChartSeriesMapper {
             }
         }
         require(series.bars.isNotEmpty()) { "No historical bars are available for this chart." }
+        if (!series.volumeAvailable) {
+            require(series.bars.all { it.volume == 0L }) {
+                "A source marked as volume-unavailable must not carry non-zero volume values."
+            }
+        }
         require(series.bars.size <= MAX_CHART_BARS) {
             "Chart history exceeds the ${MAX_CHART_BARS} bar safety limit."
         }
@@ -73,7 +80,7 @@ object ChartSeriesMapper {
             require(previousInstant?.let { instant.isAfter(it) } ?: true) {
                 "Chart bars must be strictly ordered by timestamp without duplicates (bar ${index + 1})."
             }
-            val tradingDate = bar.timestamp.toLocalDate()
+            val tradingDate = bar.timestamp.atZoneSameInstant(exchangeZone).toLocalDate()
             require(previousTradingDate?.let { tradingDate.isAfter(it) } ?: true) {
                 "Daily chart bars must have unique, increasing exchange trading dates (bar ${index + 1})."
             }
