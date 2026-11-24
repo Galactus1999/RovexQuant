@@ -19,7 +19,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -28,7 +27,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -163,7 +161,7 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
                     } else {
                         visibleFields.forEach { key ->
                             val spec = properties.optJSONObject(key) ?: JSONObject()
-                            val label = key.replace(Regex("([a-z])([A-Z])"), "$1 $2")
+                            val label = key.replace(Regex("([a-z])([A-Z])")) { match -> match.groupValues[1] + " " + match.groupValues[2] }
                                 .replace('_', ' ').replaceFirstChar { it.uppercase() }
                             val type = spec.optString("type", "string")
                             val format = spec.optString("format")
