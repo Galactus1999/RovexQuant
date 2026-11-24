@@ -156,6 +156,12 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
 
     LazyColumn(modifier = Modifier.fillMaxSize().testTag("research.lab.list"), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { SectionHeading("RESEARCH", "Research lab.", "") }
+        item {
+            TejHqOhlcvPanel(repository) { loaded, name ->
+                summary = loaded
+                datasetName = name
+            }
+        }
         if (session != null && repository != null) {
             item { NseMcpResearchPanel(session, repository) }
             item {
@@ -232,12 +238,6 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
                         Text("Retrieved ${report.retrievedAt}. Annual macro observations and daily fund NAVs are not equity quotes or intraday signals.", color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
                     }
                 }
-            }
-        }
-        item {
-            TejHqOhlcvPanel(repository) { loaded, name ->
-                summary = loaded
-                datasetName = name
             }
         }
         item {
