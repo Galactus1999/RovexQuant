@@ -201,7 +201,7 @@ fun InstrumentResearchScreen(
                 chartData = mapped
                 loading = false
             }.onFailure { failure ->
-                error = failure.message ?: "Cached chart data failed validation."
+                error = "Saved chart data could not be loaded. Refresh historical data."
             }
         }
         refreshSeries()
@@ -287,13 +287,13 @@ fun InstrumentResearchScreen(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (backendFailure: Exception) {
-                indicatorsNotice = backendFailure.message ?: "Backend indicator service unavailable."
+                indicatorsNotice = "Live indicator service unavailable; locally calculated values are shown."
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
             indicators = null
-            indicatorsError = failure.message ?: "Local indicator calculation failed."
+            indicatorsError = "Indicators are unavailable for this data window."
         } finally {
             indicatorsLoading = false
         }
