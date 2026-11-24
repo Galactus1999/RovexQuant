@@ -6,6 +6,8 @@ import com.rovexquant.app.domain.OhlcvBar
 import com.rovexquant.app.domain.OhlcvCsvResearch
 import java.time.LocalDate
 import java.time.ZoneId
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** Coordinates one-symbol incremental refreshes without mixing provider or UI logic. */
 object TejHqOhlcvSyncManager {
@@ -20,7 +22,7 @@ object TejHqOhlcvSyncManager {
         from: LocalDate,
         to: LocalDate,
         incremental: Boolean
-    ): List<OhlcvBar> {
+    ): List<OhlcvBar> = withContext(Dispatchers.IO) {
         val normalizedExchange = exchange.trim().lowercase()
         val normalizedSymbol = symbol.trim().uppercase()
         val previousSettings = TejHqOhlcvStore.settings(context)
@@ -47,7 +49,7 @@ object TejHqOhlcvSyncManager {
             )
         )
         TejHqOhlcvStore.markSynced(context)
-        return merged
+        merged
     }
 
     suspend fun refreshIfDue(
