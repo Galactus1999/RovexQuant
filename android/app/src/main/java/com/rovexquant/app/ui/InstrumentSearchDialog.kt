@@ -134,7 +134,7 @@ fun InstrumentSearchDialog(
                                 }
                                 Text(item.type, color = Cyan, fontSize = 8.sp)
                             }
-                            HorizontalDivider(color = ColorLine.copy(alpha = 0.45f))
+                            HorizontalDivider(color = Muted.copy(alpha = 0.25f))
                         }
                     }
                 }
