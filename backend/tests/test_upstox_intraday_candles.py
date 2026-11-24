@@ -1,3 +1,8 @@
+from fastapi.testclient import TestClient
+
+from rovexquant.api.routers import market as market_routes
+from rovexquant.api.main import app
+from rovexquant.auth import issue_app_session
 import asyncio
 from datetime import date
 
@@ -84,3 +89,30 @@ def test_upstox_v3_rejects_malformed_ohlc_and_naive_timestamps():
         upstox_candles._parse_candles({"data": {"candles": [[
             "2026-11-24T09:15:00", 100, 101, 99, 100, 1
         ]]}})
+
+
+def test_intraday_candle_route_requires_app_session_and_passes_query_symbol(monkeypatch):
+    monkeypatch.setenv("QUANT_APP_USERNAME", "quant-user")
+    monkeypatch.setenv("QUANT_APP_PASSWORD", "long-test-password")
+    monkeypatch.setenv("QUANT_APP_SESSION_SIGNING_KEY", "s" * 48)
+
+    async def fake_fetch(exchange, symbol, interval, from_date, to_date):
+        assert exchange == "NSE"
+        assert symbol == "NIFTY FINANCIAL SERVICES 25/50"
+        assert interval == "5m"
+        assert from_date == date(2026, 11, 23)
+        assert to_date == date(2026, 11, 24)
+        return {"provider": "UPSTOX_V3", "count": 0, "bars": []}
+
+    monkeypatch.setattr(market_routes, "fetch_intraday_candles", fake_fetch)
+    client = TestClient(app)
+    url = (
+        "/api/v1/app/market/candles?exchange=NSE"
+        "&symbol=NIFTY+FINANCIAL+SERVICES+25%2F50"
+        "&interval=5m&from=2026-11-23&to=2026-11-24"
+    )
+    assert client.get(url).status_code == 401
+    token, _ = issue_app_session("quant-user", "long-test-password")
+    response = client.get(url, headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    assert response.json()["provider"] == "UPSTOX_V3"
