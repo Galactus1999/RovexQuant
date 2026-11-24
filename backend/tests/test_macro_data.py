@@ -167,3 +167,37 @@ def test_amfi_uses_official_portal_feed_and_follows_redirects(monkeypatch):
     asyncio.run(macro_data.fetch_amfi_nav(limit=1))
     assert captured["url"] == "https://portal.amfiindia.com/spages/NAVAll.txt"
     assert captured["follow_redirects"] is True
+
+
+
+def test_rbi_dbie_mirror_keeps_successful_series_when_another_series_fails(monkeypatch):
+    async def fake_get_json(url, params):
+        if "fr_exg_resv_rn" in url:
+            return {
+                "series": [{
+                    "label": "Foreign exchange reserves",
+                    "observations": [{"period": "2026-W36", "value": 692500.0}],
+                }],
+                "as_of": "2026-09",
+            }
+        raise macro_data.MacroProviderError("Provider returned HTTP 404")
+
+    monkeypatch.setattr(macro_data, "_get_json", fake_get_json)
+    result = asyncio.run(macro_data.fetch_rbi_dbie_mirror(["forex_reserves", "wholesale_price_index"]))
+    assert len(result["series"]) == 1
+    assert result["series"][0]["key"] == "forex_reserves"
+    assert len(result["provider_warnings"]) == 1
+    assert "HTTP 404" in result["provider_warnings"][0]
+
+
+def test_rbi_dbie_mirror_reports_provider_error_when_all_series_fail(monkeypatch):
+    async def fake_get_json(url, params):
+        raise macro_data.MacroProviderError("Provider returned HTTP 503")
+
+    monkeypatch.setattr(macro_data, "_get_json", fake_get_json)
+    try:
+        asyncio.run(macro_data.fetch_rbi_dbie_mirror(["forex_reserves"]))
+    except macro_data.MacroProviderError as error:
+        assert "HTTP 503" in str(error)
+    else:
+        raise AssertionError("all failed RBI mirror series must remain a provider failure")
