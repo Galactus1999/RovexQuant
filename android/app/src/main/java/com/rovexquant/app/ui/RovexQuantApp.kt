@@ -1,6 +1,7 @@
 package com.rovexquant.app.ui
 
 import android.app.Application
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -44,6 +45,8 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
     )
     val state by workspace.uiState.collectAsStateWithLifecycle()
     var selected by remember { mutableStateOf(TerminalSection.PULSE) }
+    var showSettings by remember { mutableStateOf(false) }
+    BackHandler(enabled = showSettings) { showSettings = false }
 
     if (state.restoringSession) {
         Box(Modifier.fillMaxSize().background(Ink), contentAlignment = Alignment.Center) {
@@ -72,10 +75,20 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
                     state.streamStatus.startsWith("Connected") -> "Connected"
                     else -> "Backend"
                 },
-                onSignOut = workspace::signOut
+                onSignOut = workspace::signOut,
+                onOpenSettings = { showSettings = true }
             )
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
+            if (showSettings) {
+                SettingsScreen(
+                    session = activeSession,
+                    repository = workspace.repository,
+                    onBack = { showSettings = false },
+                    onOpenAiSettings = { showSettings = false; selected = TerminalSection.AI },
+                    onOpenMarketPulse = { showSettings = false; selected = TerminalSection.PULSE }
+                )
+            } else {
             AnimatedContent(targetState = selected, label = "workspaceTransition") { destination ->
                 when (destination) {
                     TerminalSection.PULSE -> MarketPulseScreen(
@@ -105,8 +118,11 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
                     TerminalSection.AI -> AiWorkspaceScreen(session = activeSession, repository = workspace.repository)
                 }
             }
+            }
         }
-        TerminalNavigation(selected = selected, onSelect = { selected = it })
+        if (!showSettings) {
+            TerminalNavigation(selected = selected, onSelect = { selected = it })
+        }
     }
 }
 
