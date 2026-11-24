@@ -1,16 +1,14 @@
-from fastapi.testclient import TestClient
-
-from rovexquant.api.routers import market as market_routes
-from rovexquant.api.main import app
-from rovexquant.auth import issue_app_session
 import asyncio
 from datetime import date
 
 import httpx
 import pytest
+from fastapi.testclient import TestClient
 
+from rovexquant.api.main import app
+from rovexquant.api.routers import market as market_routes
+from rovexquant.auth import issue_app_session
 from rovexquant.market_data import upstox_candles
-
 
 def test_upstox_v3_merges_historical_and_current_session_candles(monkeypatch):
     today = date(2026, 11, 24)
