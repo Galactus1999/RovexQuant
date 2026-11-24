@@ -84,7 +84,7 @@ fun TejHqOhlcvPanel(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
-                error = failure.message ?: "OHLCV extraction failed"
+                error = "Historical data unavailable. Try another date range."
             } finally {
                 loading = false
             }
@@ -106,7 +106,7 @@ fun TejHqOhlcvPanel(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
-                error = failure.message ?: "Automatic refresh failed"
+                error = "Historical data refresh delayed."
             }
         }
     }
@@ -180,7 +180,7 @@ fun TejHqOhlcvPanel(
         }
         if (loading) CircularProgressIndicator(modifier = Modifier.width(22.dp).height(22.dp))
         status?.let { Text(it, color = Mint, fontSize = 10.sp) }
-        error?.let { Text(it, color = Coral, fontSize = 10.sp) }
+        error?.let { GracefulErrorState("Historical data delayed. Tap retry to check again.") }
         Text(
             "Raw exchange EOD bars. Corporate-action adjustments are not applied.",
             color = Muted,
