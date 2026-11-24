@@ -142,3 +142,46 @@ fun InstrumentSearchDialog(
         }
     }
 }
+
+
+@Composable
+fun InstrumentSymbolPicker(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    testTag: String,
+    equities: List<MarketEquityInstrument>,
+    indexKeys: Map<String, String>,
+    placeholder: String = "Search by name or symbol"
+) {
+    var showSearch by remember(testTag) { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.weight(1f).testTag(testTag),
+            singleLine = true,
+            label = { Text(label) },
+            placeholder = { Text(placeholder) }
+        )
+        TextButton(
+            onClick = { showSearch = true },
+            modifier = Modifier.testTag("$testTag.find")
+        ) { Text("Find") }
+    }
+    if (showSearch) {
+        InstrumentSearchDialog(
+            equities = equities,
+            indexKeys = indexKeys,
+            onDismiss = { showSearch = false },
+            onSelect = { symbol, _ ->
+                onValueChange(symbol)
+                showSearch = false
+            }
+        )
+    }
+}
