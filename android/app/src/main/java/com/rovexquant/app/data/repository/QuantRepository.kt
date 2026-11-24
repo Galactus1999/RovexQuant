@@ -21,6 +21,9 @@ import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.data.remote.MarketStreamController
 import com.rovexquant.app.data.remote.QuantApi
+import com.rovexquant.app.data.remote.TejHqOhlcvClient
+import com.rovexquant.app.domain.OhlcvBar
+import java.time.LocalDate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -105,6 +108,12 @@ class QuantRepository(context: Context) : QuantDataRepository {
         session: QuantSession, query: String, timespan: String
     ): IntelligenceFeed = withContext(Dispatchers.IO) {
         QuantApi.fetchIntelligenceEvents(session, query, timespan)
+    }
+
+    override suspend fun fetchTejHqOhlcv(
+        exchange: String, symbol: String, from: LocalDate, to: LocalDate
+    ): List<OhlcvBar> = withContext(Dispatchers.IO) {
+        TejHqOhlcvClient.fetch(exchange, symbol, from, to)
     }
 
     override suspend fun fetchEventStudy(
