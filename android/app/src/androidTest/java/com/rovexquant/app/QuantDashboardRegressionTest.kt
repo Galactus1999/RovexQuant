@@ -66,6 +66,13 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("sector.index.NIFTY BANK").performClick()
         composeRule.onNodeWithTag("instrument.research.screen").assertIsDisplayed()
         composeRule.onNodeWithText("NIFTY BANK").assertIsDisplayed()
+        composeRule.waitUntil(15_000) {
+            composeRule.onAllNodesWithTag("instrument.chart.candles")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("instrument.chart.candles").assertIsDisplayed()
+        composeRule.onAllNodesWithTag("instrument.chart.volume.toggle").assertCountEquals(0)
+        composeRule.onNodeWithText("Traded volume is not published for this index series.").assertIsDisplayed()
         composeRule.onNodeWithText("← Back to Pulse").performClick()
         composeRule.onNodeWithTag("market.pulse.list").assertIsDisplayed()
     }
