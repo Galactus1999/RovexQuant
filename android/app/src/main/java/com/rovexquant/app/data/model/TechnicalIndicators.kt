@@ -39,8 +39,10 @@ data class TechnicalIndicators(
     val endExclusive: Int get() = startIndex + barCount
 
     /** Returns the response-array index for a source-bar index, or null outside coverage. */
-    fun localIndexForSourceBar(sourceBarIndex: Int): Int? =
-        (sourceBarIndex - startIndex).takeIf { it in 0 until barCount }
+    fun localIndexForSourceBar(sourceBarIndex: Int): Int? {
+        if (sourceBarIndex < startIndex || sourceBarIndex >= endExclusive) return null
+        return sourceBarIndex - startIndex
+    }
 }
 
 data class TechnicalIndicatorPeriods(
