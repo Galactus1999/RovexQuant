@@ -109,3 +109,61 @@ def test_rbi_dbie_mirror_rejects_unallowlisted_series():
         assert "Unsupported" in str(error)
     else:
         raise AssertionError("unapproved RBI series must be rejected")
+
+
+
+class FakeAmfiResponse:
+    content = (
+        "Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;Scheme Name;Plan;Option;Net Asset Value;Date\n"
+        "135762;INF846K01WO1;-;Axis Children's Fund;Direct Plan;Growth Option;31.2861;23-Nov-2026\n"
+        "120586;INF109K01480;-;ICICI Prudential Large Cap Fund;123.4567;21-May-2026\n"
+    ).encode("utf-8")
+
+    def raise_for_status(self):
+        return None
+
+
+class FakeAmfiAsyncClient:
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    async def get(self, url):
+        self.url = url
+        return FakeAmfiResponse()
+
+
+def test_amfi_parser_supports_current_eight_column_and_legacy_six_column_rows(monkeypatch):
+    monkeypatch.setattr(macro_data.httpx, "AsyncClient", FakeAmfiAsyncClient)
+    result = asyncio.run(macro_data.fetch_amfi_nav(limit=10))
+    assert result["result_count"] == 2
+    current, legacy = result["observations"]
+    assert current["scheme_code"] == 135762
+    assert current["nav"] == 31.2861
+    assert current["nav_date"] == "23-Nov-2026"
+    assert legacy["scheme_code"] == 120586
+    assert legacy["nav"] == 123.4567
+    assert legacy["nav_date"] == "21-May-2026"
+
+
+def test_amfi_uses_official_portal_feed_and_follows_redirects(monkeypatch):
+    captured = {}
+
+    class CapturingClient(FakeAmfiAsyncClient):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            captured.update(kwargs)
+
+        async def get(self, url):
+            captured["url"] = url
+            return FakeAmfiResponse()
+
+    monkeypatch.setattr(macro_data.httpx, "AsyncClient", CapturingClient)
+    asyncio.run(macro_data.fetch_amfi_nav(limit=1))
+    assert captured["url"] == "https://portal.amfiindia.com/spages/NAVAll.txt"
+    assert captured["follow_redirects"] is True
