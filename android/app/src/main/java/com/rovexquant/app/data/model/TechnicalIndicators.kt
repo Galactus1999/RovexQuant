@@ -23,6 +23,7 @@ data class TechnicalIndicators(
     init {
         require(startIndex >= 0) { "Indicator start index cannot be negative." }
         require(barCount > 0) { "Indicator window must contain at least one bar." }
+        require(startIndex <= Int.MAX_VALUE - barCount) { "Indicator source window exceeds the supported index range." }
         val arrays = listOf(
             sma, ema, rsi, macdLine, macdSignal, macdHistogram,
             bollingerUpper, bollingerMiddle, bollingerLower, atr, adx
@@ -36,6 +37,10 @@ data class TechnicalIndicators(
     }
 
     val endExclusive: Int get() = startIndex + barCount
+
+    /** Returns the response-array index for a source-bar index, or null outside coverage. */
+    fun localIndexForSourceBar(sourceBarIndex: Int): Int? =
+        (sourceBarIndex - startIndex).takeIf { it in 0 until barCount }
 }
 
 data class TechnicalIndicatorPeriods(
