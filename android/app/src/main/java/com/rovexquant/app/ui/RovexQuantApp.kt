@@ -1,5 +1,7 @@
 package com.rovexquant.app.ui
 
+import android.app.Application
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -8,6 +10,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -18,10 +22,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -30,7 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rovexquant.app.feature.workspace.QuantWorkspaceViewModel
 
-private enum class TerminalSection(val label: String, val glyph: String) {
+internal enum class TerminalSection(val label: String, val glyph: String) {
     PULSE("Pulse", "◈"), SCANNER("Scan", "⌕"), SIGNALS("Signals", "⌁"),
     LAB("Lab", "⌘"), PORTFOLIO("Portfolio", "▤"), INTELLIGENCE("Intel", "✦"),
     MACRO("Macro", "◎"), AI("Chat", "◉"), RESEARCH("Research", "✧")
@@ -45,7 +49,7 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
     val state by workspace.uiState.collectAsStateWithLifecycle()
     var selected by remember { mutableStateOf(TerminalSection.PULSE) }
     var showSettings by remember { mutableStateOf(false) }
-    val wideLayout = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 720
+    val wideLayout = shouldUseNavigationRail(androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp)
     BackHandler(enabled = showSettings) { showSettings = false }
 
     if (state.restoringSession) {
@@ -116,8 +120,11 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
     }
 }
 
+/** Uses the expanded-width breakpoint for switching to a persistent navigation rail. */
+internal fun shouldUseNavigationRail(windowWidthDp: Int): Boolean = windowWidthDp >= 840
+
 @Composable
-private fun TerminalNavigation(
+internal fun TerminalNavigation(
     selected: TerminalSection,
     onSelect: (TerminalSection) -> Unit,
     vertical: Boolean = false
@@ -125,12 +132,12 @@ private fun TerminalNavigation(
     val primary = listOf(TerminalSection.PULSE, TerminalSection.SCANNER, TerminalSection.LAB, TerminalSection.INTELLIGENCE)
     val secondary = listOf(TerminalSection.RESEARCH, TerminalSection.SIGNALS, TerminalSection.PORTFOLIO, TerminalSection.MACRO, TerminalSection.AI)
     var moreExpanded by remember { mutableStateOf(false) }
-    val itemModifier = Modifier.semantics { contentDescription = "Open workspace" }
 
     if (vertical) {
         Column(
             Modifier.width(92.dp).fillMaxHeight().navigationBarsPadding().padding(start = 8.dp, top = 8.dp, bottom = 8.dp)
-                .clip(RoundedCornerShape(24.dp)).background(PanelRaised).padding(6.dp),
+                .clip(RoundedCornerShape(24.dp)).background(PanelRaised).padding(6.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(3.dp), horizontalAlignment = Alignment.CenterHorizontally
         ) {
             (primary + secondary).forEach { destination ->
@@ -139,6 +146,7 @@ private fun TerminalNavigation(
                 Column(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp))
                         .background(if (active) Mint.copy(alpha = .12f) else PanelRaised)
+                        .semantics { contentDescription = "Open ${destination.label}"; selected = active }
                         .clickable(role = Role.Tab, onClickLabel = "Open ${destination.label}") { onSelect(destination) }
                         .padding(vertical = 9.dp), horizontalAlignment = Alignment.CenterHorizontally
                 ) {
@@ -166,7 +174,8 @@ private fun TerminalNavigation(
                 val active = selected == destination
                 val tint by animateColorAsState(if (active) Mint else Muted, label = "navigationTint")
                 Column(
-                    itemModifier.weight(1f).clip(RoundedCornerShape(16.dp))
+                    Modifier.weight(1f).clip(RoundedCornerShape(16.dp))
+                        .semantics { contentDescription = "Open ${destination.label}"; selected = active }
                         .clickable(role = Role.Tab, onClickLabel = "Open ${destination.label}") { onSelect(destination) }
                         .padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally
                 ) {
