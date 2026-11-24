@@ -2,6 +2,8 @@ package com.rovexquant.app.data.repository
 
 import android.content.Context
 import com.rovexquant.app.data.local.QuantSessionStore
+import com.rovexquant.app.data.local.InstrumentMasterStore
+import com.rovexquant.app.data.local.InstrumentMasterCache
 import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiProvider
@@ -62,6 +64,18 @@ class QuantRepository(context: Context) : QuantDataRepository {
 
     override suspend fun fetchEquityInstruments(session: QuantSession): List<MarketEquityInstrument> =
         withContext(Dispatchers.IO) { QuantApi.fetchEquityInstruments(session) }
+
+    override suspend fun loadCachedIndexInstruments(): InstrumentMasterCache<MarketIndexInstrument>? =
+        withContext(Dispatchers.IO) { InstrumentMasterStore.loadIndices(appContext) }
+
+    override suspend fun loadCachedEquityInstruments(): InstrumentMasterCache<MarketEquityInstrument>? =
+        withContext(Dispatchers.IO) { InstrumentMasterStore.loadEquities(appContext) }
+
+    override suspend fun saveCachedIndexInstruments(instruments: List<MarketIndexInstrument>) =
+        withContext(Dispatchers.IO) { InstrumentMasterStore.saveIndices(appContext, instruments) }
+
+    override suspend fun saveCachedEquityInstruments(instruments: List<MarketEquityInstrument>) =
+        withContext(Dispatchers.IO) { InstrumentMasterStore.saveEquities(appContext, instruments) }
 
     override suspend fun fetchNseMcpTools(session: QuantSession, server: String): List<NseMcpCatalog> =
         withContext(Dispatchers.IO) { QuantApi.fetchNseMcpTools(session, server) }
