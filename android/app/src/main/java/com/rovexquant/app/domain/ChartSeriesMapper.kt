@@ -37,7 +37,7 @@ data class ChartSeriesData(
 
 /**
  * Converts the P1 provider-neutral OHLCV contract to a renderer-neutral chart model.
- * This is intentionally limited to the currently supported DAILY interval.
+ * Daily and intraday timestamps remain distinct; daily trading dates must be unique.
  */
 object ChartSeriesMapper {
     const val MAX_CHART_BARS = 100_000
