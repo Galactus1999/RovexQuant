@@ -231,7 +231,9 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
                                         onValueChange = { formValues = formValues + (key to it) }
                                     )
                                     normalizedKey.contains("symbol") || normalizedKey.contains("ticker") ||
-                                        normalizedKey.contains("instrument") || normalizedKey.contains("index") -> ToolInstrumentField(
+                                        normalizedKey.contains("instrument") || normalizedKey.contains("index") ||
+                                        normalizedKey.contains("stock") || normalizedKey.contains("security") ||
+                                        normalizedKey.contains("scrip") -> ToolInstrumentField(
                                         label = fieldLabel,
                                         value = current,
                                         enabled = !calling,
@@ -456,6 +458,7 @@ private fun ToolDateTimeField(
     val timeState = rememberTimePickerState(initialHour = time.hour, initialMinute = time.minute, is24Hour = true)
     var showDate by remember { mutableStateOf(false) }
     var showTime by remember { mutableStateOf(false) }
+    Text(label, color = Muted, fontSize = 10.sp)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
         TextButton(enabled = enabled, onClick = { showDate = true }, modifier = Modifier.weight(1f)) {
             Text(date.toString())
@@ -464,7 +467,6 @@ private fun ToolDateTimeField(
             Text(time.format(DateTimeFormatter.ofPattern("HH:mm")))
         }
     }
-    Text(label, color = Muted, fontSize = 9.sp)
     if (showDate) {
         DatePickerDialog(
             onDismissRequest = { showDate = false },
