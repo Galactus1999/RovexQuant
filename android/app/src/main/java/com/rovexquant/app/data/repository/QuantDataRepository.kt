@@ -1,6 +1,8 @@
 package com.rovexquant.app.data.repository
 
 import com.rovexquant.app.data.local.QuantSessionStore
+import com.rovexquant.app.domain.OhlcvBar
+import java.time.LocalDate
 import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiProvider
@@ -44,6 +46,7 @@ interface QuantDataRepository {
     suspend fun fetchMacroResearch(session: QuantSession): MacroResearchSummary
     suspend fun fetchMarketIntegrityStatus(session: QuantSession, exchange: String = "NSE"): MarketIntegrityStatus
     suspend fun fetchMarketDataHealth(session: QuantSession, exchange: String = "NSE"): MarketDataHealth
+    suspend fun fetchTejHqOhlcv(exchange: String, symbol: String, from: LocalDate, to: LocalDate): List<OhlcvBar>
     suspend fun fetchEventStudy(session: QuantSession, symbol: String, eventDate: String, benchmarkSymbol: String?): EventStudyResult
     suspend fun sendAiMessage(
         session: QuantSession,
