@@ -43,6 +43,7 @@ fun InstrumentResearchScreen(
         runCatching { InstrumentCatalog.resolve(symbol, "NSE") }.exceptionOrNull()?.message
     }
     var series by remember(symbol) { mutableStateOf<MarketOhlcvSeries?>(null) }
+    var chartData by remember(symbol) { mutableStateOf<ChartSeriesData?>(null) }
     var loading by remember(symbol) { mutableStateOf(true) }
     var refreshing by remember(symbol) { mutableStateOf(false) }
     var error by remember(symbol) { mutableStateOf<String?>(null) }
@@ -59,16 +60,18 @@ fun InstrumentResearchScreen(
         try {
             val today = LocalDate.now(ZoneId.of("Asia/Kolkata"))
             val result = withContext(Dispatchers.IO) {
-                TejHqOhlcvSyncManager.fetchAndSave(
+                val fetched = TejHqOhlcvSyncManager.fetchAndSave(
                     context = context,
                     repository = repository,
                     instrument = selected,
                     from = if (fullHistory) today.minusDays(6200) else today.minusYears(3),
                     to = today,
                     incremental = !fullHistory
-                ).also { ChartSeriesMapper.map(it) }
+                )
+                fetched to ChartSeriesMapper.map(fetched)
             }
-            series = result
+            series = result.first
+            chartData = result.second
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
@@ -86,38 +89,55 @@ fun InstrumentResearchScreen(
             loading = false
             return@LaunchedEffect
         }
-        val cachedSeries = withContext(Dispatchers.IO) {
+        val cachedResult = withContext(Dispatchers.IO) {
             val cached = runCatching { TejHqOhlcvStore.load(context, selected) }.getOrNull()
             if (cached.isNullOrEmpty()) {
                 null
             } else {
-                val lastSync = TejHqOhlcvStore.lastSyncedMillis(context, selected)
-                MarketOhlcvSeries(
-                    instrument = selected,
-                    bars = cached,
-                    retrievedAt = lastSync.takeIf { it > 0L }?.let(Instant::ofEpochMilli),
-                    volumeAvailable = selected.provider == com.rovexquant.app.domain.OhlcvProvider.TEJHQ_EOD,
-                    adjustmentStatus = if (selected.provider == com.rovexquant.app.domain.OhlcvProvider.TEJHQ_EOD) {
-                        "Raw end-of-day bhavcopy prices; corporate-action adjustment not applied"
-                    } else {
-                        "Price Return Index OHLC; dividends are not included"
-                    }
-                ).also(ChartSeriesMapper::map)
+                runCatching {
+                    val lastSync = TejHqOhlcvStore.lastSyncedMillis(context, selected)
+                    val cachedSeries = MarketOhlcvSeries(
+                        instrument = selected,
+                        bars = cached,
+                        retrievedAt = lastSync.takeIf { it > 0L }?.let(Instant::ofEpochMilli),
+                        volumeAvailable = selected.provider == com.rovexquant.app.domain.OhlcvProvider.TEJHQ_EOD,
+                        adjustmentStatus = if (selected.provider == com.rovexquant.app.domain.OhlcvProvider.TEJHQ_EOD) {
+                            "Raw end-of-day bhavcopy prices; corporate-action adjustment not applied"
+                        } else {
+                            "Price Return Index OHLC; dividends are not included"
+                        }
+                    )
+                    cachedSeries to ChartSeriesMapper.map(cachedSeries)
+                }
             }
         }
-        if (cachedSeries != null) {
-            series = cachedSeries
-            loading = false
+        if (cachedResult != null) {
+            cachedResult.onSuccess { (cachedSeries, mapped) ->
+                series = cachedSeries
+                chartData = mapped
+                loading = false
+            }.onFailure { failure ->
+                error = failure.message ?: "Cached chart data failed validation."
+            }
         }
         refreshSeries()
     }
 
     val bars = series?.bars.orEmpty()
-    val chartData by produceState<ChartSeriesData?>(initialValue = null, series) {
-        val source = series
-        value = if (source == null) null else runCatching {
-            withContext(Dispatchers.Default) { ChartSeriesMapper.map(source) }
-        }.getOrNull()
+    val chartVisibleData by produceState<ChartSeriesData?>(initialValue = null, chartData, visible) {
+        val source = chartData
+        val firstDate = visible.firstOrNull()?.timestamp?.toLocalDate()?.toString()
+        val lastDate = visible.lastOrNull()?.timestamp?.toLocalDate()?.toString()
+        value = if (source == null || firstDate == null || lastDate == null) {
+            null
+        } else {
+            withContext(Dispatchers.Default) {
+                source.copy(
+                    candles = source.candles.filter { it.time >= firstDate && it.time <= lastDate },
+                    volumeBars = source.volumeBars?.filter { it.time >= firstDate && it.time <= lastDate }
+                )
+            }
+        }
     }
     val visible = remember(bars, range) {
         val today = LocalDate.now(ZoneId.of("Asia/Kolkata"))
@@ -229,7 +249,7 @@ fun InstrumentResearchScreen(
                     "${visible.size} bars  ·  ${visible.first().timestamp.toLocalDate()} → ${visible.last().timestamp.toLocalDate()}",
                     color = Muted, fontSize = 10.sp
                 )
-                chartData?.let { validated ->
+                chartVisibleData?.let { validated ->
                     ValidatedCandlestickChart(
                         data = validated,
                         showVolume = volume,
