@@ -356,8 +356,7 @@ fun MarketPulseScreen(
                     Column(Modifier.weight(1f)) {
                         Text(instrument.tradingSymbol, color = MaterialTheme.colorScheme.onBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         Text(instrument.name, color = Muted, fontSize = 9.sp, maxLines = 1)
-                        Text(quote?.quality ?: "AWAITING TICK", color = Muted, fontSize = 8.sp)
-                    }
+                            }
                     Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
                         Text(
                             quote?.lastPrice?.let { String.format(Locale.US, "%.2f", it) } ?: "—",
