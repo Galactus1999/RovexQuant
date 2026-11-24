@@ -7,11 +7,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -22,6 +23,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.unit.sp
 import com.rovexquant.app.domain.OhlcvBar
 import kotlin.math.roundToInt
@@ -50,16 +53,21 @@ internal fun CandlestickPriceChart(
     showSma20: Boolean,
     showSma50: Boolean
 ) {
-    var selected by rememberSaveable(bars.size) { mutableIntStateOf((bars.size - 1).coerceAtLeast(0)) }
-    var windowStart by rememberSaveable(bars.size) { mutableIntStateOf(0) }
-    var windowCount by rememberSaveable(bars.size) { mutableIntStateOf(bars.size.coerceAtLeast(1)) }
+    var selected by remember(bars) { mutableIntStateOf((bars.size - 1).coerceAtLeast(0)) }
+    var windowStart by remember(bars) { mutableIntStateOf(0) }
+    var windowCount by remember(bars) { mutableIntStateOf(bars.size.coerceAtLeast(1)) }
     val safeStart = windowStart.coerceIn(0, (bars.size - windowCount).coerceAtLeast(0))
     val safeEnd = (safeStart + windowCount).coerceAtMost(bars.size)
     val visibleBars = remember(bars, safeStart, safeEnd) {
         if (safeStart < safeEnd) bars.subList(safeStart, safeEnd) else emptyList()
     }
-    val sma20 = remember(bars) { simpleMovingAverage(bars, 20) }
-    val sma50 = remember(bars) { simpleMovingAverage(bars, 50) }
+    val indicatorValues by produceState<Pair<List<Double?>, List<Double?>>?>(initialValue = null, bars) {
+        value = withContext(Dispatchers.Default) {
+            simpleMovingAverage(bars, 20) to simpleMovingAverage(bars, 50)
+        }
+    }
+    val sma20 = indicatorValues?.first.orEmpty()
+    val sma50 = indicatorValues?.second.orEmpty()
     val selectedBar = bars.getOrNull(selected)
 
     Column {
@@ -72,8 +80,9 @@ internal fun CandlestickPriceChart(
         }
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val maxCandles = (maxWidth / 5.dp).roundToInt().coerceIn(1, 1_500)
-            val buckets = remember(visibleBars, safeStart, maxCandles, sma20, sma50) {
-                if (visibleBars.isEmpty()) emptyList() else {
+            val buckets by produceState<List<CandleBucket>>(initialValue = emptyList(), visibleBars, safeStart, maxCandles, indicatorValues) {
+                value = withContext(Dispatchers.Default) {
+                if (visibleBars.isEmpty() || indicatorValues == null) emptyList() else {
                     val count = minOf(maxCandles, visibleBars.size)
                     List(count) { bucketIndex ->
                         val from = bucketIndex * visibleBars.size / count
@@ -95,6 +104,17 @@ internal fun CandlestickPriceChart(
                         )
                     }
                 }
+                }
+            }
+            Row {
+                TextButton(
+                    enabled = bars.isNotEmpty() && (windowStart != 0 || windowCount != bars.size),
+                    onClick = {
+                        windowStart = 0
+                        windowCount = bars.size.coerceAtLeast(1)
+                        selected = bars.lastIndex.coerceAtLeast(0)
+                    }
+                ) { Text("Reset zoom") }
             }
             Canvas(
                 Modifier.fillMaxWidth().height(if (showVolume) 250.dp else 205.dp)
@@ -188,7 +208,7 @@ internal fun CandlestickPriceChart(
             }
         }
         Text(
-            "Tap to inspect OHLC · pinch to zoom · drag to pan · reset zoom in chart controls",
+            "Tap to inspect OHLC · pinch to zoom · drag to pan · use Reset zoom to restore the full range",
             color = Muted,
             fontSize = 9.sp
         )
