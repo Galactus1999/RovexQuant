@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from datetime import datetime, timezone
 from typing import Any
 
@@ -37,23 +38,32 @@ async def refresh_macro_sources() -> dict[str, Any]:
                 record_macro_failure(name, message)
             except Exception:
                 pass
-            providers.append({"provider": name, "status": "FAILED", "error": message})
+            providers.append({
+                "provider": name, "status": "FAILED", "error": message,
+                "configured": bool(os.getenv("FRED_API_KEY", "").strip()) if name == "FRED" else True,
+            })
             continue
         if payload.get("configured") is False:
             providers.append({
                 "provider": name, "status": "SKIPPED",
                 "reason": str(payload.get("reason") or "Provider is not configured")[:240],
+                "configured": False,
             })
             continue
         try:
-            providers.append(persist_macro_payload(name, payload))
+            persisted = persist_macro_payload(name, payload)
+            persisted["configured"] = bool(payload.get("configured", True))
+            providers.append(persisted)
         except Exception as persist_error:
             message = str(persist_error)[:240] or "Provider persistence failed"
             try:
                 record_macro_failure(name, message)
             except Exception:
                 pass
-            providers.append({"provider": name, "status": "FAILED", "error": message})
+            providers.append({
+                "provider": name, "status": "FAILED", "error": message,
+                "configured": bool(payload.get("configured", True)),
+            })
     return {
         "retrieved_at": datetime.now(timezone.utc).isoformat(),
         "providers": providers,
