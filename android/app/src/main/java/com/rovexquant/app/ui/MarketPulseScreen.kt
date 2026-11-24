@@ -7,6 +7,7 @@ import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.QuantSession
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
@@ -71,7 +72,8 @@ fun MarketPulseScreen(
     onReconnect: () -> Unit = {},
     eodSnapshot: EodMarketSnapshot? = null,
     eodSnapshotStatus: String = "EOD snapshot not loaded",
-    onRefreshEodSnapshot: () -> Unit = {}
+    onRefreshEodSnapshot: () -> Unit = {},
+    onOpenInstrument: (symbol: String, displayName: String) -> Unit = { _, _ -> }
 ) {
     val activeSession = session
     var equitySearch by remember { mutableStateOf("") }
@@ -230,7 +232,7 @@ fun MarketPulseScreen(
                     nifty?.let {
                         if (it.quality == "VALID" && isFresh(it)) "LIVE" else "STALE"
                     } ?: "—",
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f).clickable { onOpenInstrument("NIFTY 50", "NIFTY 50") }
                 )
                 MetricTile(
                     "NIFTY BANK",
@@ -239,7 +241,7 @@ fun MarketPulseScreen(
                         if (it.quality == "VALID" && isFresh(it)) "LIVE" else "STALE · ${it.quality}"
                     } ?: "Awaiting verified tick",
                     accent = Cyan,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f).clickable { onOpenInstrument("NIFTY BANK", "NIFTY BANK") }
                 )
             }
         }
@@ -272,13 +274,16 @@ fun MarketPulseScreen(
             }
             Column(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
-                    .background(sectorTint).padding(14.dp)
+                    .background(sectorTint)
+                    .clickable { onOpenInstrument(sector.benchmark, sector.benchmark) }
+                    .testTag("sector.index.${sector.benchmark}")
+                    .padding(14.dp)
             ) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(sector.sector, color = MaterialTheme.colorScheme.onBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(3.dp))
-                        Text(sector.benchmark, color = Muted, fontSize = 9.sp, letterSpacing = .5.sp, modifier = Modifier.testTag("sector.index.${sector.benchmark}"))
+                        Text(sector.benchmark, color = Muted, fontSize = 9.sp, letterSpacing = .5.sp, )
                     }
                     StatusPill(
                         quote?.takeIf { it.quality == "VALID" && isFresh(it) }?.changePercent
@@ -333,7 +338,7 @@ fun MarketPulseScreen(
             val quote = ticks[instrument.instrumentKey]
             TerminalCard {
                 Row(
-                    Modifier.fillMaxWidth(),
+                    Modifier.fillMaxWidth().clickable { onOpenInstrument(instrument.tradingSymbol, instrument.name) },
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                 ) {
