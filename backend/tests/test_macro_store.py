@@ -69,3 +69,64 @@ def test_amfi_nav_is_stored_as_mutual_fund_nav_not_equity_price():
     assert rows[0]["series_key"] == "scheme:119551"
     assert rows[0]["unit"] == "NAV"
     assert rows[0]["metadata"]["data_mode"] == "DAILY_MUTUAL_FUND_NAV"
+
+
+
+def test_macro_history_unfiltered_query_explicitly_types_nullable_parameters(monkeypatch):
+    from rovexquant.market_data import macro_store
+
+    captured = {}
+
+    class Result:
+        def fetchall(self):
+            return []
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, query, params):
+            captured["query"] = query
+            captured["params"] = params
+            return Result()
+
+    monkeypatch.setattr(macro_store, "connect", lambda: Connection())
+    result = macro_store.latest_macro_observations(limit=2000)
+
+    assert result["count"] == 0
+    assert "%s::text IS NULL" in captured["query"]
+    assert captured["params"] == (None, None, None, None, 2000)
+
+
+def test_macro_history_filtered_query_uses_same_typed_predicates(monkeypatch):
+    from rovexquant.market_data import macro_store
+
+    captured = {}
+
+    class Result:
+        def fetchall(self):
+            return []
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, query, params):
+            captured["query"] = query
+            captured["params"] = params
+            return Result()
+
+    monkeypatch.setattr(macro_store, "connect", lambda: Connection())
+    result = macro_store.latest_macro_observations(
+        provider="WORLD_BANK", series_key="inflation", limit=100
+    )
+
+    assert result["count"] == 0
+    assert captured["query"].count("%s::text IS NULL") == 2
+    assert captured["params"] == ("WORLD_BANK", "WORLD_BANK", "inflation", "inflation", 100)
