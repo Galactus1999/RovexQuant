@@ -110,6 +110,17 @@ class QuantDashboardRegressionTest {
             .performScrollTo().assertIsDisplayed()
         composeRule.waitForIdle()
         composeRule.onAllNodesWithTag("instrument.chart.volume.toggle").assertCountEquals(0)
+        for (timeframe in listOf("1m", "5m", "10m", "15m", "30m", "1h", "4h", "1d")) {
+            composeRule.onAllNodesWithTag("instrument.chart.timeframe.$timeframe").assertCountEquals(1)
+        }
+        composeRule.onNodeWithTag("instrument.chart.timeframe.5m").performClick()
+        composeRule.waitUntil(15_000) {
+            composeRule.onAllNodesWithText("Upstox V3 intraday candles", substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("instrument.chart.timeframe.5m").assertIsSelected()
+        composeRule.onAllNodesWithTag("instrument.chart.volume.toggle").assertCountEquals(0)
         composeRule.waitUntil(15_000) {
             runCatching {
                 composeRule.onNodeWithTag("instrument.chart.indicator.rsi.toggle").assertIsEnabled()
