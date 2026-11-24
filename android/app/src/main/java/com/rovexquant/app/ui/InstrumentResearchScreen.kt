@@ -26,6 +26,7 @@ import com.rovexquant.app.data.local.TejHqOhlcvSyncManager
 import com.rovexquant.app.data.repository.QuantDataRepository
 import com.rovexquant.app.domain.InstrumentCatalog
 import com.rovexquant.app.domain.ChartSeriesMapper
+import com.rovexquant.app.domain.ChartSeriesData
 import com.rovexquant.app.domain.MarketOhlcvSeries
 import com.rovexquant.app.domain.OhlcvBar
 import java.time.Instant
@@ -115,6 +116,12 @@ fun InstrumentResearchScreen(
     }
 
     val bars = series?.bars.orEmpty()
+    val chartData by produceState<ChartSeriesData?>(initialValue = null, series) {
+        val source = series
+        value = if (source == null) null else runCatching {
+            withContext(Dispatchers.Default) { ChartSeriesMapper.map(source) }
+        }.getOrNull()
+    }
     val visible = remember(bars, range) {
         val today = LocalDate.now(ZoneId.of("Asia/Kolkata"))
         val cutoff = when (range) {
@@ -225,12 +232,14 @@ fun InstrumentResearchScreen(
                     "${visible.size} bars  ·  ${visible.first().timestamp.toLocalDate()} → ${visible.last().timestamp.toLocalDate()}",
                     color = Muted, fontSize = 10.sp
                 )
-                CandlestickPriceChart(
-                    bars = visible,
-                    showVolume = volume && series?.volumeAvailable == true,
-                    showSma20 = sma20,
-                    showSma50 = sma50
-                )
+                chartData?.let { validated ->
+                    ValidatedCandlestickChart(
+                        data = validated,
+                        showVolume = volume,
+                        showSma20 = sma20,
+                        showSma50 = sma50
+                    )
+                } ?: CircularProgressIndicator()
                 latest?.let {
                     Text(
                         "Close  ${"%.2f".format(it.close)}",
