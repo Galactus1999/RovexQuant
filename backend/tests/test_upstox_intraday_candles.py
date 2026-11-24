@@ -1,9 +1,9 @@
 import asyncio
 from datetime import date
 
+from fastapi.testclient import TestClient
 import httpx
 import pytest
-from fastapi.testclient import TestClient
 
 from rovexquant.api.main import app
 from rovexquant.api.routers import market as market_routes
