@@ -118,8 +118,10 @@ class QuantDashboardRegressionTest {
         waitForDashboard()
         composeRule.onNodeWithText("Intel").performClick()
         composeRule.onNodeWithText("AI Intelligence Centre").assertIsDisplayed()
+        composeRule.onNodeWithText("No research run yet").assertIsDisplayed()
+        composeRule.onNodeWithText("Refresh intelligence").performClick()
         composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithText("Refresh intelligence")
+            composeRule.onAllNodesWithTag("intelligence.feed.ready")
                 .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithTag("intelligence.screen")
