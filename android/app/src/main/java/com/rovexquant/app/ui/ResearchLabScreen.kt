@@ -163,10 +163,15 @@ fun ResearchLabScreen(
     LazyColumn(modifier = Modifier.fillMaxSize().testTag("research.lab.list"), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { SectionHeading("RESEARCH", "Research lab.", "") }
         item {
-            TejHqOhlcvPanel(repository) { loaded, name ->
+            TejHqOhlcvPanel(
+                repository = repository,
+                onDatasetLoaded = { loaded, name ->
                 summary = loaded
                 datasetName = name
-            }
+                },
+                equityInstruments = equityInstruments,
+                indexKeys = indexKeys
+            )
         }
         if (session != null && repository != null) {
             item { NseMcpResearchPanel(session, repository, equityInstruments = equityInstruments, indexKeys = indexKeys) }
