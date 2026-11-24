@@ -1,6 +1,5 @@
 package com.rovexquant.app.ui
 
-import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -163,12 +162,7 @@ fun TejHqOhlcvPanel(
                     autoSync = it
                     TejHqOhlcvStore.saveSettings(
                         context,
-                        OhlcvSourceSettings(
-                            exchange = exchange.lowercase(),
-                            symbol = symbol.uppercase(),
-                            fromDate = fromDate,
-                            autoSync = it
-                        )
+                        TejHqOhlcvStore.settings(context).copy(autoSync = it)
                     )
                 },
                 modifier = Modifier.testTag("ohlcv.autoSync")
