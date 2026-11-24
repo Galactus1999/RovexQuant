@@ -29,6 +29,8 @@ import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.QuantSession
+import com.rovexquant.app.data.model.TechnicalIndicators
+import com.rovexquant.app.data.model.TechnicalIndicatorPeriods
 import com.rovexquant.app.data.repository.MarketStream
 import com.rovexquant.app.data.repository.QuantDataRepository
 import com.rovexquant.app.domain.OhlcvBar
@@ -233,6 +235,31 @@ class FakeQuantRepository(
     override suspend fun fetchTejHqOhlcv(
         exchange: String, symbol: String, from: LocalDate, to: LocalDate
     ): List<OhlcvBar> = emptyList()
+
+    override suspend fun fetchTechnicalIndicators(
+        bars: List<OhlcvBar>,
+        startIndex: Int,
+        periods: TechnicalIndicatorPeriods
+    ): TechnicalIndicators {
+        val count = bars.size
+        fun series(period: Int, value: (Int) -> Double): List<Double?> =
+            List(count) { index -> if (index + 1 < period) null else value(index) }
+        return TechnicalIndicators(
+            startIndex = startIndex,
+            barCount = count,
+            sma = series(periods.sma) { bars[it].close },
+            ema = series(periods.ema) { bars[it].close },
+            rsi = series(periods.rsi + 1) { 50.0 },
+            macdLine = series(26) { 0.5 },
+            macdSignal = series(34) { 0.4 },
+            macdHistogram = series(34) { 0.1 },
+            bollingerUpper = series(periods.bollinger) { bars[it].close + 1.0 },
+            bollingerMiddle = series(periods.bollinger) { bars[it].close },
+            bollingerLower = series(periods.bollinger) { bars[it].close - 1.0 },
+            atr = series(periods.atr + 1) { 1.0 },
+            adx = series(periods.adx * 2) { 25.0 }
+        )
+    }
 
     override suspend fun fetchEventStudy(
         session: QuantSession, symbol: String, eventDate: String, benchmarkSymbol: String?
