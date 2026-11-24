@@ -57,6 +57,10 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithText("FIXTURE").assertIsDisplayed()
         composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("market.sector.heading"))
         composeRule.onNodeWithTag("market.sector.heading").assertIsDisplayed()
+        // Sector cards are ranked by verified live performance; expand the list before
+        // asserting a specific benchmark so the test does not assume a fixed rank.
+        composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasText("View all sector benchmarks"))
+        composeRule.onNodeWithText("View all sector benchmarks").performClick()
         composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("sector.index.NIFTY BANK"))
         composeRule.onNodeWithTag("sector.index.NIFTY BANK").assertIsDisplayed()
     }
