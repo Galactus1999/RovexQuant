@@ -332,7 +332,9 @@ class QuantWorkspaceViewModel(
 
                 val indexMaster = try {
                     val fresh = repository.fetchIndexInstruments(session)
-                    require(fresh.isNotEmpty()) { "Official NSE index master returned no instruments." }
+                    require(fresh.isNotEmpty() && resolveDashboardIndices(fresh).isNotEmpty()) {
+                        "Official NSE index master returned no dashboard benchmark matches."
+                    }
                     persistMaster { repository.saveCachedIndexInstruments(fresh) }
                     fresh
                 } catch (cancelled: CancellationException) {
