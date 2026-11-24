@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Checkbox
@@ -26,7 +27,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -46,7 +49,12 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.OffsetDateTime
+import java.time.ZoneId
 import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 
 @Composable
 fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, onAttachToAi: ((String) -> Unit)? = null) {
@@ -104,11 +112,7 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
         TerminalCard {
             Eyebrow("Official NSE MCP · on-demand research")
             Spacer(Modifier.height(6.dp))
-            Text(
-                "Private educational research only. Bhavcopy is end-of-day; CM market data is delayed, not tick-by-tick live.",
-                color = Muted, fontSize = 10.sp, lineHeight = 16.sp
-            )
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
                     selected = server == "bhavcopy",
@@ -204,19 +208,46 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
                                     key.contains("timespan", true) || key.contains("period", true) -> "e.g. 1d, 3d, 7d"
                                     else -> spec.optString("description").take(90)
                                 }
-                                if (format == "date" || key.contains("date", true)) {
-                                    ToolDateField(
-                                        label = label + if (key in requiredNames) " · required" else " · optional",
+                                val fieldLabel = label + if (key in requiredNames) " · required" else ""
+                                when {
+                                    format == "date-time" || key.contains("datetime", true) ||
+                                        key.contains("timestamp", true) -> ToolDateTimeField(
+                                        label = fieldLabel,
                                         value = current,
                                         enabled = !calling,
                                         onValueChange = { formValues = formValues + (key to it) }
                                     )
-                                } else {
-                                    OutlinedTextField(
+                                    format == "time" || key.equals("time", true) -> ToolTimeField(
+                                        label = fieldLabel,
+                                        value = current,
+                                        enabled = !calling,
+                                        onValueChange = { formValues = formValues + (key to it) }
+                                    )
+                                    format == "date" || key.contains("date", true) -> ToolDateField(
+                                        label = fieldLabel,
+                                        value = current,
+                                        enabled = !calling,
+                                        onValueChange = { formValues = formValues + (key to it) }
+                                    )
+                                    key.contains("symbol", true) || key.contains("ticker", true) ||
+                                        key.contains("instrument", true) || key.contains("index", true) -> ToolInstrumentField(
+                                        label = fieldLabel,
+                                        value = current,
+                                        enabled = !calling,
+                                        onValueChange = { formValues = formValues + (key to it) }
+                                    )
+                                    key.contains("timespan", true) || key.contains("period", true) ||
+                                        key.contains("duration", true) -> ToolTimespanField(
+                                        label = fieldLabel,
+                                        value = current,
+                                        enabled = !calling,
+                                        onValueChange = { formValues = formValues + (key to it) }
+                                    )
+                                    else -> OutlinedTextField(
                                         value = current,
                                         onValueChange = { formValues = formValues + (key to it.take(240)) },
                                         modifier = Modifier.fillMaxWidth(),
-                                        label = { Text(label + if (key in requiredNames) " · required" else " · optional") },
+                                        label = { Text(fieldLabel) },
                                         placeholder = { Text(hint) },
                                         singleLine = true,
                                         enabled = !calling
@@ -402,6 +433,143 @@ private fun ToolDateField(
             }
         ) {
             DatePicker(state = pickerState)
+        }
+    }
+}
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ToolDateTimeField(
+    label: String,
+    value: String,
+    enabled: Boolean,
+    onValueChange: (String) -> Unit
+) {
+    val parsed = remember(value) {
+        runCatching { OffsetDateTime.parse(value) }.getOrNull()
+            ?: runCatching { LocalDateTime.parse(value).atZone(ZoneId.systemDefault()).toOffsetDateTime() }.getOrNull()
+    }
+    val date = parsed?.toLocalDate() ?: LocalDate.now()
+    val time = parsed?.toLocalTime() ?: LocalTime.now()
+    val dateState = rememberDatePickerState(initialSelectedDateMillis = date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
+    val timeState = rememberTimePickerState(initialHour = time.hour, initialMinute = time.minute, is24Hour = true)
+    var showDate by remember { mutableStateOf(false) }
+    var showTime by remember { mutableStateOf(false) }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        TextButton(enabled = enabled, onClick = { showDate = true }, modifier = Modifier.weight(1f)) {
+            Text(date.toString())
+        }
+        TextButton(enabled = enabled, onClick = { showTime = true }, modifier = Modifier.weight(1f)) {
+            Text(time.format(DateTimeFormatter.ofPattern("HH:mm")))
+        }
+    }
+    Text(label, color = Muted, fontSize = 9.sp)
+    if (showDate) {
+        DatePickerDialog(
+            onDismissRequest = { showDate = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val selected = dateState.selectedDateMillis?.let {
+                        Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()
+                    } ?: date
+                    val local = LocalDateTime.of(selected, LocalTime.of(timeState.hour, timeState.minute))
+                    onValueChange(local.atZone(ZoneId.systemDefault()).toOffsetDateTime().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
+                    showDate = false
+                }) { Text("Apply") }
+            },
+            dismissButton = { TextButton(onClick = { showDate = false }) { Text("Cancel") } }
+        ) { DatePicker(state = dateState) }
+    }
+    if (showTime) {
+        AlertDialog(
+            onDismissRequest = { showTime = false },
+            title = { Text("Select time") },
+            text = { TimePicker(state = timeState) },
+            confirmButton = {
+                TextButton(onClick = {
+                    val local = LocalDateTime.of(date, LocalTime.of(timeState.hour, timeState.minute))
+                    onValueChange(local.atZone(ZoneId.systemDefault()).toOffsetDateTime().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
+                    showTime = false
+                }) { Text("Apply") }
+            },
+            dismissButton = { TextButton(onClick = { showTime = false }) { Text("Cancel") } }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ToolTimeField(
+    label: String,
+    value: String,
+    enabled: Boolean,
+    onValueChange: (String) -> Unit
+) {
+    val parsed = remember(value) { runCatching { LocalTime.parse(value) }.getOrNull() ?: LocalTime.of(9, 15) }
+    val state = rememberTimePickerState(parsed.hour, parsed.minute, is24Hour = true)
+    var show by remember { mutableStateOf(false) }
+    TextButton(enabled = enabled, onClick = { show = true }) {
+        Text(if (value.isBlank()) "$label · Select" else "$label · $value")
+    }
+    if (show) AlertDialog(
+        onDismissRequest = { show = false },
+        title = { Text(label) },
+        text = { TimePicker(state = state) },
+        confirmButton = {
+            TextButton(onClick = {
+                onValueChange("%02d:%02d".format(state.hour, state.minute))
+                show = false
+            }) { Text("Apply") }
+        },
+        dismissButton = { TextButton(onClick = { show = false }) { Text("Cancel") } }
+    )
+}
+
+@Composable
+private fun ToolInstrumentField(
+    label: String,
+    value: String,
+    enabled: Boolean,
+    onValueChange: (String) -> Unit
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { onValueChange(it.take(80).uppercase()) },
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text(label) },
+        placeholder = { Text("Stock or index symbol") },
+        singleLine = true,
+        enabled = enabled
+    )
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf("RELIANCE", "TCS", "INFY", "NIFTY 50", "BANKNIFTY", "NIFTYBEES").forEach { symbol ->
+            FilterChip(selected = value.equals(symbol, true), enabled = enabled,
+                onClick = { onValueChange(symbol) }, label = { Text(symbol) })
+        }
+    }
+}
+
+@Composable
+private fun ToolTimespanField(
+    label: String,
+    value: String,
+    enabled: Boolean,
+    onValueChange: (String) -> Unit
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { onValueChange(it.take(40)) },
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text(label) },
+        placeholder = { Text("Select a period") },
+        singleLine = true,
+        enabled = enabled
+    )
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf("1d", "5d", "1mo", "3mo", "6mo", "1y").forEach { period ->
+            FilterChip(selected = value.equals(period, true), enabled = enabled,
+                onClick = { onValueChange(period) }, label = { Text(period) })
         }
     }
 }
