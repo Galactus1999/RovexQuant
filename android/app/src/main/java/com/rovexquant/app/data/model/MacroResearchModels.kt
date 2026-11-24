@@ -22,7 +22,7 @@ data class MacroResearchSummary(
     val worldBankSeries: List<MacroSeriesObservation>,
     val amfiNavCount: Int,
     val amfiExamples: List<AmfiNavObservation>,
-    val fredConfigured: Boolean,
+    val fredConfigured: Boolean?,
     val fredSeriesCount: Int,
     val providerErrors: List<String>,
     val persistedObservationCount: Int = 0,
