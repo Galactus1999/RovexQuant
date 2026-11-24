@@ -170,7 +170,7 @@ fun MarketPulseScreen(
         modifier = Modifier.fillMaxSize()
     ) {
         if (showSectorCube) {
-            SectorCubeDialog(
+            SectorHeatmapDialog(
                 sectors = sectorTiles,
                 liveCount = liveSectorCount,
                 onDismiss = { showSectorCube = false },
