@@ -283,13 +283,55 @@ fun InstrumentResearchScreen(
                     label = { Text("Volume") }
                 )
             }
-            FilterChip(enabled = indicators != null, selected = showSma, onClick = { showSma = !showSma }, label = { Text("SMA 20") })
-            FilterChip(enabled = indicators != null, selected = showEma, onClick = { showEma = !showEma }, label = { Text("EMA 20") })
-            FilterChip(enabled = indicators != null, selected = showBollinger, onClick = { showBollinger = !showBollinger }, label = { Text("Bollinger") })
-            FilterChip(enabled = indicators != null, selected = showRsi, onClick = { showRsi = !showRsi }, label = { Text("RSI") })
-            FilterChip(enabled = indicators != null, selected = showMacd, onClick = { showMacd = !showMacd }, label = { Text("MACD") })
-            FilterChip(enabled = indicators != null, selected = showAtr, onClick = { showAtr = !showAtr }, label = { Text("ATR") })
-            FilterChip(enabled = indicators != null, selected = showAdx, onClick = { showAdx = !showAdx }, label = { Text("ADX") })
+            FilterChip(
+                modifier = Modifier.testTag("instrument.chart.indicator.sma.toggle"),
+                enabled = indicators != null,
+                selected = showSma,
+                onClick = { showSma = !showSma },
+                label = { Text("SMA 20") }
+            )
+            FilterChip(
+                modifier = Modifier.testTag("instrument.chart.indicator.ema.toggle"),
+                enabled = indicators != null,
+                selected = showEma,
+                onClick = { showEma = !showEma },
+                label = { Text("EMA 20") }
+            )
+            FilterChip(
+                modifier = Modifier.testTag("instrument.chart.indicator.bollinger.toggle"),
+                enabled = indicators != null,
+                selected = showBollinger,
+                onClick = { showBollinger = !showBollinger },
+                label = { Text("Bollinger") }
+            )
+            FilterChip(
+                modifier = Modifier.testTag("instrument.chart.indicator.rsi.toggle"),
+                enabled = indicators != null,
+                selected = showRsi,
+                onClick = { showRsi = !showRsi },
+                label = { Text("RSI") }
+            )
+            FilterChip(
+                modifier = Modifier.testTag("instrument.chart.indicator.macd.toggle"),
+                enabled = indicators != null,
+                selected = showMacd,
+                onClick = { showMacd = !showMacd },
+                label = { Text("MACD") }
+            )
+            FilterChip(
+                modifier = Modifier.testTag("instrument.chart.indicator.atr.toggle"),
+                enabled = indicators != null,
+                selected = showAtr,
+                onClick = { showAtr = !showAtr },
+                label = { Text("ATR") }
+            )
+            FilterChip(
+                modifier = Modifier.testTag("instrument.chart.indicator.adx.toggle"),
+                enabled = indicators != null,
+                selected = showAdx,
+                onClick = { showAdx = !showAdx },
+                label = { Text("ADX") }
+            )
         }
         when {
             indicatorsLoading -> Text("Calculating indicators on the backend…", color = Muted, fontSize = 9.sp)
@@ -309,12 +351,12 @@ fun InstrumentResearchScreen(
                 modifier = Modifier.padding(top = 4.dp)
             )
         }
-        if (series?.volumeAvailable == false) {
+
+        if (indicators != null && visibleStartIndex < indicators!!.startIndex) {
             Text(
-                "Traded volume is not published for this index series.",
+                "Indicator coverage begins at ${bars.getOrNull(indicators!!.startIndex)?.timestamp?.toLocalDate() ?: "the latest 10,000 bars"}; older candles have no indicator values.",
                 color = Muted,
-                fontSize = 10.sp,
-                modifier = Modifier.padding(top = 4.dp)
+                fontSize = 9.sp
             )
         }
         if (range == "ALL" && bars.isNotEmpty()) {
