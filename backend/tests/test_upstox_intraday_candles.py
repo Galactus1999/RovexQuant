@@ -23,7 +23,7 @@ def test_upstox_v3_merges_historical_and_current_session_candles(monkeypatch):
     requested = []
 
     async def handler(request):
-        requested.append((request.url.path, request.headers.get("Authorization")))
+        requested.append((request.url.raw_path.decode("ascii"), request.headers.get("Authorization")))
         if "/historical-candle/" in request.url.path and "/intraday/" not in request.url.path:
             return httpx.Response(200, json={"data": {"candles": [[
                 f"{yesterday.isoformat()}T15:30:00+05:30", 100, 103, 99, 102, 1000
