@@ -274,7 +274,8 @@ fun InstrumentResearchScreen(
             }
         }
         Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            modifier = Modifier.horizontalScroll(rememberScrollState())
+                .testTag("instrument.chart.indicator.controls"),
             horizontalArrangement = Arrangement.spacedBy(5.dp)
         ) {
             if (series?.volumeAvailable == true) {
