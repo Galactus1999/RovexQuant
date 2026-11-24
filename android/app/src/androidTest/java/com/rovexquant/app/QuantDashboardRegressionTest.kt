@@ -75,7 +75,7 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("instrument.chart.candles")
             .performScrollTo().assertIsDisplayed()
         composeRule.onAllNodesWithTag("instrument.chart.volume.toggle").assertCountEquals(0)
-        composeRule.onNodeWithText("← Back to Pulse").performClick()
+        composeRule.onNodeWithText("← Back to Pulse").performScrollTo().performClick()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("market.pulse.list").fetchSemanticsNodes().isNotEmpty()
         }
