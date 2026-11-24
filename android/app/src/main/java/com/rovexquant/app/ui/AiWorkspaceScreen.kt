@@ -43,6 +43,7 @@ fun AiWorkspaceScreen(
     val scope = rememberCoroutineScope()
     var providersLoading by remember { mutableStateOf(true) }
     var providers by remember { mutableStateOf(emptyList<com.rovexquant.app.data.model.AiProvider>()) }
+    var showAdvancedProviderSettings by rememberSaveable { mutableStateOf(false) }
     var providerError by remember { mutableStateOf<String?>(null) }
     var credentialInput by remember { mutableStateOf("") }
     var credentialSaving by remember { mutableStateOf(false) }
@@ -167,6 +168,20 @@ fun AiWorkspaceScreen(
         }
         item {
             TerminalCard {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Eyebrow("AI research model")
+                        Text(if (configuredProviders.isNotEmpty()) "${configuredProviders.size} connected" else "Connect a model to enable AI research",
+                            color = MaterialTheme.colorScheme.onBackground, fontSize = 11.sp)
+                    }
+                    TextButton(onClick = { showAdvancedProviderSettings = !showAdvancedProviderSettings }) {
+                        Text(if (showAdvancedProviderSettings) "Hide settings" else "Model settings")
+                    }
+                }
+            }
+        }
+        if (showAdvancedProviderSettings) item {
+            TerminalCard {
                 Eyebrow("AI provider")
                 Spacer(Modifier.height(7.dp))
                 when {
@@ -175,7 +190,7 @@ fun AiWorkspaceScreen(
                         Text("Checking server-side providers…", color = Muted, fontSize = 11.sp)
                     }
                     providerError != null && providers.isEmpty() -> Text(
-                        providerError ?: "AI provider discovery failed.",
+                        "AI services are temporarily unavailable.",
                         color = Coral, fontSize = 11.sp, lineHeight = 17.sp
                     )
                     providers.isEmpty() -> Text(
@@ -279,7 +294,7 @@ fun AiWorkspaceScreen(
                                         session = session, providerId = selectedProvider, model = model.trim(),
                                         messages = listOf(AiChatMessage("user", "Reply with exactly ROVEX_AI_CONNECTION_OK."))
                                     )
-                                    providerTestStatus = "Connected · ${result.providerId} / ${result.model}"
+                                    providerTestStatus = "Connection verified"
                                 } catch (cancelled: CancellationException) {
                                     throw cancelled
                                 } catch (failure: Exception) {
@@ -314,7 +329,7 @@ fun AiWorkspaceScreen(
                     }
                 }
                 providerTestStatus?.let {
-                    Text(it, color = if (it.startsWith("Connected")) Mint else Gold, fontSize = 10.sp, lineHeight = 15.sp)
+                    Text(it, color = if (it.startsWith("Connection verified")) Mint else Gold, fontSize = 10.sp, lineHeight = 15.sp)
                 }
                 val fallbackOptions = configuredProviders.filter { it.providerId != selectedProvider && it.fallbackModelConfigured }
                 Spacer(Modifier.height(8.dp))
@@ -336,8 +351,9 @@ fun AiWorkspaceScreen(
                     }
                     Text("Fallback providers need a server-side fallback model and credential. Authentication and entitlement errors never silently switch providers.", color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
                 }
-                credentialError?.let { Text(it, color = Coral, fontSize = 10.sp, lineHeight = 15.sp) }
+                credentialError?.let { GracefulErrorState("Provider setup unavailable. Try again.") }
             }
+        }
         }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -402,7 +418,7 @@ fun AiWorkspaceScreen(
                 ) {
                     Text(if (chatLoading) "Generating…" else "Send to Quant AI")
                 }
-                if (chatError != null) Text(chatError!!, color = Coral, fontSize = 11.sp, lineHeight = 16.sp)
+                if (chatError != null) GracefulErrorState("Research assistant unavailable. Try again.")
                 TextButton(onClick = { messages = emptyList(); chatError = null }, modifier = Modifier.fillMaxWidth()) {
                     Text("Clear conversation")
                 }
@@ -461,7 +477,7 @@ fun AiWorkspaceScreen(
                         else "Recover adjusted EOD data"
                     )
                 }
-                if (briefError != null) Text(briefError!!, color = Coral, fontSize = 11.sp, lineHeight = 16.sp)
+                if (briefError != null) GracefulErrorState("Historical data retrieval unavailable. Try again.")
                 Text(
                     "Fallback is adjusted EOD only, not intraday/live. If the source fails, recovery stops. If AI fails, the recovered bars and deterministic metrics are still returned with a warning. Quant never fabricates candles. Private personal research only.",
                     color = Muted, fontSize = 10.sp, lineHeight = 16.sp
