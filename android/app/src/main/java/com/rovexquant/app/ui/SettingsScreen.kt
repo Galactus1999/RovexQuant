@@ -216,13 +216,5 @@ fun SettingsScreen(
                 }
             }
         }
-        item {
-            TerminalCard {
-                Eyebrow("Data and research")
-                TextButton(onClick = onOpenMarketPulse, modifier = Modifier.fillMaxWidth()) {
-                    Text("Market data and ingestion status")
-                }
-            }
-        }
     }
 }
