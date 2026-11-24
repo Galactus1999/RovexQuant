@@ -29,14 +29,15 @@ class IntelligenceCentreViewModel(
     private val session: QuantSession,
     private val repository: QuantDataRepository
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(IntelligenceCentreUiState(loading = true))
+    private val _uiState = MutableStateFlow(IntelligenceCentreUiState())
     val uiState = _uiState.asStateFlow()
     private var requestJob: Job? = null
     private var healthJob: Job? = null
 
     init {
+        // Discovery is deliberately user-triggered; opening the workspace must not
+        // block on third-party news providers or turn a cold-start timeout into an error.
         refreshHealth()
-        refresh()
     }
 
 
