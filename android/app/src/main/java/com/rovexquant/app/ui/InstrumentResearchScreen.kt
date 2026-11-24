@@ -9,7 +9,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
@@ -33,6 +35,7 @@ import com.rovexquant.app.domain.OhlcvBar
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -717,8 +720,12 @@ private fun OverviewMetric(
     modifier: Modifier = Modifier,
     valueColor: Color = MaterialTheme.colorScheme.onBackground
 ) {
-    TerminalCard {
-        Column(modifier = modifier) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = PanelRaised
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
             Text(label, color = Muted, fontSize = 9.sp)
             Text(value, color = valueColor, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }
