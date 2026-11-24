@@ -71,7 +71,7 @@ fun InstrumentResearchScreen(
                     instrument = selected,
                     from = if (fullHistory) today.minusDays(6200) else today.minusYears(3),
                     to = today,
-                    incremental = true
+                    incremental = !fullHistory
                 )
             }
             series = result
