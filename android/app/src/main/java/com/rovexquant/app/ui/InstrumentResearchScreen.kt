@@ -11,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -19,6 +20,9 @@ import com.rovexquant.app.data.local.TejHqOhlcvStore
 import com.rovexquant.app.data.local.TejHqOhlcvSyncManager
 import com.rovexquant.app.data.repository.QuantDataRepository
 import com.rovexquant.app.data.model.TechnicalIndicators
+import com.rovexquant.app.data.model.InstrumentQuoteSnapshot
+import com.rovexquant.app.data.model.IntelligenceFeed
+import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.domain.InstrumentCatalog
 import com.rovexquant.app.domain.OhlcvInterval
 import com.rovexquant.app.domain.TechnicalIndicatorCalculator
@@ -39,9 +43,17 @@ fun InstrumentResearchScreen(
     symbol: String,
     displayName: String,
     repository: QuantDataRepository,
+    session: QuantSession? = null,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    var quoteSnapshot by remember(symbol) { mutableStateOf<InstrumentQuoteSnapshot?>(null) }
+    var quoteLoading by remember(symbol) { mutableStateOf(false) }
+    var quoteError by remember(symbol) { mutableStateOf<String?>(null) }
+    var intelligenceFeed by remember(symbol) { mutableStateOf<IntelligenceFeed?>(null) }
+    var intelligenceLoading by remember(symbol) { mutableStateOf(false) }
+    var intelligenceError by remember(symbol) { mutableStateOf<String?>(null) }
     var selectedIntervalKey by rememberSaveable(symbol) { mutableStateOf(OhlcvInterval.DAILY.key) }
     val selectedInterval = remember(selectedIntervalKey) {
         OhlcvInterval.entries.first { it.key == selectedIntervalKey }
@@ -106,6 +118,44 @@ fun InstrumentResearchScreen(
         } finally {
             refreshing = false
             loading = false
+        }
+    }
+
+    LaunchedEffect(identity, session) {
+        quoteSnapshot = null
+        quoteError = null
+        val selected = identity
+        val activeSession = session
+        if (selected == null || activeSession == null) return@LaunchedEffect
+        quoteLoading = true
+        try {
+            quoteSnapshot = repository.fetchInstrumentQuote(activeSession, selected.canonicalSymbol)
+            if (quoteSnapshot == null) quoteError = "No quote snapshot returned by the configured provider."
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            quoteError = failure.message ?: "Instrument quote snapshot unavailable."
+        } finally {
+            quoteLoading = false
+        }
+    }
+
+    LaunchedEffect(identity, session) {
+        intelligenceFeed = null
+        intelligenceError = null
+        val selected = identity
+        val activeSession = session
+        if (selected == null || activeSession == null) return@LaunchedEffect
+        intelligenceLoading = true
+        try {
+            val query = "\"\u0024{selected.canonicalSymbol}\" OR \"\u0024{displayName.take(70)}\"".take(160)
+            intelligenceFeed = repository.fetchIntelligenceEvents(activeSession, query, "7d")
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            intelligenceError = failure.message ?: "Recent news discovery unavailable."
+        } finally {
+            intelligenceLoading = false
         }
     }
 
