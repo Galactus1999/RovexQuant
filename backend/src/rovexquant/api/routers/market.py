@@ -120,12 +120,12 @@ async def app_market_equity_instruments():
 
 
 @router.get(
-    "/api/v1/app/market/candles/{exchange}/{symbol}",
+    "/api/v1/app/market/candles",
     dependencies=[Depends(require_app_session), Depends(backtest_rate_limit)],
 )
 async def app_intraday_market_candles(
-    exchange: str,
-    symbol: str,
+    exchange: str = Query(..., min_length=3, max_length=3),
+    symbol: str = Query(..., min_length=1, max_length=80),
     interval: str = Query(..., min_length=2, max_length=3),
     from_date: date = Query(..., alias="from"),
     to_date: __import__("datetime").date = Query(..., alias="to"),
