@@ -23,6 +23,8 @@ import com.rovexquant.app.data.model.MarketIngestionStatus
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.QuantSession
+import com.rovexquant.app.data.model.TechnicalIndicators
+import com.rovexquant.app.data.model.TechnicalIndicatorPeriods
 
 /** Repository contract consumed by feature state holders and UI tests. */
 interface QuantDataRepository {
@@ -65,6 +67,9 @@ interface QuantDataRepository {
             adjustmentStatus = "TejHQ raw end-of-day bhavcopy OHLCV"
         )
     }
+    suspend fun fetchTechnicalIndicators(
+        bars: List<OhlcvBar>, startIndex: Int, periods: TechnicalIndicatorPeriods = TechnicalIndicatorPeriods()
+    ): TechnicalIndicators
     suspend fun fetchEventStudy(session: QuantSession, symbol: String, eventDate: String, benchmarkSymbol: String?): EventStudyResult
     suspend fun sendAiMessage(
         session: QuantSession,
