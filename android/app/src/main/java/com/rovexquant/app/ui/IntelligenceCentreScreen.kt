@@ -93,7 +93,8 @@ fun IntelligenceCentreScreen(session: QuantSession, repository: QuantDataReposit
                     )
                     health.macroProviders.forEach { item ->
                         Text(
-                            "Macro · ${item.name}: ${item.status} · ${item.records ?: 0} rows · ${item.freshness}",
+                            "Macro · ${item.name}: ${item.status} · ${item.records ?: 0} observations · ${item.freshness}" +
+                                (item.detail?.let { " · $it" } ?: ""),
                             color = if (item.status == "FAILED") Coral else Muted, fontSize = 9.sp
                         )
                     }
