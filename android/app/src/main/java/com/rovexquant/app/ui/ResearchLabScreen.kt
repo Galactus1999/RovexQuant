@@ -1,6 +1,7 @@
 package com.rovexquant.app.ui
 
 import com.rovexquant.app.data.model.QuantSession
+import com.rovexquant.app.data.local.TejHqOhlcvStore
 import com.rovexquant.app.data.model.MacroResearchSummary
 import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.repository.QuantDataRepository
@@ -144,8 +145,7 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
                     }
                 }
                 summary = restored
-                val settings = TejHqOhlcvStore.settings(context)
-                datasetName = "${settings.symbol} · ${settings.exchange.uppercase()} · saved locally"
+                datasetName = "Saved local dataset"
 
             } catch (failure: Exception) {
                 error = failure.message ?: "Saved dataset could not be read"
