@@ -236,6 +236,14 @@ fun InstrumentResearchScreen(
             FilterChip(selected = sma20, onClick = { sma20 = !sma20 }, label = { Text("SMA 20") })
             FilterChip(selected = sma50, onClick = { sma50 = !sma50 }, label = { Text("SMA 50") })
         }
+        if (series?.volumeAvailable == false) {
+            Text(
+                "Traded volume is not published for this index series.",
+                color = Muted,
+                fontSize = 10.sp,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
         if (range == "ALL" && bars.isNotEmpty()) {
             Text(
                 if (refreshing) "Loading extended history…" else "All locally available bars · earliest ${bars.first().timestamp.toLocalDate()}",
@@ -275,8 +283,6 @@ fun InstrumentResearchScreen(
                     )
                     if (series?.volumeAvailable == true) {
                         Text("Volume  ${it.volume}", color = Muted, fontSize = 10.sp)
-                    } else {
-                        Text("Traded volume is not published for this index series.", color = Muted, fontSize = 10.sp)
                     }
                 }
             }
