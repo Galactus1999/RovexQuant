@@ -97,8 +97,11 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("quant.settings.open").performClick()
         composeRule.onNodeWithTag("settings.screen").assertIsDisplayed()
         composeRule.onNodeWithText("Settings").assertIsDisplayed()
+        composeRule.onNodeWithTag("settings.screen").performScrollToNode(hasTestTag("settings.upstox.token"))
         composeRule.onNodeWithTag("settings.upstox.token").assertIsDisplayed()
+        composeRule.onNodeWithTag("settings.screen").performScrollToNode(hasText("Open AI provider settings"))
         composeRule.onNodeWithText("Open AI provider settings").assertIsDisplayed()
+        composeRule.onNodeWithTag("settings.screen").performScrollToNode(hasText("Close"))
         composeRule.onNodeWithText("Close").performClick()
         composeRule.onNodeWithText("Market pulse.").assertIsDisplayed()
     }
