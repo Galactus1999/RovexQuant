@@ -1,8 +1,6 @@
 package com.rovexquant.app.ui
 
 import com.rovexquant.app.data.model.QuantSession
-import com.rovexquant.app.data.local.TejHqOhlcvStore
-import com.rovexquant.app.data.local.TejHqOhlcvSyncManager
 import com.rovexquant.app.data.model.MacroResearchSummary
 import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.repository.QuantDataRepository
@@ -18,7 +16,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.Switch
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
@@ -40,8 +37,6 @@ import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.Locale
-import java.time.LocalDate
-import java.time.ZoneId
 
 private const val MAX_CSV_BYTES = 20 * 1024 * 1024
 
@@ -62,16 +57,6 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
     var eventResult by remember { mutableStateOf<EventStudyResult?>(null) }
     var eventLoading by remember { mutableStateOf(false) }
     var eventError by remember { mutableStateOf<String?>(null) }
-    val savedOhlcvSettings = remember(context) { TejHqOhlcvStore.settings(context) }
-    var ohlcvExchange by rememberSaveable { mutableStateOf(savedOhlcvSettings.exchange.uppercase()) }
-    var ohlcvSymbol by rememberSaveable { mutableStateOf(savedOhlcvSettings.symbol) }
-    var ohlcvFrom by rememberSaveable { mutableStateOf(savedOhlcvSettings.fromDate) }
-    var ohlcvTo by rememberSaveable { mutableStateOf(LocalDate.now(ZoneId.of("Asia/Kolkata")).toString()) }
-    var ohlcvAutoSync by rememberSaveable { mutableStateOf(savedOhlcvSettings.autoSync) }
-    var ohlcvLoading by remember { mutableStateOf(false) }
-    var ohlcvError by remember { mutableStateOf<String?>(null) }
-    var ohlcvStatus by remember { mutableStateOf<String?>(null) }
-
     fun runEventStudy() {
         if (session == null || repository == null || eventLoading) return
         eventLoading = true
@@ -161,57 +146,11 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
                 summary = restored
                 val settings = TejHqOhlcvStore.settings(context)
                 datasetName = "${settings.symbol} · ${settings.exchange.uppercase()} · saved locally"
-                if (repository != null) {
-                    try {
-                        val updated = TejHqOhlcvSyncManager.refreshIfDue(context, repository)
-                        if (updated != null) {
-                            summary = OhlcvCsvResearch.summarize(updated)
-                            ohlcvStatus = "Updated automatically · ${updated.size} bars"
-                        }
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (failure: Exception) {
-                        ohlcvError = failure.message ?: "Automatic OHLCV refresh failed"
-                    }
-                }
+
             } catch (failure: Exception) {
                 error = failure.message ?: "Saved dataset could not be read"
             } finally {
                 loading = false
-            }
-        }
-    }
-
-    fun fetchOhlcvHistory(incremental: Boolean) {
-        val activeRepository = repository ?: run {
-            ohlcvError = "Connect to the Quant workspace to use the in-app extractor."
-            return
-        }
-        val from = runCatching { LocalDate.parse(ohlcvFrom) }.getOrNull()
-        val to = runCatching { LocalDate.parse(ohlcvTo) }.getOrNull()
-        if (from == null || to == null || from.isAfter(to)) {
-            ohlcvError = "Choose a valid date range."
-            return
-        }
-        if (ohlcvLoading) return
-        ohlcvLoading = true
-        ohlcvError = null
-        ohlcvStatus = null
-        scope.launch {
-            try {
-                val bars = TejHqOhlcvSyncManager.fetchAndSave(
-                    context, activeRepository, ohlcvExchange, ohlcvSymbol, from, to,
-                    incremental = incremental
-                )
-                summary = OhlcvCsvResearch.summarize(bars)
-                datasetName = "${ohlcvSymbol.uppercase()} · ${ohlcvExchange.uppercase()} · TejHQ"
-                ohlcvStatus = "${bars.size} bars saved on this device"
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (failure: Exception) {
-                ohlcvError = failure.message ?: "OHLCV extraction failed"
-            } finally {
-                ohlcvLoading = false
             }
         }
     }
@@ -297,75 +236,9 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
             }
         }
         item {
-            TerminalCard {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Eyebrow("Automatic OHLCV")
-                    StatusPill(if (ohlcvAutoSync) "AUTO ON" else "AUTO OFF", if (ohlcvAutoSync) Mint else Gold)
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = ohlcvExchange,
-                        onValueChange = { ohlcvExchange = it.take(3).uppercase() },
-                        label = { Text("Exchange") },
-                        singleLine = true,
-                        modifier = Modifier.weight(0.7f).testTag("ohlcv.exchange")
-                    )
-                    OutlinedTextField(
-                        value = ohlcvSymbol,
-                        onValueChange = { ohlcvSymbol = it.take(30).uppercase() },
-                        label = { Text("Symbol") },
-                        placeholder = { Text("RELIANCE") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1.3f).testTag("ohlcv.symbol")
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = ohlcvFrom,
-                        onValueChange = { ohlcvFrom = it.take(10) },
-                        label = { Text("From · YYYY-MM-DD") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f).testTag("ohlcv.from")
-                    )
-                    OutlinedTextField(
-                        value = ohlcvTo,
-                        onValueChange = { ohlcvTo = it.take(10) },
-                        label = { Text("To · YYYY-MM-DD") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f).testTag("ohlcv.to")
-                    )
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Refresh this dataset automatically when Research Lab opens", color = Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
-                    Switch(
-                        checked = ohlcvAutoSync,
-                        onCheckedChange = {
-                            ohlcvAutoSync = it
-                            val old = TejHqOhlcvStore.settings(context)
-                            TejHqOhlcvStore.saveSettings(context, old.copy(
-                                exchange = ohlcvExchange.lowercase(),
-                                symbol = ohlcvSymbol.uppercase(),
-                                fromDate = ohlcvFrom,
-                                autoSync = it
-                            ))
-                        },
-                        modifier = Modifier.testTag("ohlcv.autoSync")
-                    )
-                }
-                Button(
-                    onClick = { fetchOhlcvHistory(incremental = false) },
-                    enabled = !ohlcvLoading && repository != null && ohlcvSymbol.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth().testTag("ohlcv.fetch")
-                ) {
-                    Text(if (ohlcvLoading) "Fetching…" else "Fetch OHLCV history")
-                }
-                if (ohlcvLoading) {
-                    androidx.compose.material3.CircularProgressIndicator(
-                        modifier = Modifier.width(22.dp).height(22.dp)
-                    )
-                }
-                ohlcvStatus?.let { Text(it, color = Mint, fontSize = 10.sp) }
-                ohlcvError?.let { Text(it, color = Coral, fontSize = 10.sp) }
+            TejHqOhlcvPanel(repository) { loaded, name ->
+                summary = loaded
+                datasetName = name
             }
         }
         item {
