@@ -42,12 +42,10 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("market.eod.snapshot"))
         composeRule.onNodeWithTag("market.eod.snapshot").assertIsDisplayed()
         composeRule.onNodeWithText("END OF DAY").assertIsDisplayed()
-        // The EOD card intentionally collapses mover rows by default. Wait for
-        // the asynchronous snapshot payload, then explicitly expand it before
-        // asserting that the fixture symbol is rendered.
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithText("2450 stocks", substring = true).fetchSemanticsNodes().isNotEmpty()
         }
+        composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasText("Show market movers"))
         composeRule.onNodeWithText("Show market movers").performClick()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithText("FIXTURE").fetchSemanticsNodes().isNotEmpty()
@@ -57,16 +55,35 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithText("FIXTURE").assertIsDisplayed()
         composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("market.sector.heading"))
         composeRule.onNodeWithTag("market.sector.heading").assertIsDisplayed()
-        // Sector cards are ranked by verified live performance; expand the list before
-        // asserting a specific benchmark so the test does not assume a fixed rank.
-        composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasText("View all sector benchmarks"))
+
+        // Expand sector coverage before selecting a benchmark. Waiting for the
+        // expanded state avoids race-dependent clicks during Compose animations.
+        composeRule.onNodeWithTag("market.pulse.list")
+            .performScrollToNode(hasText("View all sector benchmarks"))
         composeRule.onNodeWithText("View all sector benchmarks").performClick()
-        composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("sector.index.NIFTY BANK"))
-        composeRule.onNodeWithTag("sector.index.NIFTY BANK").assertIsDisplayed()
-        composeRule.onNodeWithTag("sector.index.NIFTY BANK").performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("sector.index.NIFTY BANK")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("market.pulse.list")
+            .performScrollToNode(hasTestTag("sector.index.NIFTY BANK"))
+        composeRule.onNodeWithTag("sector.index.NIFTY BANK")
+            .assertIsDisplayed()
+            .performClick()
+
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("instrument.research.screen")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
         composeRule.onNodeWithTag("instrument.research.screen").assertIsDisplayed()
         composeRule.onNodeWithText("NIFTY BANK").assertIsDisplayed()
+
+        composeRule.onNodeWithText("← Back to Pulse").performScrollTo()
         composeRule.onNodeWithText("← Back to Pulse").performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("market.pulse.list")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
         composeRule.onNodeWithTag("market.pulse.list").assertIsDisplayed()
     }
 
@@ -90,8 +107,6 @@ class QuantDashboardRegressionTest {
             .performScrollToNode(hasTestTag("portfolio.entry"))
         composeRule.onNodeWithTag("portfolio.entry").assertIsDisplayed()
     }
-
-
 
     @Test fun settingsWorkspaceSeparatesProviderCredentialsFromMarketDashboard() {
         waitForDashboard()
