@@ -20,6 +20,7 @@ import com.rovexquant.app.data.local.TejHqOhlcvSyncManager
 import com.rovexquant.app.data.repository.QuantDataRepository
 import com.rovexquant.app.data.model.TechnicalIndicators
 import com.rovexquant.app.domain.InstrumentCatalog
+import com.rovexquant.app.domain.TechnicalIndicatorCalculator
 import com.rovexquant.app.domain.ChartSeriesMapper
 import com.rovexquant.app.domain.ChartSeriesData
 import com.rovexquant.app.domain.MarketOhlcvSeries
@@ -61,6 +62,8 @@ fun InstrumentResearchScreen(
     var indicators by remember(symbol) { mutableStateOf<TechnicalIndicators?>(null) }
     var indicatorsLoading by remember(symbol) { mutableStateOf(false) }
     var indicatorsError by remember(symbol) { mutableStateOf<String?>(null) }
+    var indicatorsSource by remember(symbol) { mutableStateOf("BACKEND") }
+    var indicatorsNotice by remember(symbol) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     suspend fun refreshSeries(fullHistory: Boolean = false) {
@@ -195,11 +198,30 @@ fun InstrumentResearchScreen(
                 "Backend indicator coverage does not match the requested OHLC window."
             }
             indicators = result
+            indicatorsSource = "BACKEND"
+            indicatorsNotice = null
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (failure: Exception) {
-            indicators = null
-            indicatorsError = failure.message ?: "Backend indicator calculation is unavailable."
+        } catch (backendFailure: Exception) {
+            // The chart tools remain functional offline. The local engine mirrors
+            // the backend formulas and preserves identical warm-up/index semantics.
+            try {
+                val fallback = withContext(Dispatchers.Default) {
+                    TechnicalIndicatorCalculator.calculate(requestBars, startIndex)
+                }
+                require(fallback.startIndex == startIndex && fallback.barCount == requestBars.size) {
+                    "Local indicator coverage does not match the requested OHLC window."
+                }
+                indicators = fallback
+                indicatorsSource = "LOCAL"
+                indicatorsNotice = backendFailure.message ?: "Backend indicator service unavailable."
+                indicatorsError = null
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (fallbackFailure: Exception) {
+                indicators = null
+                indicatorsError = "Backend: ${backendFailure.message ?: "unavailable"} · Local: ${fallbackFailure.message ?: "calculation failed"}"
+            }
         } finally {
             indicatorsLoading = false
         }
@@ -340,9 +362,10 @@ fun InstrumentResearchScreen(
             indicatorsLoading -> Text("Calculating indicators on the backend…", color = Muted, fontSize = 9.sp)
             indicatorsError != null -> Text("Indicators unavailable: $indicatorsError", color = Coral, fontSize = 9.sp)
             indicators != null -> Text(
-                "Deterministic backend indicators · ${indicators!!.barCount} bars · " +
-                    "${bars.getOrNull(indicators!!.startIndex)?.timestamp?.toLocalDate()?.toString() ?: "coverage pending"} onward",
-                color = Muted,
+                "${if (indicatorsSource == "BACKEND") "Backend" else "Offline local fallback"} indicators · ${indicators!!.barCount} bars · " +
+                    "${bars.getOrNull(indicators!!.startIndex)?.timestamp?.toLocalDate()?.toString() ?: "coverage pending"} onward" +
+                    (indicatorsNotice?.let { " · backend unavailable" } ?: ""),
+                color = if (indicatorsSource == "BACKEND") Muted else Gold,
                 fontSize = 9.sp
             )
         }
