@@ -295,20 +295,68 @@ class QuantWorkspaceViewModel(
 
         marketJob = viewModelScope.launch {
             try {
-                val indexMaster = repository.fetchIndexInstruments(session)
+                val cachedIndices = try {
+                    repository.loadCachedIndexInstruments()?.instruments.orEmpty()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    emptyList()
+                }
+                val cachedEquities = try {
+                    repository.loadCachedEquityInstruments()?.instruments.orEmpty()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    emptyList()
+                }
+                val cachedResolvedIndices = resolveDashboardIndices(cachedIndices)
+                if (cachedResolvedIndices.isNotEmpty() || cachedEquities.isNotEmpty()) {
+                    _uiState.update {
+                        it.copy(
+                            indexKeys = cachedResolvedIndices,
+                            equities = cachedEquities,
+                            streamStatus = "Loaded on-device NSE instrument library · refreshing master"
+                        )
+                    }
+                }
+
+                suspend fun persistMaster(block: suspend () -> Unit) {
+                    try {
+                        block()
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        // Cache write failure must not block market data or company search.
+                    }
+                }
+
+                val indexMaster = try {
+                    val fresh = repository.fetchIndexInstruments(session)
+                    require(fresh.isNotEmpty()) { "Official NSE index master returned no instruments." }
+                    persistMaster { repository.saveCachedIndexInstruments(fresh) }
+                    fresh
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    if (cachedIndices.isEmpty()) throw failure
+                    cachedIndices
+                }
                 val resolvedIndices = resolveDashboardIndices(indexMaster)
                 if (resolvedIndices.isEmpty()) {
-                    throw IllegalStateException("Official NSE index master contained no dashboard benchmark matches.")
+                    throw IllegalStateException("Official and cached NSE index masters contain no dashboard benchmark matches.")
                 }
 
                 var equityMasterFailure: String? = null
                 val equities = try {
-                    repository.fetchEquityInstruments(session)
+                    val fresh = repository.fetchEquityInstruments(session)
+                    if (fresh.isEmpty()) throw IllegalStateException("NSE equity master returned no instruments.")
+                    persistMaster { repository.saveCachedEquityInstruments(fresh) }
+                    fresh
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (failure: Exception) {
                     equityMasterFailure = failure.message ?: "NSE equity master unavailable"
-                    emptyList()
+                    cachedEquities
                 }
 
                 val subscriptions = (resolvedIndices.values + equities.map { it.instrumentKey }).distinct()
@@ -321,9 +369,13 @@ class QuantWorkspaceViewModel(
                     it.copy(
                         indexKeys = resolvedIndices,
                         equities = equities,
-                        streamStatus = equityMasterFailure?.let {
-                            "NSE equity master unavailable: $it · index-only feed"
-                        } ?: "Connecting · ${equities.size} equities + ${resolvedIndices.size} indices"
+                        streamStatus = when {
+                            equityMasterFailure != null && equities.isNotEmpty() ->
+                                "Using cached NSE company library · refresh failed: $equityMasterFailure"
+                            equityMasterFailure != null ->
+                                "NSE equity master unavailable: $equityMasterFailure · index-only feed"
+                            else -> "Connecting · ${equities.size} equities + ${resolvedIndices.size} indices"
+                        }
                     )
                 }
                 controller.start(subscriptions)
@@ -331,7 +383,7 @@ class QuantWorkspaceViewModel(
                 throw cancelled
             } catch (failure: Exception) {
                 _uiState.update {
-                    it.copy(streamStatus = failure.message ?: "Unable to load official NSE instrument master")
+                    it.copy(streamStatus = failure.message ?: "Unable to load official or cached NSE instrument master")
                 }
             }
         }
