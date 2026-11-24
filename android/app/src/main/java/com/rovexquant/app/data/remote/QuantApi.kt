@@ -56,6 +56,17 @@ object QuantApi {
         .followSslRedirects(false)
         .build()
 
+    // Render Free services can sleep after 15 minutes and take about a minute
+    // to wake. Keep this longer budget limited to slow research/status endpoints;
+    // normal interactive quote/auth calls retain their shorter deadlines.
+    private val researchHttp = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(90, TimeUnit.SECONDS)
+        .callTimeout(105, TimeUnit.SECONDS)
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .build()
+
     fun login(baseUrl: String, username: String, password: String): QuantSession {
         val normalized = baseUrl.trim().trimEnd('/')
         require(normalized.startsWith("https://")) { "Use the HTTPS URL of your Quant backend." }
@@ -429,7 +440,7 @@ object QuantApi {
             .header("Authorization", "Bearer ${session.accessToken}")
             .get()
             .build()
-        masterHttp.newCall(request).execute().use { response ->
+        researchHttp.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) throw IllegalStateException(apiError(body, response.code))
             require(body.toByteArray(Charsets.UTF_8).size <= 512 * 1024) {
@@ -514,7 +525,7 @@ object QuantApi {
                 builder.post("{}".toRequestBody("application/json".toMediaType())).build()
             } else builder.get().build()
             return try {
-                masterHttp.newCall(request).execute().use { response ->
+                researchHttp.newCall(request).execute().use { response ->
                     val body = response.body?.string().orEmpty()
                     if (!response.isSuccessful) {
                         errors += "${path}: ${apiError(body, response.code)}"
