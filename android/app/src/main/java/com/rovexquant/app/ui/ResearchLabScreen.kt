@@ -6,7 +6,6 @@ import com.rovexquant.app.data.model.MacroResearchSummary
 import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.repository.QuantDataRepository
 
-import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -298,7 +297,7 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
                 }
             }
         } else {
-            item { EmptyPanel("No historical dataset loaded", "Import a licensed OHLCV CSV to calculate trend, momentum and breakout conditions on-device. Your imported dataset is stored privately on this device.") }
+            item { EmptyPanel("No historical dataset loaded", "Fetch daily OHLCV history above or import a CSV. Data is stored privately on this device.") }
         }
 
     }
