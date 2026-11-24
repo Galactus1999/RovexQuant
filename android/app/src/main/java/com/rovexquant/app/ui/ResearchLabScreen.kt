@@ -1,6 +1,7 @@
 package com.rovexquant.app.ui
 
 import com.rovexquant.app.data.model.QuantSession
+import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.local.TejHqOhlcvStore
 import com.rovexquant.app.data.model.MacroResearchSummary
 import com.rovexquant.app.data.model.EventStudyResult
@@ -41,7 +42,12 @@ import java.util.Locale
 private const val MAX_CSV_BYTES = 20 * 1024 * 1024
 
 @Composable
-fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataRepository? = null) {
+fun ResearchLabScreen(
+    session: QuantSession? = null,
+    repository: QuantDataRepository? = null,
+    equityInstruments: List<MarketEquityInstrument> = emptyList(),
+    indexKeys: Map<String, String> = emptyMap()
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var summary by remember { mutableStateOf<OhlcvResearchSummary?>(null) }
@@ -163,28 +169,30 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
             }
         }
         if (session != null && repository != null) {
-            item { NseMcpResearchPanel(session, repository) }
+            item { NseMcpResearchPanel(session, repository, equityInstruments = equityInstruments, indexKeys = indexKeys) }
             item {
                 TerminalCard {
                     Eyebrow("Event study")
-                    OutlinedTextField(
+                    InstrumentSymbolPicker(
                         value = eventSymbol,
-                        onValueChange = { eventSymbol = it.take(40).uppercase() },
-                        label = { Text("NSE symbol") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                        onValueChange = { eventSymbol = it.uppercase().take(80) },
+                        label = "NSE company or index",
+                        testTag = "research.lab.event.symbol",
+                        equities = equityInstruments,
+                        indexKeys = indexKeys
                     )
                     EventDatePickerField(
                         value = eventDate,
                         onValueChange = { eventDate = it },
                         modifier = Modifier.fillMaxWidth()
                     )
-                    OutlinedTextField(
+                    InstrumentSymbolPicker(
                         value = benchmarkSymbol,
-                        onValueChange = { benchmarkSymbol = it.take(40).uppercase() },
-                        label = { Text("Benchmark · optional") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                        onValueChange = { benchmarkSymbol = it.uppercase().take(80) },
+                        label = "Benchmark company or index · optional",
+                        testTag = "research.lab.event.benchmark",
+                        equities = equityInstruments,
+                        indexKeys = indexKeys
                     )
                     Button(
                         onClick = { runEventStudy() },
