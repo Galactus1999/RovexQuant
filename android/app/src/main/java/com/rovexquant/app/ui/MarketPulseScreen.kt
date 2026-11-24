@@ -232,7 +232,7 @@ fun MarketPulseScreen(
                     nifty?.let {
                         if (it.quality == "VALID" && isFresh(it)) "LIVE" else "STALE"
                     } ?: "—",
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f).clickable { onOpenInstrument("NIFTY 50", "NIFTY 50") }
                 )
                 MetricTile(
                     "NIFTY BANK",
@@ -241,7 +241,7 @@ fun MarketPulseScreen(
                         if (it.quality == "VALID" && isFresh(it)) "LIVE" else "STALE · ${it.quality}"
                     } ?: "Awaiting verified tick",
                     accent = Cyan,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f).clickable { onOpenInstrument("NIFTY BANK", "NIFTY BANK") }
                 )
             }
         }
