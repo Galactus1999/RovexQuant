@@ -32,6 +32,9 @@ import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.NseMcpTool
 import com.rovexquant.app.data.model.QuantSession
+import com.rovexquant.app.data.model.TechnicalIndicators
+import com.rovexquant.app.data.model.TechnicalIndicatorPeriods
+import com.rovexquant.app.domain.OhlcvBar
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -352,6 +355,103 @@ object QuantApi {
                 derivedBackfills = parseItems("derived_backfills"),
                 reconciliation = parseItem(json.optJSONObject("reconciliation"), "Reconciliation"),
                 notes = notes
+            )
+        }
+    }
+
+    /**
+     * Calls the authenticated deterministic backend indicator engine. Input order is
+     * preserved exactly; JSON null warm-up values remain null and every returned
+     * array is checked against the requested bar count before reaching the chart.
+     */
+    fun fetchTechnicalIndicators(
+        session: QuantSession,
+        bars: List<OhlcvBar>,
+        startIndex: Int,
+        periods: TechnicalIndicatorPeriods = TechnicalIndicatorPeriods()
+    ): TechnicalIndicators {
+        require(bars.isNotEmpty() && bars.size <= 10_000) {
+            "Indicator calculations require between 1 and 10,000 aligned OHLC bars."
+        }
+        require(startIndex >= 0) { "Indicator source offset cannot be negative." }
+        bars.forEachIndexed { index, bar ->
+            require(
+                bar.open.isFinite() && bar.open > 0.0 &&
+                    bar.high.isFinite() && bar.high > 0.0 &&
+                    bar.low.isFinite() && bar.low > 0.0 &&
+                    bar.close.isFinite() && bar.close > 0.0 &&
+                    bar.high >= maxOf(bar.open, bar.close) &&
+                    bar.low <= minOf(bar.open, bar.close) &&
+                    bar.high >= bar.low
+            ) { "OHLC bar ${index + 1} failed validation before indicator calculation." }
+        }
+
+        val close = JSONArray()
+        val high = JSONArray()
+        val low = JSONArray()
+        bars.forEach { bar ->
+            close.put(bar.close)
+            high.put(bar.high)
+            low.put(bar.low)
+        }
+        val payload = JSONObject()
+            .put("close", close)
+            .put("high", high)
+            .put("low", low)
+            .put("sma_period", periods.sma)
+            .put("ema_period", periods.ema)
+            .put("rsi_period", periods.rsi)
+            .put("bollinger_period", periods.bollinger)
+            .put("bollinger_deviations", periods.bollingerDeviations)
+            .put("atr_period", periods.atr)
+            .put("adx_period", periods.adx)
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/research/indicators")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .post(payload.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+
+        researchHttp.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(body, response.code))
+            require(body.toByteArray(Charsets.UTF_8).size <= 2 * 1024 * 1024) {
+                "Indicator response exceeds the 2 MB mobile safety limit."
+            }
+            val json = JSONObject(body)
+            val count = bars.size
+            fun parseSeries(array: JSONArray?, label: String): List<Double?> {
+                require(array != null && array.length() == count) {
+                    "Backend indicator '$label' is missing or misaligned with the requested OHLC bars."
+                }
+                return List(count) { index ->
+                    if (array.isNull(index)) null else {
+                        val value = array.optDouble(index, Double.NaN)
+                        require(value.isFinite()) {
+                            "Backend indicator '$label' contains a non-finite value at bar ${index + 1}."
+                        }
+                        value
+                    }
+                }
+            }
+            val macd = json.optJSONArray("macd")
+                ?: throw IllegalStateException("Backend indicator response is missing MACD arrays.")
+            require(macd.length() == 3) { "Backend MACD response must contain line, signal and histogram arrays." }
+            val bands = json.optJSONObject("bollinger_bands")
+                ?: throw IllegalStateException("Backend indicator response is missing Bollinger bands.")
+            return TechnicalIndicators(
+                startIndex = startIndex,
+                barCount = count,
+                sma = parseSeries(json.optJSONArray("sma"), "SMA"),
+                ema = parseSeries(json.optJSONArray("ema"), "EMA"),
+                rsi = parseSeries(json.optJSONArray("rsi"), "RSI"),
+                macdLine = parseSeries(macd.optJSONArray(0), "MACD line"),
+                macdSignal = parseSeries(macd.optJSONArray(1), "MACD signal"),
+                macdHistogram = parseSeries(macd.optJSONArray(2), "MACD histogram"),
+                bollingerUpper = parseSeries(bands.optJSONArray("upper"), "Bollinger upper"),
+                bollingerMiddle = parseSeries(bands.optJSONArray("middle"), "Bollinger middle"),
+                bollingerLower = parseSeries(bands.optJSONArray("lower"), "Bollinger lower"),
+                atr = parseSeries(json.optJSONArray("atr"), "ATR"),
+                adx = parseSeries(json.optJSONArray("adx"), "ADX")
             )
         }
     }
