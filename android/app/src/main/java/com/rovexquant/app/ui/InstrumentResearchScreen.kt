@@ -148,7 +148,7 @@ fun InstrumentResearchScreen(
         if (selected == null || activeSession == null) return@LaunchedEffect
         intelligenceLoading = true
         try {
-            val query = "\"\u0024{selected.canonicalSymbol}\" OR \"\u0024{displayName.take(70)}\"".take(160)
+            val query = "\"" + selected.canonicalSymbol + "\" OR \"" + displayName.take(70) + "\""
             intelligenceFeed = repository.fetchIntelligenceEvents(activeSession, query, "7d")
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -543,4 +543,184 @@ internal fun simpleMovingAverage(bars: List<OhlcvBar>, period: Int): List<Double
         if (index >= period - 1) result[index] = rollingSum / period
     }
     return result
+}
+
+
+@Composable
+private fun InstrumentOverviewPanel(
+    symbol: String,
+    isIndex: Boolean,
+    bars: List<OhlcvBar>,
+    visibleBars: List<OhlcvBar>,
+    interval: OhlcvInterval,
+    quote: InstrumentQuoteSnapshot?,
+    quoteLoading: Boolean,
+    quoteError: String?,
+    intelligence: IntelligenceFeed?,
+    intelligenceLoading: Boolean,
+    intelligenceError: String?,
+    onOpenUrl: (String) -> Unit
+) {
+    val latest = bars.lastOrNull()
+    val previous = bars.getOrNull(bars.lastIndex - 1)
+    val dailyChange = quote?.changePercent
+        ?: if (latest != null && previous != null && previous.close > 0.0) {
+            (latest.close / previous.close - 1.0) * 100.0
+        } else null
+    val periodHigh = visibleBars.maxOfOrNull { it.high }
+    val periodLow = visibleBars.minOfOrNull { it.low }
+    fun periodReturn(days: Long): Double? {
+        val last = bars.lastOrNull() ?: return null
+        val targetDate = last.timestamp.toLocalDate().minusDays(days)
+        val base = bars.lastOrNull { !it.timestamp.toLocalDate().isAfter(targetDate) } ?: return null
+        if (base.close <= 0.0) return null
+        return (last.close / base.close - 1.0) * 100.0
+    }
+    fun price(value: Double?): String = value?.takeIf { it.isFinite() && it > 0.0 }
+        ?.let { String.format(Locale.US, "%.2f", it) } ?: "—"
+    fun percent(value: Double?): String = value?.takeIf { it.isFinite() }
+        ?.let { String.format(Locale.US, "%+.2f%%", it) } ?: "—"
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            "INSTRUMENT OVERVIEW",
+            color = MaterialTheme.colorScheme.onBackground,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            "Market data and price-derived statistics · ${quote?.provider ?: "historical OHLC source"}",
+            color = Muted,
+            fontSize = 9.sp
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OverviewMetric("Last price", price(quote?.lastPrice ?: latest?.close), Modifier.weight(1f))
+            OverviewMetric(
+                if (interval.isIntraday) "vs prior candle" else "Daily change",
+                percent(dailyChange),
+                Modifier.weight(1f),
+                valueColor = when {
+                    dailyChange == null -> Muted
+                    dailyChange >= 0.0 -> Mint
+                    else -> Coral
+                }
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OverviewMetric("52-week high", price(quote?.yearHigh), Modifier.weight(1f))
+            OverviewMetric("52-week low", price(quote?.yearLow), Modifier.weight(1f))
+        }
+        if (quote == null && !quoteLoading) {
+            Text(
+                quoteError ?: "52-week range is not available from the configured quote provider.",
+                color = Muted,
+                fontSize = 9.sp
+            )
+        } else if (quoteLoading) {
+            Text("Loading provider quote and 52-week range…", color = Muted, fontSize = 9.sp)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OverviewMetric("Selected-range high", price(periodHigh), Modifier.weight(1f))
+            OverviewMetric("Selected-range low", price(periodLow), Modifier.weight(1f))
+        }
+        Text("PRICE PERFORMANCE", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OverviewMetric("1 month", percent(periodReturn(30)), Modifier.weight(1f))
+            OverviewMetric("3 months", percent(periodReturn(90)), Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OverviewMetric("6 months", percent(periodReturn(180)), Modifier.weight(1f))
+            OverviewMetric("1 year", percent(periodReturn(365)), Modifier.weight(1f))
+        }
+        Text(
+            "VALUATION & FUNDAMENTALS",
+            color = Muted,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold
+        )
+        TerminalCard {
+            Text(
+                if (isIndex) "Index valuation (P/E, P/B, dividend yield)"
+                else "Company valuation (P/E, P/B, EPS, market capitalisation, dividend yield)",
+                color = MaterialTheme.colorScheme.onBackground,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                "Not yet available from a connected, validated fundamentals provider. These values are intentionally not estimated from price candles.",
+                color = Muted,
+                fontSize = 10.sp
+            )
+        }
+        Text("POSITION PROFIT / LOSS", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Text(
+            "The figures above show market-price performance, not your personal P&L. Personal profit/loss requires holdings, quantity, average buy price and corporate-action adjustments.",
+            color = Muted,
+            fontSize = 9.sp
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("RECENT NEWS & DEVELOPMENTS", color = MaterialTheme.colorScheme.onBackground,
+                fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text("7 days", color = Muted, fontSize = 9.sp)
+        }
+        when {
+            intelligenceLoading -> Text("Searching recent news…", color = Muted, fontSize = 10.sp)
+            intelligenceError != null -> Text(intelligenceError, color = Muted, fontSize = 10.sp)
+            intelligence?.events?.isNotEmpty() == true -> {
+                intelligence.events.take(6).forEach { event ->
+                    TerminalCard {
+                        Text(event.headline, color = MaterialTheme.colorScheme.onBackground,
+                            fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "${event.eventCategory} · ${event.sourceArticleCount} articles · ${event.independentSourceCount} independent sources",
+                            color = Muted, fontSize = 9.sp
+                        )
+                        event.sources.take(2).forEach { source ->
+                            TextButton(
+                                onClick = { if (source.url.startsWith("https://")) onOpenUrl(source.url) },
+                                enabled = source.url.startsWith("https://")
+                            ) {
+                                Text(
+                                    "${source.domain} · ${source.seenAt.ifBlank { "timestamp unavailable" }}",
+                                    fontSize = 9.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            else -> Text("No matching news events were returned for this 7-day search.", color = Muted, fontSize = 10.sp)
+        }
+        Text("IMPORTANT DATES & EXCHANGE DISCLOSURES", color = MaterialTheme.colorScheme.onBackground,
+            fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Text(
+            "Upcoming ex-dates, board meetings and result dates need a verified exchange corporate-actions feed; they are not inferred from news headlines.",
+            color = Muted,
+            fontSize = 9.sp
+        )
+        TextButton(onClick = {
+            onOpenUrl("https://www.nseindia.com/companies-listing/corporate-filings-announcements")
+        }) {
+            Text("Open official NSE company announcements")
+        }
+    }
+}
+
+@Composable
+private fun OverviewMetric(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    valueColor: Color = MaterialTheme.colorScheme.onBackground
+) {
+    TerminalCard {
+        Column(modifier = modifier) {
+            Text(label, color = Muted, fontSize = 9.sp)
+            Text(value, color = valueColor, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        }
+    }
 }
