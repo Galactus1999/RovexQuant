@@ -99,7 +99,9 @@ fun InstrumentResearchScreen(
             val today = LocalDate.now(ZoneId.of("Asia/Kolkata"))
             val from = when {
                 selected.interval.isIntraday -> today.minusDays(selected.interval.maximumHistoryDays)
-                fullHistory -> today.minusDays(6200)
+                fullHistory -> today.minusDays(
+                    if (selected.provider == com.rovexquant.app.domain.OhlcvProvider.UPSTOX_V3_HISTORICAL) 3653L else 6200L
+                )
                 else -> today.minusYears(3)
             }
             val result = withContext(Dispatchers.IO) {
@@ -377,7 +379,10 @@ fun InstrumentResearchScreen(
                         range = period
                         if (period == "ALL" && selectedInterval == OhlcvInterval.DAILY) {
                             val earliest = series?.bars?.firstOrNull()?.timestamp?.toLocalDate()
-                            val target = LocalDate.now(ZoneId.of("Asia/Kolkata")).minusDays(6190)
+                            val historyDays = if (
+                                identity?.provider == com.rovexquant.app.domain.OhlcvProvider.UPSTOX_V3_HISTORICAL
+                            ) 3653L else 6190L
+                            val target = LocalDate.now(ZoneId.of("Asia/Kolkata")).minusDays(historyDays)
                             if (earliest == null || earliest.isAfter(target)) {
                                 scope.launch { refreshSeries(fullHistory = true) }
                             }

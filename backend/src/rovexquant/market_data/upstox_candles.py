@@ -26,7 +26,7 @@ class UpstoxCandleError(Exception):
 
 
 _INTERVALS = {
-    "1d": ("days", 1, 3650),
+    "1d": ("days", 1, 3653),
     "1m": ("minutes", 1, 30),
     "5m": ("minutes", 5, 30),
     "10m": ("minutes", 10, 30),
