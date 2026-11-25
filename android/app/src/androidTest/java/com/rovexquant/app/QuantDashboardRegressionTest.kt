@@ -103,8 +103,8 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("instrument.overview.panel").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("52-week high").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("52-week low").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("VALUATION & FUNDAMENTALS").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("RECENT NEWS & DEVELOPMENTS").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("INDEX COMPOSITION & BREADTH").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("INDEX & SECTOR DEVELOPMENTS").performScrollTo().assertIsDisplayed()
         composeRule.waitUntil(15_000) {
             composeRule.onAllNodesWithTag("instrument.chart.candles")
                 .fetchSemanticsNodes().isNotEmpty()

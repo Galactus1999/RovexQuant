@@ -673,11 +673,12 @@ private fun InstrumentOverviewPanel(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OverviewMetric("1Y max drawdown", percent(oneYearMaximumDrawdown), Modifier.weight(1f))
-            OverviewMetric("Average daily range", percent(averageDailyRange), Modifier.weight(1f))
+            OverviewMetric("Avg daily range / prior close", percent(averageDailyRange), Modifier.weight(1f))
         }
         if (quote == null && !quoteLoading) {
             Text(
-                quoteError ?: "52-week range is not available from the configured quote provider.",
+                quoteError?.let { "Quote snapshot unavailable: $it. Price-derived metrics above use validated historical OHLC." }
+                    ?: "No separate quote snapshot; price-derived metrics above use validated historical OHLC.",
                 color = Muted,
                 fontSize = 9.sp
             )
@@ -690,46 +691,68 @@ private fun InstrumentOverviewPanel(
         }
         Text("PRICE PERFORMANCE", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OverviewMetric("1 week", percent(periodReturn(7)), Modifier.weight(1f))
             OverviewMetric("1 month", percent(periodReturn(30)), Modifier.weight(1f))
-            OverviewMetric("3 months", percent(periodReturn(90)), Modifier.weight(1f))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OverviewMetric("6 months", percent(periodReturn(180)), Modifier.weight(1f))
             OverviewMetric("1 year", percent(periodReturn(365)), Modifier.weight(1f))
         }
-        Text(
-            "VALUATION & FUNDAMENTALS",
-            color = Muted,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold
-        )
-        TerminalCard {
+        if (isIndex) {
+            Text("INDEX COMPOSITION & BREADTH", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            TerminalCard {
+                Text(
+                    "Constituents, weights, advances/declines and constituent contribution",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "Not available from the validated OHLC provider. These fields require an independently verified, point-in-time index constituent feed and are not inferred from index candles.",
+                    color = Muted,
+                    fontSize = 10.sp
+                )
+            }
+        } else {
+            Text("VALUATION & FUNDAMENTALS", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            TerminalCard {
+                Text(
+                    "Company valuation (P/E, P/B, EPS, market capitalisation, dividend yield)",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "Not yet available from a connected, validated fundamentals provider. These values are intentionally not estimated from price candles.",
+                    color = Muted,
+                    fontSize = 10.sp
+                )
+            }
+            Text("POSITION PROFIT / LOSS", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
             Text(
-                if (isIndex) "Index valuation (P/E, P/B, dividend yield)"
-                else "Company valuation (P/E, P/B, EPS, market capitalisation, dividend yield)",
-                color = MaterialTheme.colorScheme.onBackground,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                "Not yet available from a connected, validated fundamentals provider. These values are intentionally not estimated from price candles.",
+                "The figures above show market-price performance, not your personal P&L. Personal profit/loss requires holdings, quantity, average buy price and corporate-action adjustments.",
                 color = Muted,
-                fontSize = 10.sp
+                fontSize = 9.sp
             )
         }
-        Text("POSITION PROFIT / LOSS", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-        Text(
-            "The figures above show market-price performance, not your personal P&L. Personal profit/loss requires holdings, quantity, average buy price and corporate-action adjustments.",
-            color = Muted,
-            fontSize = 9.sp
-        )
+        if (interval == OhlcvInterval.DAILY && bars.isNotEmpty()) {
+            Text(
+                "DAILY HISTORY COVERAGE · ${bars.size} bars · ${bars.first().timestamp.toLocalDate()} to ${bars.last().timestamp.toLocalDate()}",
+                color = Muted,
+                fontSize = 9.sp
+            )
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("RECENT NEWS & DEVELOPMENTS", color = MaterialTheme.colorScheme.onBackground,
-                fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(
+                if (isIndex) "INDEX & SECTOR DEVELOPMENTS" else "RECENT NEWS & DEVELOPMENTS",
+                color = MaterialTheme.colorScheme.onBackground,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold
+            )
             Text("7 days", color = Muted, fontSize = 9.sp)
         }
         when {
@@ -760,17 +783,27 @@ private fun InstrumentOverviewPanel(
             }
             else -> Text("No matching news events were returned for this 7-day search.", color = Muted, fontSize = 10.sp)
         }
-        Text("IMPORTANT DATES & EXCHANGE DISCLOSURES", color = MaterialTheme.colorScheme.onBackground,
-            fontSize = 15.sp, fontWeight = FontWeight.Bold)
-        Text(
-            "Upcoming ex-dates, board meetings and result dates need a verified exchange corporate-actions feed; they are not inferred from news headlines.",
-            color = Muted,
-            fontSize = 9.sp
-        )
-        TextButton(onClick = {
-            onOpenUrl("https://www.nseindia.com/companies-listing/corporate-filings-announcements")
-        }) {
-            Text("Open official NSE company announcements")
+        if (isIndex) {
+            Text("INDEX METHODOLOGY & REBALANCING", color = MaterialTheme.colorScheme.onBackground,
+                fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "Constituent changes, index methodology, weights and rebalancing dates require a validated official index factsheet/feed. They are not inferred from price movements.",
+                color = Muted,
+                fontSize = 9.sp
+            )
+        } else {
+            Text("IMPORTANT DATES & EXCHANGE DISCLOSURES", color = MaterialTheme.colorScheme.onBackground,
+                fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "Upcoming ex-dates, board meetings and result dates need a verified exchange corporate-actions feed; they are not inferred from news headlines.",
+                color = Muted,
+                fontSize = 9.sp
+            )
+            TextButton(onClick = {
+                onOpenUrl("https://www.nseindia.com/companies-listing/corporate-filings-announcements")
+            }) {
+                Text("Open official NSE company announcements")
+            }
         }
     }
 }
