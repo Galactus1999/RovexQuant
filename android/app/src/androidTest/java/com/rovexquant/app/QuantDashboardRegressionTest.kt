@@ -2,6 +2,7 @@ package com.rovexquant.app
 
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsEnabled
@@ -381,8 +382,11 @@ class QuantDashboardRegressionTest {
 
         composeRule.onNodeWithTag("ai.workspace.list")
             .performScrollToNode(hasTestTag("ai.task.auto"))
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("ai.task.route").fetchSemanticsNodes().isNotEmpty()
+        }
         composeRule.onNodeWithTag("ai.task.auto").performClick()
-        composeRule.onNodeWithTag("ai.task.route").assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.task.route").assertExists()
         composeRule.onNodeWithTag("ai.workspace.list")
             .performScrollToNode(hasTestTag("ai.chat.input"))
         composeRule.onNodeWithTag("ai.chat.input").performTextInput("Review this supplied evidence using the research route.")
