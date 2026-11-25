@@ -110,7 +110,7 @@ class FakeQuantRepository(
     )
 
     override suspend fun fetchNseMcpTools(session: QuantSession, server: String): List<NseMcpCatalog> {
-        val servers = if (server == "both") listOf("bhavcopy", "cmmkt") else listOf(server)
+        val servers = if (server == "both") listOf("bhavcopy", "cmmkt", "dalalos") else listOf(server)
         return servers.map { serverName ->
             val tools = if (serverName == "dalalos") listOf(
                 NseMcpTool("get_company_exposures", "Company exposure fixture.", JSONObject("""{"type":"object","properties":{"query":{"type":"string"}}}"""), true),
