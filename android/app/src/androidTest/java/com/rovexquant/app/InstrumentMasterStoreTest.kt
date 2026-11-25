@@ -73,4 +73,20 @@ class InstrumentMasterStoreTest {
         assertTrue(cachedEquities.updatedAtMillis > 0L)
         assertTrue(cachedIndices.updatedAtMillis > 0L)
     }
+
+    @Test fun persistsAndRestoresEtfWithNonEquityPrefixIsin() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val etf = MarketEquityInstrument(
+            "NSE_EQ|INF204KB17I5",
+            "NIPPON INDIA ETF NIFTY 50 BEES",
+            "NIFTYBEES",
+            "INF204KB17I5"
+        )
+
+        InstrumentMasterStore.saveEquities(context, listOf(etf))
+
+        val cached = InstrumentMasterStore.loadEquities(context)
+        assertNotNull(cached)
+        assertEquals(listOf(etf), cached!!.instruments)
+    }
 }
