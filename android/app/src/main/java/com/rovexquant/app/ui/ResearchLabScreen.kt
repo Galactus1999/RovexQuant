@@ -296,7 +296,7 @@ fun ResearchLabScreen(
                     lineHeight = 16.sp
                 )
                 Text(
-                    "Daily filenames: NSE_RELIANCE.csv, BSE_TCS.csv, NSE_NIFTY_50.csv. Required columns: timestamp, open, high, low, close, volume; timestamps need an ISO-8601 offset. Limits: 20 MB/file, 100 MB/scan, 100 CSV files.",
+                    "Daily filenames: NSE_RELIANCE.csv, BSE_TCS.csv, NSE_NIFTY_50.csv. Supports Date/Datetime/Timestamp, Open, High, Low, Close and common Volume/Vol exports. Date-only and local timestamps are interpreted as Asia/Kolkata; equity files require volume, while index volume may be omitted. Limits: 20 MB/file, 100 MB/scan, 100 CSV files.",
                     color = Muted,
                     fontSize = 10.sp,
                     lineHeight = 16.sp
