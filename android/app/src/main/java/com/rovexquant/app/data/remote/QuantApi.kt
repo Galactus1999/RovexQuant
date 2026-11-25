@@ -4,6 +4,8 @@ import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiDailyBar
 import com.rovexquant.app.data.model.AiProvider
+import com.rovexquant.app.data.model.AiResearchRun
+import com.rovexquant.app.data.model.AiBudgetStatus
 import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.AiStrategyEvidence
@@ -873,6 +875,73 @@ object QuantApi {
                     put(task, AiTaskRoute(provider, model, fallbacks))
                 }
             }
+        }
+    }
+
+    fun fetchAiResearchRuns(session: QuantSession, limit: Int = 20): List<AiResearchRun> {
+        require(limit in 1..100) { "Research history limit must be between 1 and 100." }
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/ai/research/runs?limit=$limit")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            require(text.toByteArray(Charsets.UTF_8).size <= 512 * 1024) {
+                "AI research history exceeds the 512 KB mobile safety limit."
+            }
+            val rows = JSONObject(text).optJSONArray("runs") ?: JSONArray()
+            return buildList {
+                for (index in 0 until rows.length()) {
+                    val item = rows.optJSONObject(index) ?: continue
+                    val usage = item.optJSONObject("token_usage") ?: JSONObject()
+                    val cost = if (item.isNull("cost_usd")) null else item.optDouble("cost_usd").takeIf { it.isFinite() }
+                    add(AiResearchRun(
+                        runId = item.optString("run_id"),
+                        taskType = item.optString("task_type"),
+                        providerId = item.optString("provider_id"),
+                        model = item.optString("model"),
+                        status = item.optString("status"),
+                        promptTokens = usage.optLong("prompt_tokens").coerceAtLeast(0L),
+                        completionTokens = usage.optLong("completion_tokens").coerceAtLeast(0L),
+                        totalTokens = usage.optLong("total_tokens", usage.optLong("reserved_tokens")).coerceAtLeast(0L),
+                        costUsd = cost,
+                        costStatus = item.optString("cost_status", "NOT_TRACKED"),
+                        fallbackUsed = item.optBoolean("fallback_used"),
+                        createdAt = item.optString("created_at")
+                    ))
+                }
+            }
+        }
+    }
+
+    fun fetchAiBudgetStatus(session: QuantSession): AiBudgetStatus {
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/ai/budget")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            require(text.toByteArray(Charsets.UTF_8).size <= 64 * 1024) {
+                "AI budget response exceeds the 64 KB mobile safety limit."
+            }
+            val json = JSONObject(text)
+            val daily = json.optJSONObject("daily") ?: JSONObject()
+            val monthly = json.optJSONObject("monthly") ?: JSONObject()
+            fun nullableLong(source: JSONObject, key: String): Long? =
+                if (source.isNull(key)) null else source.optLong(key).coerceAtLeast(0L)
+            return AiBudgetStatus(
+                enabled = json.optBoolean("enabled"),
+                dailyUsedTokens = daily.optLong("used_tokens").coerceAtLeast(0L),
+                dailyLimitTokens = nullableLong(daily, "limit_tokens"),
+                dailyRemainingTokens = nullableLong(daily, "remaining_tokens"),
+                monthlyUsedTokens = monthly.optLong("used_tokens").coerceAtLeast(0L),
+                monthlyLimitTokens = nullableLong(monthly, "limit_tokens"),
+                monthlyRemainingTokens = nullableLong(monthly, "remaining_tokens")
+            )
         }
     }
 
