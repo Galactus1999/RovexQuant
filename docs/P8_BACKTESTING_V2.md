@@ -7,7 +7,7 @@ Upgrade the existing single-instrument, long-only prototype into a reproducible 
 ## P8.1 — Result integrity and analytics
 
 - Persist one equity point per input bar, including timestamp, cash, marked position value, equity and quantity.
-- Report positive and negative trade P&L totals, expectancy, average win/loss, maximum consecutive losses and exposure fraction.
+- Report positive and negative trade P&L totals (trade net P&L after commission/slippage), expectancy (mean net P&L per closed trade), average win and average absolute loss, maximum consecutive losses and fraction of bar intervals with any position exposure.
 - Report CAGR only when the sample spans at least 30 calendar days.
 - Do not infer annualisation frequency from timestamps. Annualised volatility and Sharpe remain null unless the caller explicitly supplies `periods_per_year`.
 - Preserve next-open signal fills, adverse stop-gap fills, commission and slippage.

@@ -119,4 +119,5 @@ def test_research_service_exposes_equity_curve_and_analytics():
     assert len(result["equity_curve"]) == 4
     assert result["equity_curve"][0]["equity"] == pytest.approx(100_000.0)
     assert result["expectancy"] == pytest.approx(500.0)
-    assert result["periods_per_year"] if "periods_per_year" in result else True
+    assert result["annualized_volatility_fraction"] is not None
+    assert result["sharpe_ratio"] is not None
