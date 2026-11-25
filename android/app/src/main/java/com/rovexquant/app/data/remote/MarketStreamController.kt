@@ -29,7 +29,6 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 private const val FRAME_QUEUE_CAPACITY = 64
-private const val CHART_FLOW_CAPACITY = 32
 private const val DASHBOARD_COALESCE_MS = 250L
 
 internal fun marketStreamStatusForQuotes(quotes: List<MarketTick>): String {
@@ -71,13 +70,6 @@ class MarketStreamController(
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
         onUndeliveredElement = { droppedFrames.incrementAndGet() }
     )
-    private val mutableChartTicks = MutableSharedFlow<List<MarketTick>>(
-        replay = 0,
-        extraBufferCapacity = CHART_FLOW_CAPACITY,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST
-    )
-    override val chartTicks = mutableChartTicks.asSharedFlow()
-
     private val mutableDashboardTicks = MutableSharedFlow<List<MarketTick>>(
         replay = 0,
         extraBufferCapacity = 1,
@@ -243,8 +235,6 @@ class MarketStreamController(
                 }
             }
             if (parsedTicks.isNotEmpty()) {
-                // Chart consumers can opt into this bounded higher-frequency stream.
-                mutableChartTicks.tryEmit(parsedTicks)
                 mergeLatestMarketTicks(latestByInstrument, parsedTicks)
             }
             if (json.optString("type") == "initial_feed" || json.optString("type") == "live_feed") {
