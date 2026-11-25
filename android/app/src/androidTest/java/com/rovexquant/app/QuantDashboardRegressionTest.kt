@@ -299,6 +299,35 @@ class QuantDashboardRegressionTest {
             hasText("Deterministic EOD strategy fixture response.")
         )
         composeRule.onNodeWithText("Deterministic EOD strategy fixture response.").assertIsDisplayed()
+
+        // Research tools must load deterministic market evidence and attach it to
+        // the draft; the independent briefing panel must then render its output.
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.tool.market"))
+        composeRule.onNodeWithTag("ai.tool.market").assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.tool.events"))
+        composeRule.onNodeWithTag("ai.tool.events").assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.tool.macro"))
+        composeRule.onNodeWithTag("ai.tool.macro").assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.tool.market"))
+        composeRule.onNodeWithTag("ai.tool.market").performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("NSE EOD snapshot attached", substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.chat.input"))
+        composeRule.onNodeWithTag("ai.chat.input").assertTextContains("NSE EOD SNAPSHOT", substring = true)
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.brief.generate"))
+        composeRule.onNodeWithTag("ai.brief.generate").assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.brief.generate").performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("Deterministic AI fixture response.").fetchSemanticsNodes().size >= 2
+        }
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.brief.output"))
+        composeRule.onNodeWithTag("ai.brief.output").assertTextContains("Deterministic AI fixture response.")
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(
+            hasText("No machine-verifiable source references returned.", substring = true)
+        )
+        composeRule.onNodeWithText("No machine-verifiable source references returned.", substring = true).assertIsDisplayed()
     }
 
     @Test fun intelligenceCentreLoadsEventEvidenceAndSectorTransmission() {
