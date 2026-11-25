@@ -10,7 +10,13 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field, SecretStr, model_validator
 
-from rovexquant.ai.gateway import GatewayError, authorize_gateway, complete_chat, configured_providers
+from rovexquant.ai.gateway import (
+    GatewayError, authorize_gateway, complete_chat, configured_providers, configured_task_routes,
+)
+from rovexquant.market_data.eod_store import EodStoreError
+from rovexquant.ai.research_archive import (
+    get_ai_research_run, get_ai_token_budget_status, list_ai_research_runs,
+)
 from rovexquant.ai.providers import SUPPORTED
 from rovexquant.market_data import tejhq_service
 from rovexquant.market_data.tejhq_service import TejHqError
@@ -398,5 +404,54 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
         }
     except TejHqError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+    except GatewayError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+@router.get(
+    "/api/v1/app/ai/budget",
+    dependencies=[Depends(require_app_session)],
+)
+def app_ai_budget_status():
+    """Return owner-scoped AI budget telemetry without exposing credentials."""
+    try:
+        return get_ai_token_budget_status()
+    except EodStoreError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+@router.get(
+    "/api/v1/app/ai/research/runs",
+    dependencies=[Depends(require_app_session)],
+)
+def app_ai_research_runs(limit: int = 30, task_type: str | None = None):
+    try:
+        return list_ai_research_runs(limit=limit, task_type=task_type)
+    except EodStoreError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+@router.get(
+    "/api/v1/app/ai/research/runs/{run_id}",
+    dependencies=[Depends(require_app_session)],
+)
+def app_ai_research_run(run_id: str):
+    try:
+        result = get_ai_research_run(run_id)
+    except EodStoreError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+    if result is None:
+        raise HTTPException(status_code=404, detail="AI research run not found")
+    return result
+
+
+@router.get(
+    "/api/v1/app/ai/task-routes",
+    dependencies=[Depends(require_app_session)],
+)
+def app_ai_task_routes():
+    """Expose server-owned task routing metadata, never provider credentials."""
+    try:
+        return {"routes": configured_task_routes()}
     except GatewayError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
