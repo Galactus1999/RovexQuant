@@ -372,6 +372,27 @@ class QuantDashboardRegressionTest {
         }
     }
 
+    @Test fun aiWorkspaceUsesConfiguredServerTaskRoute() {
+        waitForDashboard()
+        composeRule.onNodeWithText("Scan").performClick()
+        composeRule.onNodeWithTag("scanner.list").performScrollToNode(hasText("Open AI data recovery"))
+        composeRule.onNodeWithText("Open AI data recovery").performClick()
+        composeRule.onNodeWithText("Quant Intelligence.").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("ai.workspace.list")
+            .performScrollToNode(hasTestTag("ai.task.auto"))
+        composeRule.onNodeWithTag("ai.task.auto").performClick()
+        composeRule.onNodeWithTag("ai.task.route").assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.workspace.list")
+            .performScrollToNode(hasTestTag("ai.chat.input"))
+        composeRule.onNodeWithTag("ai.chat.input").performTextInput("Review this supplied evidence using the research route.")
+        composeRule.onNodeWithTag("ai.chat.send").assertIsEnabled()
+        composeRule.onNodeWithTag("ai.chat.send").performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("Deterministic AI fixture response.").fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
     @Test fun intelligenceCentreLoadsEventEvidenceAndSectorTransmission() {
         waitForDashboard()
         composeRule.onNodeWithText("Intel").performClick()
