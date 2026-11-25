@@ -34,3 +34,4 @@ class BacktestRequest(BaseModel):
     stop_fraction: float = Field(default=0.02, gt=0, lt=1)
     commission_bps: float = Field(default=5, ge=0)
     slippage_bps: float = Field(default=5, ge=0)
+    periods_per_year: int | None = Field(default=None, ge=1, le=100000)

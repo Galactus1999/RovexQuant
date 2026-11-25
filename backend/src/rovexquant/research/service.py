@@ -49,6 +49,7 @@ def run_backtest(request: BacktestRequest) -> dict[str, Any]:
         stop_fraction=request.stop_fraction,
         commission_bps=request.commission_bps,
         slippage_bps=request.slippage_bps,
+        periods_per_year=request.periods_per_year,
     )
     bars = [BacktestBar(**bar.model_dump()) for bar in request.bars]
     result = run_long_only_backtest(bars, request.signals, config)
@@ -60,6 +61,24 @@ def run_backtest(request: BacktestRequest) -> dict[str, Any]:
         "win_rate": result.win_rate,
         "profit_factor": result.profit_factor,
         "trade_count": result.trade_count,
+        "gross_profit": result.gross_profit,
+        "gross_loss": result.gross_loss,
+        "expectancy": result.expectancy,
+        "average_win": result.average_win,
+        "average_loss": result.average_loss,
+        "max_consecutive_losses": result.max_consecutive_losses,
+        "exposure_fraction": result.exposure_fraction,
+        "cagr_fraction": result.cagr_fraction,
+        "annualized_volatility_fraction": result.annualized_volatility_fraction,
+        "sharpe_ratio": result.sharpe_ratio,
+        "calmar_ratio": result.calmar_ratio,
+        "equity_curve": [{
+            "timestamp": point.timestamp,
+            "cash": point.cash,
+            "position_market_value": point.position_market_value,
+            "equity": point.equity,
+            "position_quantity": point.position_quantity,
+        } for point in result.equity_curve],
         "trades": [{
             "entry_time": trade.entry_time,
             "exit_time": trade.exit_time,
