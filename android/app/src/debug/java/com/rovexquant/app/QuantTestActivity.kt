@@ -32,7 +32,13 @@ import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.data.repository.MarketStream
 import com.rovexquant.app.data.repository.QuantDataRepository
 import com.rovexquant.app.domain.OhlcvBar
+import com.rovexquant.app.domain.InstrumentIdentity
+import com.rovexquant.app.domain.MarketOhlcvSeries
+import com.rovexquant.app.domain.OhlcvProvider
 import java.time.LocalDate
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
+import java.time.Instant
 import com.rovexquant.app.feature.workspace.QuantWorkspaceViewModel
 import org.json.JSONObject
 
@@ -180,6 +186,49 @@ class FakeQuantRepository(
         )),
         limitations = listOf("Global news discovery is not primary-source verification.")
     )
+
+    override suspend fun fetchInstrumentOhlcv(
+        instrument: InstrumentIdentity,
+        from: LocalDate,
+        to: LocalDate
+    ): MarketOhlcvSeries {
+        val bars = buildList {
+            var date = to.minusDays(160)
+            var index = 0
+            while (!date.isAfter(to)) {
+                if (date.dayOfWeek.value <= 5) {
+                    val close = 100.0 + index * 0.25
+                    val open = close - 0.2
+                    add(
+                        OhlcvBar(
+                            timestamp = OffsetDateTime.of(
+                                date.year, date.monthValue, date.dayOfMonth, 15, 30, 0, 0,
+                                ZoneOffset.ofHoursMinutes(5, 30)
+                            ),
+                            open = open,
+                            high = close + 0.5,
+                            low = open - 0.5,
+                            close = close,
+                            volume = if (instrument.provider == OhlcvProvider.TEJHQ_EOD) 100_000L + index else 0L
+                        )
+                    )
+                    index++
+                }
+                date = date.plusDays(1)
+            }
+        }
+        return MarketOhlcvSeries(
+            instrument = instrument,
+            bars = bars,
+            retrievedAt = Instant.parse("2026-11-24T10:00:00Z"),
+            volumeAvailable = instrument.provider == OhlcvProvider.TEJHQ_EOD,
+            adjustmentStatus = if (instrument.provider == OhlcvProvider.TEJHQ_EOD) {
+                "Deterministic test fixture · raw EOD"
+            } else {
+                "Deterministic test fixture · price-return index OHLC"
+            }
+        )
+    }
 
     override suspend fun fetchTejHqOhlcv(
         exchange: String, symbol: String, from: LocalDate, to: LocalDate

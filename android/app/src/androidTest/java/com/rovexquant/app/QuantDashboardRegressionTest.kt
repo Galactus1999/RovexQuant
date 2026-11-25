@@ -37,9 +37,11 @@ class QuantDashboardRegressionTest {
 
     @Test fun appStartsWithQuantMarketPulseAndHonestOfflineState() {
         waitForDashboard()
+        composeRule.waitForIdle()
         composeRule.onNodeWithTag("quant.header").assertIsDisplayed()
         composeRule.onNodeWithText("Market Pulse").assertIsDisplayed()
         composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("market.eod.snapshot"))
+        composeRule.waitForIdle()
         composeRule.onNodeWithTag("market.eod.snapshot").assertIsDisplayed()
         composeRule.onNodeWithText("END OF DAY").assertIsDisplayed()
         // The EOD card intentionally collapses mover rows by default. Wait for
@@ -48,26 +50,56 @@ class QuantDashboardRegressionTest {
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithText("2450 stocks", substring = true).fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("Show market movers").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Show market movers").performScrollTo().performClick()
+        composeRule.waitForIdle()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithText("FIXTURE").fetchSemanticsNodes().isNotEmpty()
         }
+        composeRule.waitForIdle()
         composeRule.onAllNodesWithTag("market.ingestion.status").assertCountEquals(0)
         composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasText("FIXTURE"))
+        composeRule.waitForIdle()
         composeRule.onNodeWithText("FIXTURE").assertIsDisplayed()
         composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("market.sector.heading"))
+        composeRule.waitForIdle()
         composeRule.onNodeWithTag("market.sector.heading").assertIsDisplayed()
         // Sector cards are ranked by verified live performance; expand the list before
         // asserting a specific benchmark so the test does not assume a fixed rank.
         composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasText("View all sector benchmarks"))
-        composeRule.onNodeWithText("View all sector benchmarks").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("View all sector benchmarks").performScrollTo().performClick()
+        composeRule.waitForIdle()
         composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("sector.index.NIFTY BANK"))
+        composeRule.waitForIdle()
         composeRule.onNodeWithTag("sector.index.NIFTY BANK").assertIsDisplayed()
+        composeRule.waitForIdle()
         composeRule.onNodeWithTag("sector.index.NIFTY BANK").performClick()
+        composeRule.waitForIdle()
         composeRule.onNodeWithTag("instrument.research.screen").assertIsDisplayed()
         composeRule.onNodeWithText("NIFTY BANK").assertIsDisplayed()
-        composeRule.onNodeWithText("← Back to Pulse").performClick()
-        composeRule.onNodeWithTag("market.pulse.list").assertIsDisplayed()
+        composeRule.waitUntil(15_000) {
+            composeRule.onAllNodesWithTag("instrument.chart.candles")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Traded volume is not published for this index series.")
+            .performScrollTo().assertIsDisplayed()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("instrument.chart.candles")
+            .performScrollTo().assertIsDisplayed()
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithTag("instrument.chart.volume.toggle").assertCountEquals(0)
+        composeRule.onNodeWithText("← Back to Pulse").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("market.pulse.list").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("market.pulse.list")
+            .performScrollToNode(hasTestTag("market.eod.snapshot"))
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("market.eod.snapshot").assertIsDisplayed()
     }
 
     @Test fun bottomNavigationOpensAllWorkspacesAndSectorCoverage() {

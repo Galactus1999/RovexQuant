@@ -6,6 +6,8 @@ import com.rovexquant.app.domain.OhlcvBar
 import com.rovexquant.app.domain.OhlcvCsvResearch
 import com.rovexquant.app.domain.InstrumentIdentity
 import com.rovexquant.app.domain.MarketOhlcvSeries
+import com.rovexquant.app.domain.ChartSeriesMapper
+import com.rovexquant.app.domain.OhlcvProvider
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -22,15 +24,34 @@ object TejHqOhlcvSyncManager {
         to: LocalDate,
         incremental: Boolean
     ): MarketOhlcvSeries = withContext(Dispatchers.IO) {
-        val existing = runCatching { TejHqOhlcvStore.load(context, instrument).orEmpty() }
-            .getOrElse { emptyList() }
+        val existing = runCatching {
+            val cached = TejHqOhlcvStore.load(context, instrument).orEmpty()
+            if (cached.isNotEmpty()) {
+                ChartSeriesMapper.map(
+                    MarketOhlcvSeries(
+                        instrument = instrument,
+                        bars = cached,
+                        volumeAvailable = instrument.provider == OhlcvProvider.TEJHQ_EOD,
+                        adjustmentStatus = if (instrument.provider == OhlcvProvider.TEJHQ_EOD) {
+                            "Raw end-of-day bhavcopy prices; corporate-action adjustment not applied"
+                        } else {
+                            "Price Return Index OHLC; dividends are not included"
+                        }
+                    )
+                )
+            }
+            cached
+        }.getOrElse { emptyList() }
         val fetchFrom = if (incremental) {
             TejHqOhlcvStore.latestDate(existing)?.minusDays(7)?.coerceAtLeast(from) ?: from
         } else from
         val fetched = repository.fetchInstrumentOhlcv(instrument, fetchFrom, to)
+        if (fetched.bars.isNotEmpty()) ChartSeriesMapper.map(fetched)
         val merged = if (incremental && existing.isNotEmpty()) {
             OhlcvCsvResearch.merge(existing, fetched.bars)
         } else fetched.bars
+        require(merged.isNotEmpty()) { "No valid historical bars are available to save." }
+        ChartSeriesMapper.map(fetched.copy(bars = merged))
         TejHqOhlcvStore.save(context, instrument, merged)
         TejHqOhlcvStore.markSynced(context, instrument)
         fetched.copy(bars = merged, retrievedAt = Instant.now())
