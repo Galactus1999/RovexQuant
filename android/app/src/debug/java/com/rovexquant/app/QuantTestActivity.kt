@@ -7,6 +7,8 @@ import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiDailyBar
 import com.rovexquant.app.data.model.AiProvider
+import com.rovexquant.app.data.model.AiResearchRun
+import com.rovexquant.app.data.model.AiBudgetStatus
 import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.EodMarketSnapshot
@@ -132,6 +134,33 @@ class FakeQuantRepository(
 
     override suspend fun fetchAiTaskRoutes(session: QuantSession): Map<String, AiTaskRoute> =
         mapOf("research" to AiTaskRoute("groq", "server-research-model", emptyList()))
+
+    override suspend fun fetchAiResearchRuns(session: QuantSession, limit: Int) = listOf(
+        AiResearchRun(
+            runId = "fixture-research",
+            taskType = "research",
+            providerId = "groq",
+            model = "server-research-model",
+            status = "SUCCEEDED",
+            promptTokens = 120,
+            completionTokens = 80,
+            totalTokens = 200,
+            costUsd = null,
+            costStatus = "UNKNOWN_MODEL_PRICING",
+            fallbackUsed = false,
+            createdAt = "2026-11-24T10:00:00Z"
+        )
+    ).take(limit)
+
+    override suspend fun fetchAiBudgetStatus(session: QuantSession) = AiBudgetStatus(
+        enabled = true,
+        dailyUsedTokens = 200,
+        dailyLimitTokens = 10_000,
+        dailyRemainingTokens = 9_800,
+        monthlyUsedTokens = 200,
+        monthlyLimitTokens = 100_000,
+        monthlyRemainingTokens = 99_800
+    )
 
     override suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) = Unit
     override suspend fun deleteAiProviderCredential(session: QuantSession, providerId: String) = Unit
