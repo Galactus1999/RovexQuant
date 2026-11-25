@@ -333,3 +333,44 @@ def test_short_provider_secrets_are_not_reflected_in_validation_errors(mobile_cl
     )
     assert upstox_response.status_code == 422
     assert upstox_secret not in upstox_response.text
+
+
+def test_mobile_ai_task_routes_are_authenticated_and_do_not_expose_credentials(mobile_client, monkeypatch):
+    client, headers = mobile_client
+    monkeypatch.setenv(
+        "QUANT_AI_TASK_ROUTES",
+        '{"research":{"provider_id":"groq","model":"research-model","fallback_providers":[]}}',
+    )
+    assert client.get("/api/v1/app/ai/task-routes").status_code == 401
+    response = client.get("/api/v1/app/ai/task-routes", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["routes"]["research"]["provider_id"] == "groq"
+    assert "groq-server-secret" not in response.text
+    assert "api_key" not in response.text
+
+
+def test_mobile_ai_research_archive_endpoints_require_session(mobile_client, monkeypatch):
+    client, headers = mobile_client
+    from rovexquant.api.routers import ai as ai_router
+
+    monkeypatch.setattr(ai_router, "get_ai_token_budget_status", lambda: {"daily": {"used": 12}})
+    monkeypatch.setattr(
+        ai_router, "list_ai_research_runs",
+        lambda limit=30, task_type=None: {"runs": [], "limit": limit, "task_type": task_type},
+    )
+    monkeypatch.setattr(
+        ai_router, "get_ai_research_run",
+        lambda run_id: {"run_id": run_id, "status": "SUCCEEDED"},
+    )
+
+    assert client.get("/api/v1/app/ai/budget").status_code == 401
+    assert client.get("/api/v1/app/ai/research/runs").status_code == 401
+    assert client.get("/api/v1/app/ai/research/runs/test-run").status_code == 401
+
+    budget = client.get("/api/v1/app/ai/budget", headers=headers)
+    runs = client.get("/api/v1/app/ai/research/runs?limit=12&task_type=research", headers=headers)
+    detail = client.get("/api/v1/app/ai/research/runs/test-run", headers=headers)
+    assert budget.status_code == 200 and budget.json()["daily"]["used"] == 12
+    assert runs.status_code == 200 and runs.json()["limit"] == 12
+    assert runs.json()["task_type"] == "research"
+    assert detail.status_code == 200 and detail.json()["status"] == "SUCCEEDED"
