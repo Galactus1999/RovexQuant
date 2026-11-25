@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertCountEquals
@@ -328,6 +329,47 @@ class QuantDashboardRegressionTest {
             hasText("No machine-verifiable source references returned.", substring = true)
         )
         composeRule.onNodeWithText("No machine-verifiable source references returned.", substring = true).assertIsDisplayed()
+    }
+
+    @Test fun dalalosConnectorStoresKeyAndRequiresPerCallQuotaConfirmation() {
+        waitForDashboard()
+        composeRule.onNodeWithText("Scan").performClick()
+        composeRule.onNodeWithTag("scanner.list").performScrollToNode(hasText("Open AI data recovery"))
+        composeRule.onNodeWithText("Open AI data recovery").performClick()
+        composeRule.onNodeWithText("Quant Intelligence.").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("ai.workspace.list")
+            .performScrollToNode(hasTestTag("ai.dalalos.panel"))
+        composeRule.onNodeWithTag("ai.dalalos.key").performTextInput("d".repeat(32))
+        composeRule.onNodeWithTag("ai.dalalos.terms").performClick()
+        composeRule.onNodeWithTag("ai.dalalos.save").performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("KEY STORED").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("ai.dalalos.discover").performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("ai.dalalos.enable.get_company_exposures")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onNodeWithTag("ai.dalalos.enable.get_company_exposures").performClick()
+        composeRule.onNodeWithTag("ai.dalalos.tool.get_company_exposures").performClick()
+        composeRule.onNodeWithTag("ai.dalalos.arguments").performTextClearance()
+        composeRule.onNodeWithTag("ai.dalalos.arguments").performTextInput("{\"query\":\"RELIANCE\"}")
+        composeRule.onNodeWithTag("ai.dalalos.run").performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("get_company_exposures").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onNodeWithTag("ai.dalalos.enable.get_filing_extract").performClick()
+        composeRule.onNodeWithTag("ai.dalalos.tool.get_filing_extract").performClick()
+        composeRule.onNodeWithTag("ai.dalalos.run").assertIsNotEnabled()
+        composeRule.onNodeWithTag("ai.dalalos.confirm.quota").performClick()
+        composeRule.onNodeWithTag("ai.dalalos.run").assertIsEnabled()
+        composeRule.onNodeWithTag("ai.dalalos.run").performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("get_filing_extract").fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     @Test fun intelligenceCentreLoadsEventEvidenceAndSectorTransmission() {
