@@ -330,24 +330,20 @@ class QuantWorkspaceViewModel(
                     }
                 }
 
+                var indexMasterFailure: String? = null
                 val indexMaster = try {
                     val fresh = repository.fetchIndexInstruments(session)
                     val merged = (fresh + cachedIndices).distinctBy { it.instrumentKey }
-                    require(merged.isNotEmpty() && resolveDashboardIndices(merged).isNotEmpty()) {
-                        "Official NSE index master returned no dashboard benchmark matches."
-                    }
+                    require(merged.isNotEmpty()) { "NSE index master returned no instruments." }
                     persistMaster { repository.saveCachedIndexInstruments(merged) }
                     merged
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (failure: Exception) {
-                    if (cachedIndices.isEmpty()) throw failure
+                    indexMasterFailure = failure.message ?: "NSE index master unavailable"
                     cachedIndices
                 }
                 val resolvedIndices = resolveDashboardIndices(indexMaster)
-                if (resolvedIndices.isEmpty()) {
-                    throw IllegalStateException("Official and cached NSE index masters contain no dashboard benchmark matches.")
-                }
 
                 var equityMasterFailure: String? = null
                 val equities = try {
@@ -360,6 +356,12 @@ class QuantWorkspaceViewModel(
                 } catch (failure: Exception) {
                     equityMasterFailure = failure.message ?: "NSE equity master unavailable"
                     cachedEquities
+                }
+
+                if (resolvedIndices.isEmpty() && equities.isEmpty()) {
+                    throw IllegalStateException(
+                        "No usable NSE instrument master is available. Index: ${indexMasterFailure ?: "no benchmark matches"}; equities: ${equityMasterFailure ?: "no cached instruments"}."
+                    )
                 }
 
                 val subscriptions = (resolvedIndices.values + equities.map { it.instrumentKey }).distinct()
