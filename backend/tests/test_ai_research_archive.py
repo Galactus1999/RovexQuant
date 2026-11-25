@@ -36,4 +36,4 @@ def test_ai_token_budget_feature_is_disabled_unless_a_limit_is_configured(monkey
 
     monkeypatch.setenv("QUANT_AI_DAILY_TOKEN_BUDGET", "0")
     monkeypatch.setenv("QUANT_AI_MONTHLY_TOKEN_BUDGET", "0")
-    assert ai_token_budgets_enabled() is True
+    assert ai_token_budgets_enabled() is False
