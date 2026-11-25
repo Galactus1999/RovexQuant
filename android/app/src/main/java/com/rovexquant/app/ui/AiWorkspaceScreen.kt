@@ -411,7 +411,8 @@ fun AiWorkspaceScreen(
                 model = model,
                 fallbackProviders = selectedFallbacks.toList(),
                 canUseAi = canUseResearch,
-                evidenceDraft = chatInput
+                evidenceDraft = chatInput,
+                automaticTaskRouting = automaticTaskRouting
             )
         }
         item {
