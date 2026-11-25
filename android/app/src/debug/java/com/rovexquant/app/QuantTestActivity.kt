@@ -7,6 +7,7 @@ import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiDailyBar
 import com.rovexquant.app.data.model.AiProvider
+import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.EodMarketSnapshot
 import com.rovexquant.app.data.model.EodStockMove
@@ -128,6 +129,9 @@ class FakeQuantRepository(
 
     override suspend fun fetchAiProviders(session: QuantSession) =
         listOf(AiProvider("groq", true, listOf("default")))
+
+    override suspend fun fetchAiTaskRoutes(session: QuantSession): Map<String, AiTaskRoute> =
+        mapOf("research" to AiTaskRoute("groq", "server-research-model", emptyList()))
 
     override suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) = Unit
     override suspend fun deleteAiProviderCredential(session: QuantSession, providerId: String) = Unit
@@ -345,24 +349,29 @@ class FakeQuantRepository(
 
     override suspend fun sendAiMessage(
         session: QuantSession,
-        providerId: String,
-        model: String,
+        providerId: String?,
+        model: String?,
         messages: List<AiChatMessage>,
         credentialId: String?,
-        fallbackProviders: List<String>
-    ) = AiCompletion(providerId, credentialId, model, "Deterministic AI fixture response.", false)
+        fallbackProviders: List<String>,
+        taskType: String
+    ) = AiCompletion(
+        providerId ?: "groq", credentialId, model ?: "server-research-model",
+        "Deterministic AI fixture response.", false, taskType
+    )
 
     override suspend fun requestAiStrategyBrief(
         session: QuantSession,
-        providerId: String,
-        model: String,
+        providerId: String?,
+        model: String?,
         symbol: String,
         exchange: String,
         fromDate: String,
         toDate: String,
         strategyContext: String,
         credentialId: String?,
-        fallbackProviders: List<String>
+        fallbackProviders: List<String>,
+        automaticTaskRouting: Boolean
     ) = AiStrategyBrief(
         provider = "tejhq_eod",
         dataMode = "END_OF_DAY",
