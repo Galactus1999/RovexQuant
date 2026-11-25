@@ -28,6 +28,7 @@ import com.rovexquant.app.data.model.AmfiNavObservation
 import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
+import com.rovexquant.app.data.model.NseMcpTool
 import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.data.model.TechnicalIndicators
 import com.rovexquant.app.data.model.TechnicalIndicatorPeriods
@@ -74,6 +75,7 @@ class FakeQuantRepository(
     private val restoreAuthenticatedSession: Boolean
 ) : QuantDataRepository {
     var rejectLogin = false
+    var dalalOsConfigured = false
     private val testSession = QuantSession("https://quant.test", "test-session-token")
 
     override suspend fun loadSavedConnection() =
@@ -108,10 +110,21 @@ class FakeQuantRepository(
 
     override suspend fun fetchNseMcpTools(session: QuantSession, server: String): List<NseMcpCatalog> {
         val servers = if (server == "both") listOf("bhavcopy", "cmmkt") else listOf(server)
-        return servers.map {
-            NseMcpCatalog(it, emptyList(), "No tools in deterministic UI test fixture.")
+        return servers.map { serverName ->
+            val tools = if (serverName == "dalalos") listOf(
+                NseMcpTool("get_company_exposures", "Company exposure fixture.", JSONObject("""{"type":"object","properties":{"query":{"type":"string"}}}"""), true),
+                NseMcpTool("get_filing_extract", "Filing processing fixture.", JSONObject("""{"type":"object","properties":{"query":{"type":"string"},"news_id":{"type":"string"}}}"""), false, true, false)
+            ) else emptyList()
+            NseMcpCatalog(serverName, tools, if (serverName == "dalalos" && !dalalOsConfigured) "DalalOS API key is not configured." else null)
         }
     }
+
+    override suspend fun saveDalalOsApiKey(session: QuantSession, apiKey: String) {
+        require(apiKey.length in 20..4096)
+        dalalOsConfigured = true
+    }
+    override suspend fun deleteDalalOsApiKey(session: QuantSession) { dalalOsConfigured = false }
+    override suspend fun fetchDalalOsConfigured(session: QuantSession): Boolean = dalalOsConfigured
 
     override suspend fun fetchAiProviders(session: QuantSession) =
         listOf(AiProvider("groq", true, listOf("default")))
@@ -382,8 +395,18 @@ class FakeQuantRepository(
         session: QuantSession,
         server: String,
         tool: String,
-        argumentsJson: String
-    ) = NseMcpResult("test", "TEST", null, null, JSONObject().toString())
+        argumentsJson: String,
+        confirmNonReadOnly: Boolean
+    ): NseMcpResult {
+        if (tool == "get_filing_extract") require(confirmNonReadOnly) { "Explicit quota confirmation required." }
+        return NseMcpResult(
+            if (server == "dalalos") "dalalos_mcp" else "test",
+            if (server == "dalalos") "SOURCE_ATTRIBUTED_RESEARCH" else "TEST",
+            "Dataset-specific",
+            "2026-11-24",
+            JSONObject().put("tool", tool).put("source", "deterministic-fixture").toString(2)
+        )
+    }
 
     override fun createMarketStream(
         session: QuantSession,
