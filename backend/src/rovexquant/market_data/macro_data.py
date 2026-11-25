@@ -298,6 +298,16 @@ async def fetch_rbi_dbie_mirror(series: list[str] | None = None) -> dict[str, An
     unknown = sorted(set(selected) - RBI_DBIE_SERIES.keys())
     if unknown:
         raise ValueError(f"Unsupported RBI DBIE mirror series: {unknown[0]}")
+    enabled = os.getenv("RBIH_DBIE_ENABLE", "").strip().lower() in {"1", "true", "yes"}
+    if not enabled:
+        return {
+            "provider": "RBIH_DBIE_MIRROR", "configured": False, "series": [],
+            "reason": (
+                "Disabled by default: RBIH identifies this site as an experimental prototype "
+                "and warns that some tables may be missing. Enable only after each endpoint "
+                "and observation vintage has been independently verified."
+            ),
+        }
     base = os.getenv("RBIH_DBIE_BASE_URL", RBIH_DBIE_BASE_URL).strip().rstrip("/")
     if not base.startswith("https://"):
         raise ValueError("RBIH_DBIE_BASE_URL must use HTTPS")

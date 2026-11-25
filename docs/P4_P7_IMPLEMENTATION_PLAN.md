@@ -7,8 +7,8 @@ every data family.
 ## P4 — macroeconomic data
 - [x] World Bank Indicators API v2 adapter (keyless; allowlisted series).
 - [x] Optional FRED adapter (server-side FRED_API_KEY; fail-soft when absent).
-- [ ] RBI DBIE time-series importer. Official DBIE exposes downloadable Excel tables; a stable documented public API was not verified. Current implementation exposes RBI official announcements through RSS, not DBIE numeric series.
-- [ ] AMFI NAV import, kept separate from equity-price instruments.
+- [ ] RBI DBIE numeric-series importer. The official RBI portal exposes downloadable datasets, but a stable documented public machine interface was not verified. The RBIH mirror is an experimental prototype and is disabled by default until table-specific paths and vintages are independently verified.
+- [x] AMFI NAV import, kept separate from equity-price instruments.
 - Acceptance: annual/monthly frequencies and observation periods remain intact;
   no forward-fill into daily bars; every observation carries source code and URL.
 
@@ -19,7 +19,8 @@ every data family.
   a conservative greater-than-five-second minimum interval; surface HTTP 429 as
   a recoverable provider condition.
 - [x] Return retrieved-at and latest GDELT-seen timestamps with explicit semantics.
-- [ ] Scheduled durable event ingestion and historical event archive in PostgreSQL. Current official/GDELT feed cache is process-local and on-demand.
+- [x] Scheduled durable event ingestion and historical event archive in PostgreSQL.
+- [ ] Reliable GDELT coverage and independent issuer/exchange corroboration; the latest scheduled archive run succeeded with 8 official RBI articles/events while GDELT reported UNAVAILABLE.
 - [ ] Corroborate material events against RBI, SEBI, PIB and issuer/exchange filings.
 - [ ] Add listed-company/ISIN entity resolution with confidence and review queue.
 - Acceptance: retain original publisher URL; distinguish indexed time from
@@ -62,10 +63,10 @@ every data family.
 
 The P4–P7 implementation is present in this branch and has been integrated with the latest `main` Pulse/EOD worker changes. The phase labels below describe source implementation, not a claim that a deployed service has already collected production data.
 
-- **P4 — macro persistence:** World Bank, optional FRED, AMFI NAV and the allowlisted delayed RBIH DBIE mirror adapters; versioned PostgreSQL observations, deduplication/content hashes, authenticated refresh/history/status routes and a scheduled/manual refresh workflow.
-- **P5 — event archive:** GDELT discovery plus RBI/SEBI/PIB source feeds; durable event/source/run persistence, normalized deduplication, scheduled/manual refresh, archive/status routes and conservative exact-name/symbol issuer candidates. Sector effects remain hypotheses, not verified causal links.
-- **P6 — point-in-time research:** ISIN-based identity resolution and historical ticker continuity, corporate-action-adjusted OHLC consistency, point-in-time constituent reconstruction and equal-weighted historical universe performance with coverage invalidation. Research output is descriptive and not a tradable portfolio.
-- **P7 — data health and Android:** authenticated health/reconciliation APIs and Android research views for macro, events and event studies, with provenance/freshness context and deterministic CSV research utilities.
+- **P4 — macro persistence (partial):** World Bank and AMFI NAV adapters persist data; FRED is optional and was skipped because FRED_API_KEY was not configured. RBIH DBIE mirror is disabled by default because the public site describes itself as an experimental prototype and warns that tables may be missing. The latest run on 2026-11-24 saw 283 World Bank observations and 100 AMFI NAV rows, with 0 new upserts (idempotent existing rows); the RBIH adapter failed all three configured URLs with HTTP 404 before this safety change. A stable official RBI numerical-data interface remains unverified.
+- **P5 — event archive (partial runtime coverage):** GDELT discovery plus RBI/SEBI/PIB source feeds; durable event/source/run persistence, normalized deduplication, scheduled/manual refresh, archive/status routes and conservative exact-name/symbol issuer candidates. Latest scheduled run (2026-11-25) persisted 8 official RBI articles/events; GDELT was UNAVAILABLE and SEBI/PIB returned no articles in that run. Sector effects remain hypotheses, not verified causal links.
+- **P6 — point-in-time research (source present; data acceptance pending):** ISIN-based identity resolution and historical ticker continuity, corporate-action-adjusted OHLC consistency, point-in-time constituent reconstruction and equal-weighted historical universe performance with coverage invalidation. Production acceptance still requires a populated historical corpus, reconciliation evidence, and explicit no-look-ahead/survivorship tests against actual data. Research output is descriptive and not a tradable portfolio.
+- **P7 — data health and Android (source present; end-to-end acceptance pending):** authenticated health/reconciliation APIs and Android research views for macro, events and event studies, with provenance/freshness context and deterministic CSV research utilities. Backend deployment, real persisted data, and Android end-to-end loading/stale/error-state verification remain open.
 
 ### Remaining release and production gates
 
@@ -73,9 +74,9 @@ The P4–P7 implementation is present in this branch and has been integrated wit
 2. Merge only after the PR is mergeable and all required checks pass against the latest `main`.
 3. Apply the database migration in the deployed environment and verify the actual migration revision.
 4. Configure the existing database connection secret for the scheduled macro refresh; configure `FRED_API_KEY` only if FRED coverage is required.
-5. Verify scheduled GitHub Actions execution, persisted rows, source timestamps, archive freshness and health/reconciliation outputs against the deployed backend.
+5. Verify scheduled GitHub Actions execution, persisted rows, source timestamps, archive freshness and health/reconciliation outputs against the deployed backend. Treat a green workflow as insufficient if provider JSON reports failed or unavailable sub-sources; the macro refresh now fails the job when any enabled provider fails.
 6. Verify Android login, refresh, loading, stale-data, empty-data, provider-error and backend-unavailable states against the deployed service.
 
 A green GitHub build proves source/build/test correctness only. It does not prove production credentials, external-provider availability, scheduler execution or live data collection. AMFI NAV is fund NAV, not an equity quote; the RBIH DBIE mirror is delayed and must be checked against RBI's portal; GDELT is discovery rather than primary-source verification. NSE MCP and other providers remain subject to their own usage terms.
 
-P1–P3 (TejHQ EOD durability, bulk historical backfill and independent reconciliation) remain separate integration priorities and are not silently marked complete by P4–P7.
+P1–P3 (TejHQ EOD durability, bulk historical backfill and independent reconciliation) remain separate integration priorities and are not silently marked complete by P4–P7. The current historical backfill/reconciliation workflow is operator-dispatched only; it is not scheduled, and official exchange reconciliation is skipped unless express written permission and its reference are configured.

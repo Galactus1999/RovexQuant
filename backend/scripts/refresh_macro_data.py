@@ -5,13 +5,13 @@ from __future__ import annotations
 import asyncio
 import json
 
-from rovexquant.market_data.macro_ingestion import refresh_macro_sources
+from rovexquant.market_data.macro_ingestion import macro_refresh_exit_code, refresh_macro_sources
 
 
 def main() -> int:
     result = asyncio.run(refresh_macro_sources())
     print(json.dumps(result, sort_keys=True))
-    return 0 if result["succeeded"] > 0 else 1
+    return macro_refresh_exit_code(result)
 
 
 if __name__ == "__main__":

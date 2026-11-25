@@ -1,6 +1,6 @@
-# RovexQuant P2/P3 — historical market data and independent verification
+# RovexQuant P3 — historical archive backfill and independent verification
 
-## P2: Historical archive backfill
+## P3A: Historical archive backfill
 
 - Source: public TejHQ/indian-markets Hugging Face Parquet dataset.
 - NSE archive starts at 2010-01-04; BSE coverage starts at 2024-07-08.
@@ -13,7 +13,7 @@
 
 Manual execution: Actions → Quant Historical Backfill & Exchange Reconciliation → Run workflow. Use operation=backfill for raw bars or operation=backfill_derived for adjusted bars/actions/symbol history; choose NSE/BSE and a year. Import one year per run to bound memory, runtime, and rollback scope.
 
-## P3: independent exchange reconciliation
+## P3B: independent exchange reconciliation
 
 - NSE: official UDiFF Common Bhavcopy ZIP from nsearchives.nseindia.com.
 - BSE: official UDiFF cash-market bhavcopy CSV from bseindia.com.
@@ -24,7 +24,7 @@ Manual execution: Actions → Quant Historical Backfill & Exchange Reconciliatio
 - Event studies prefer TejHQ back-adjusted close when the adjusted archive is imported. The source methodology adjusts splits, bonuses and dividends, but does not scale demergers, rights, buybacks or mergers. Asset/benchmark comparisons are disabled if their adjustment bases differ.
 - Repeated downloads of the same official file are idempotent by (exchange, trading_date, source_sha256).
 
-The scheduled job runs at 19:30 IST and retries at 21:30 IST on weekdays. An official 404 is treated as unavailable for that date (often a holiday) and is not fabricated into a zero-row success.
+The current `.github/workflows/quant-market-integrity.yml` workflow is `workflow_dispatch` only. It is operator-triggered; it is NOT scheduled for 19:30/21:30 IST. No automated weekday schedule or retry is active. Historical backfill and derived-data backfill can be dispatched separately. Official exchange reconciliation remains disabled unless `NSE_OFFICIAL_AUTOMATED_DATA_PERMISSION=true` and a non-empty `NSE_OFFICIAL_PERMISSION_REFERENCE` are configured. Do not add an automatic exchange-download schedule without confirming written permission and a holiday-aware operating policy. An official 404 is treated as unavailable for that date (often a holiday) and is not fabricated into a zero-row success.
 
 ## Data and use boundaries
 
