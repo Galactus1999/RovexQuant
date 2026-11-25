@@ -260,7 +260,7 @@ class QuantDashboardRegressionTest {
         openInstrumentChart("NIFTY 50")
         composeRule.onNodeWithText(
             "Not available from validated OHLC provider; requires separately verified point-in-time index constituent/breadth feed."
-        ).assertIsDisplayed()
+        ).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("← Back to Pulse").performClick()
         openInstrumentChart("NIFTY BANK")
     }
@@ -447,8 +447,14 @@ class QuantDashboardRegressionTest {
         }
         composeRule.onNodeWithTag("ai.dalalos.tools.readonly")
             .performScrollToNode(hasTestTag("ai.dalalos.tool.get_company_exposures"))
-        composeRule.onNodeWithTag("ai.dalalos.tool.get_company_exposures").performClick()
-        composeRule.onNodeWithTag("ai.dalalos.arguments").performTextClearance()
+        composeRule.onNodeWithTag("ai.dalalos.tool.get_company_exposures")
+            .assertIsDisplayed().performClick()
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag("ai.dalalos.arguments")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("ai.dalalos.arguments")
+            .performScrollTo().assertIsDisplayed().performTextClearance()
         composeRule.onNodeWithTag("ai.dalalos.arguments").performTextInput("{\"query\":\"RELIANCE\"}")
         composeRule.onNodeWithTag("ai.dalalos.run").performClick()
         composeRule.waitUntil(10_000) {
