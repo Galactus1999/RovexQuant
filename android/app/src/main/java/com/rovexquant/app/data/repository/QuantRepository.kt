@@ -92,6 +92,9 @@ class QuantRepository(context: Context) : QuantDataRepository {
     override suspend fun fetchAiProviders(session: QuantSession): List<AiProvider> =
         withContext(Dispatchers.IO) { QuantApi.fetchAiProviders(session) }
 
+    override suspend fun fetchAiTaskRoutes(session: QuantSession): Map<String, AiTaskRoute> =
+        withContext(Dispatchers.IO) { QuantApi.fetchAiTaskRoutes(session) }
+
     override suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) =
         withContext(Dispatchers.IO) { QuantApi.saveAiProviderCredential(session, providerId, apiKey) }
 
@@ -221,29 +224,31 @@ class QuantRepository(context: Context) : QuantDataRepository {
 
     override suspend fun sendAiMessage(
         session: QuantSession,
-        providerId: String,
-        model: String,
+        providerId: String?,
+        model: String?,
         messages: List<AiChatMessage>,
         credentialId: String?,
-        fallbackProviders: List<String>
+        fallbackProviders: List<String>,
+        taskType: String
     ): AiCompletion = withContext(Dispatchers.IO) {
-        QuantApi.sendAiMessage(session, providerId, model, messages, credentialId, fallbackProviders)
+        QuantApi.sendAiMessage(session, providerId, model, messages, credentialId, fallbackProviders, taskType)
     }
 
     override suspend fun requestAiStrategyBrief(
         session: QuantSession,
-        providerId: String,
-        model: String,
+        providerId: String?,
+        model: String?,
         symbol: String,
         exchange: String,
         fromDate: String,
         toDate: String,
         strategyContext: String,
         credentialId: String?,
-        fallbackProviders: List<String>
+        fallbackProviders: List<String>,
+        automaticTaskRouting: Boolean
     ): AiStrategyBrief = withContext(Dispatchers.IO) {
         QuantApi.requestAiStrategyBrief(
-            session, providerId, model, symbol, exchange, fromDate, toDate, strategyContext, credentialId, fallbackProviders
+            session, providerId, model, symbol, exchange, fromDate, toDate, strategyContext, credentialId, fallbackProviders, automaticTaskRouting
         )
     }
 
