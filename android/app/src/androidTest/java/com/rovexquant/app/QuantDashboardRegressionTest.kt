@@ -44,17 +44,14 @@ class QuantDashboardRegressionTest {
 
     private fun clickIndicator(key: String) {
         val tag = "instrument.chart.indicator.$key.toggle"
-        // The controls live in a nested horizontal scroller inside the screen's
-        // vertical scroller. Scroll the horizontal container itself so the
-        // pointer injected by performClick lands inside the clipped viewport.
-        // Explicitly return the vertical screen scroller to its start. The
-        // control row then reveals the requested chip using its horizontal axis.
-        composeRule.onNodeWithTag("instrument.research.screen")
-            .performSemanticsAction(SemanticsActions.ScrollBy) { scrollBy ->
-                scrollBy(0f, -10_000f)
-            }
-        composeRule.onNodeWithTag("instrument.chart.indicator.controls")
-            .performScrollToNode(hasTestTag(tag))
+        // First reveal the entire horizontal controls row in the outer vertical
+        // research scroller. Then reveal the requested chip inside that row.
+        // Scrolling only the horizontal row is insufficient when the row itself
+        // is clipped by the ancestor vertical viewport.
+        val controls = composeRule.onNodeWithTag("instrument.chart.indicator.controls")
+        controls.performScrollTo()
+        controls.performScrollToNode(hasTestTag(tag))
+        composeRule.waitForIdle()
         composeRule.onNodeWithTag(tag).assertIsDisplayed().performClick()
         composeRule.waitForIdle()
     }
