@@ -134,17 +134,6 @@ fun MarketPulseScreen(
             val fresh = quote?.let { it.quality == "VALID" && isFresh(it) } == true
             SectorHeatmapTile(
                 label = sector.sector,
-                shortLabel = when (sector.sector) {
-                    "Financial Services" -> "FIN SERV"
-                    "Information Technology" -> "IT"
-                    "Automobiles" -> "AUTO"
-                    "Healthcare" -> "HEALTH"
-                    "Consumer Durables" -> "DURABLE"
-                    "Capital Goods" -> "CAP GOODS"
-                    "Private Banks" -> "PVT BANK"
-                    "PSU Banks" -> "PSU BANK"
-                    else -> sector.sector.uppercase().take(10)
-                },
                 benchmark = sector.benchmark,
                 changePercent = quote?.changePercent?.takeIf { fresh },
                 lastPrice = quote?.lastPrice?.takeIf { fresh },
