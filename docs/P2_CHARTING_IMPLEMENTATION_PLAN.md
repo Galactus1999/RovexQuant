@@ -161,3 +161,11 @@ The Android wrapper executes chart calls asynchronously in WebView. Its document
 - Add chart interaction tests for each overlay/pane, range changes, old-history coverage, refresh cancellation and chart recreation.
 - Profile 1k/5k/10k input windows, Compose jank and memory on emulator, then validate on OnePlus CPH2691 Android 16.
 - P2.4 remains: compare instruments with compatible adjustment/time semantics, sourced event/corporate-action markers, fullscreen, richer accessibility/theme behavior, and a formal renderer comparison/decision. Do not claim P2 complete before these and acceptance gates are done.
+
+## Mainline integration verification
+
+The P2 implementation is integrated on top of the current mainline in PR #36, preserving the newer wide-layout navigation and global instrument search while adding instrument identity, Upstox V3 candle routing, index/sector charting, technical indicators and bounded folder-based CSV import.
+
+The original P2 branch's exact-head workflow passed after correcting three CSV test fixtures that contained literal backslash-n sequences instead of line breaks. The first integrated PR run also passed backend regression, backend static quality, migration/vault, API/security and secret-scan checks; Android unit tests passed. Its separate Android compile job was blocked before Kotlin compilation because Gradle could not resolve the Kotlin Android plugin artifact (HTTP/repository resolution failure), so that run is not an application-code compile result. A fresh exact-head CI run is required before merge.
+
+Index constituent weights, advances/declines and constituent contribution remain unavailable until a separately validated point-in-time constituent/breadth provider is connected. Index candles must not be used to invent those fields. CSV folder scanning is limited to immediate children of the user-selected folder; it is not a background filesystem watcher.
