@@ -47,7 +47,8 @@ fun DalalOsResearchPanel(
 ) {
     val scope = rememberCoroutineScope()
     var apiKey by remember { mutableStateOf("") }
-    var configured by remember { mutableStateOf(false) }
+    var configured by remember(session) { mutableStateOf(false) }
+    var configurationTouched by remember(session) { mutableStateOf(false) }
     var termsAccepted by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
@@ -69,7 +70,8 @@ fun DalalOsResearchPanel(
 
     LaunchedEffect(session) {
         try {
-            configured = repository.fetchDalalOsConfigured(session)
+            val remoteConfigured = repository.fetchDalalOsConfigured(session)
+            if (!configurationTouched) configured = remoteConfigured
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
@@ -140,6 +142,7 @@ fun DalalOsResearchPanel(
                 Button(
                     onClick = {
                         if (saving || apiKey.length !in 20..4096 || !termsAccepted) return@Button
+                        configurationTouched = true
                         saving = true
                         error = null
                         scope.launch {
@@ -167,6 +170,7 @@ fun DalalOsResearchPanel(
                 TextButton(
                     onClick = {
                         if (deleting) return@TextButton
+                        configurationTouched = true
                         deleting = true
                         error = null
                         scope.launch {
