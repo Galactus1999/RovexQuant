@@ -54,7 +54,7 @@ class ResearchCsvFolderImporterTest {
     @Test
     fun parsesYahooStyleDailyCsvWithDateAndQuotedThousandsSeparators() {
         val bars = ResearchCsvFolderImporter.parseFolderCsv(
-            "Date,Open,High,Low,Close,Adj Close,Volume\\n" +
+            "Date,Open,High,Low,Close,Adj Close,Volume\n" +
                 "2026-11-23,\"1,234.00\",1250,1200,1240,1240,\"1,234,567\"",
             volumeRequired = true
         )
@@ -67,11 +67,11 @@ class ResearchCsvFolderImporterTest {
     @Test
     fun parsesIndianDateFormatsAndTimezoneNaiveLocalDateTimes() {
         val dateBars = ResearchCsvFolderImporter.parseFolderCsv(
-            "Date,Open,High,Low,Close,Volume\\n23/11/2026,100,102,99,101,1000",
+            "Date,Open,High,Low,Close,Volume\n23/11/2026,100,102,99,101,1000",
             volumeRequired = true
         )
         val timeBars = ResearchCsvFolderImporter.parseFolderCsv(
-            "DateTime,Open,High,Low,Close,Volume\\n2026-11-24T15:30:00,100,102,99,101,1000",
+            "DateTime,Open,High,Low,Close,Volume\n2026-11-24T15:30:00,100,102,99,101,1000",
             volumeRequired = true
         )
         assertEquals("2026-11-23T00:00+05:30", dateBars.single().timestamp.toString())
@@ -81,7 +81,7 @@ class ResearchCsvFolderImporterTest {
     @Test
     fun allowsMissingVolumeForIndexDailyCsv() {
         val bars = ResearchCsvFolderImporter.parseFolderCsv(
-            "Date,Open,High,Low,Close\\n2026-11-24,100,102,99,101",
+            "Date,Open,High,Low,Close\n2026-11-24,100,102,99,101",
             volumeRequired = false
         )
         assertEquals(0L, bars.single().volume)
@@ -91,7 +91,7 @@ class ResearchCsvFolderImporterTest {
     fun requiresVolumeForEquityDailyCsv() {
         assertThrows(IllegalArgumentException::class.java) {
             ResearchCsvFolderImporter.parseFolderCsv(
-                "Date,Open,High,Low,Close\\n2026-11-24,100,102,99,101",
+                "Date,Open,High,Low,Close\n2026-11-24,100,102,99,101",
                 volumeRequired = true
             )
         }
