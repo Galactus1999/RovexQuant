@@ -283,6 +283,14 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("ai.research.run.fixture-research").assertIsDisplayed()
         composeRule.onNodeWithTag("ai.research.budget.daily")
             .assertTextContains("200 / 10000 tokens")
+        composeRule.onNodeWithTag("ai.research.run.open.fixture-research").performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("ai.research.run.detail").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("ai.research.run.detail")
+            .assertTextContains("Deterministic archived research detail.")
+        composeRule.onNodeWithTag("ai.research.run.detail")
+            .assertTextContains("Fixture research prompt")
         composeRule.onNodeWithText("Groq", substring = true).assertIsDisplayed()
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.model"))
         composeRule.onNodeWithTag("ai.model").performTextInput("test-model")
