@@ -6,6 +6,7 @@ import com.rovexquant.app.data.model.AiDailyBar
 import com.rovexquant.app.data.model.AiProvider
 import com.rovexquant.app.data.model.AiResearchRun
 import com.rovexquant.app.data.model.AiBudgetStatus
+import com.rovexquant.app.data.model.AiResearchRunDetail
 import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.AiStrategyEvidence
@@ -913,6 +914,53 @@ object QuantApi {
                     ))
                 }
             }
+        }
+    }
+
+    fun fetchAiResearchRun(session: QuantSession, runId: String): AiResearchRunDetail {
+        require(runId.length in 1..64 && runId.all { it.isLetterOrDigit() || it == '-' }) {
+            "Invalid archived research run identifier."
+        }
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/ai/research/runs/$runId")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            require(text.toByteArray(Charsets.UTF_8).size <= 512 * 1024) {
+                "Archived AI research run exceeds the 512 KB mobile safety limit."
+            }
+            val json = JSONObject(text)
+            fun jsonValue(key: String): String {
+                val value = json.opt(key)
+                return when (value) {
+                    null, JSONObject.NULL -> "{}"
+                    is JSONObject -> value.toString(2)
+                    is JSONArray -> value.toString(2)
+                    else -> value.toString()
+                }
+            }
+            val cost = if (json.isNull("cost_usd")) null else json.optDouble("cost_usd").takeIf { it.isFinite() }
+            return AiResearchRunDetail(
+                runId = json.optString("run_id"),
+                taskType = json.optString("task_type"),
+                providerId = json.optString("provider_id"),
+                model = json.optString("model"),
+                status = json.optString("status"),
+                requestHash = json.optString("request_hash"),
+                requestPayloadJson = jsonValue("request_payload"),
+                responsePayloadJson = jsonValue("response_payload"),
+                tokenUsageJson = jsonValue("token_usage"),
+                costUsd = cost,
+                costStatus = json.optString("cost_status", "NOT_TRACKED"),
+                fallbackUsed = json.optBoolean("fallback_used"),
+                sourceRefsJson = jsonValue("source_refs"),
+                verificationJson = jsonValue("verification"),
+                createdAt = json.optString("created_at"),
+                completedAt = json.optString("completed_at").takeIf { it.isNotBlank() && it != "null" }
+            )
         }
     }
 
