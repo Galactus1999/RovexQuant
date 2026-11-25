@@ -1,0 +1,43 @@
+name: Quant Main Source Snapshot
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quant-main-source-snapshot-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-snapshot:
+    name: Package tracked main source
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact source revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Create reproducible source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="RovexQuant-main-${GITHUB_SHA}.zip"
+          git archive --format=zip --prefix="RovexQuant-${GITHUB_SHA}/" "${GITHUB_SHA}" > "${archive}"
+          sha256sum "${archive}" | tee "${archive}.sha256"
+          test -s "${archive}"
+
+      - name: Upload source archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: RovexQuant-main-source-${{ github.sha }}
+          path: |
+            RovexQuant-main-${{ github.sha }}.zip
+            RovexQuant-main-${{ github.sha }}.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
