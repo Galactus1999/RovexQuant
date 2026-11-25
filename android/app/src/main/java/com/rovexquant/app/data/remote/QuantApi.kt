@@ -4,6 +4,7 @@ import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiDailyBar
 import com.rovexquant.app.data.model.AiProvider
+import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.AiStrategyEvidence
 import com.rovexquant.app.data.model.EodMarketSnapshot
@@ -845,6 +846,36 @@ object QuantApi {
     }
 
 
+    fun fetchAiTaskRoutes(session: QuantSession): Map<String, AiTaskRoute> {
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/ai/task-routes")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            val routes = JSONObject(text).optJSONObject("routes") ?: JSONObject()
+            return buildMap {
+                val keys = routes.keys()
+                while (keys.hasNext()) {
+                    val task = keys.next()
+                    val route = routes.optJSONObject(task) ?: continue
+                    val provider = route.optString("provider_id")
+                    val model = route.optString("model")
+                    if (provider.isBlank() || model.isBlank()) continue
+                    val fallbackJson = route.optJSONArray("fallback_providers") ?: JSONArray()
+                    val fallbacks = buildList {
+                        for (index in 0 until fallbackJson.length()) {
+                            fallbackJson.optString(index).takeIf { it.isNotBlank() }?.let(::add)
+                        }
+                    }
+                    put(task, AiTaskRoute(provider, model, fallbacks))
+                }
+            }
+        }
+    }
+
     fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) {
         require(providerId in setOf("deepseek", "groq", "openrouter", "gemini", "openai")) {
             "Unsupported AI provider."
@@ -944,12 +975,20 @@ object QuantApi {
 
     fun sendAiMessage(
         session: QuantSession,
-        providerId: String,
-        model: String,
+        providerId: String?,
+        model: String?,
         messages: List<AiChatMessage>,
         credentialId: String?,
-        fallbackProviders: List<String>
+        fallbackProviders: List<String>,
+        taskType: String
     ): AiCompletion {
+        require((providerId.isNullOrBlank() && model.isNullOrBlank()) ||
+            (!providerId.isNullOrBlank() && !model.isNullOrBlank())) {
+            "Provider and model must be supplied together, or both omitted for server routing."
+        }
+        require(taskType in setOf("chat", "research", "macro_analysis", "filing_extraction", "claim_verification", "summarization")) {
+            "Unsupported AI task type."
+        }
         require(messages.isNotEmpty() && messages.size <= 12) { "Keep AI conversations to the latest 12 messages." }
         val boundedMessages = mutableListOf<AiChatMessage>()
         var combinedCharacters = 0
@@ -966,9 +1005,10 @@ object QuantApi {
             }
         }
         val body = JSONObject()
-            .put("provider_id", providerId)
-            .put("model", model)
             .put("messages", messageArray)
+            .put("task_type", taskType)
+        if (!providerId.isNullOrBlank()) body.put("provider_id", providerId)
+        if (!model.isNullOrBlank()) body.put("model", model)
             .put("max_tokens", 1200)
             .put("temperature", 0.2)
         if (!credentialId.isNullOrBlank()) body.put("credential_id", credentialId)
@@ -987,20 +1027,30 @@ object QuantApi {
 
     fun requestAiStrategyBrief(
         session: QuantSession,
-        providerId: String,
-        model: String,
+        providerId: String?,
+        model: String?,
         symbol: String,
         exchange: String,
         fromDate: String,
         toDate: String,
         strategyContext: String,
         credentialId: String?,
-        fallbackProviders: List<String>
+        fallbackProviders: List<String>,
+        automaticTaskRouting: Boolean
     ): AiStrategyBrief {
+        require(automaticTaskRouting || (!providerId.isNullOrBlank() && !model.isNullOrBlank())) {
+            "Select a configured provider/model or enable server task routing."
+        }
+        require(!automaticTaskRouting || (providerId.isNullOrBlank() && model.isNullOrBlank())) {
+            "Automatic task routing cannot be combined with a manual provider/model."
+        }
         val body = JSONObject()
-            .put("provider_id", providerId)
-            .put("model", model)
             .put("symbol", symbol.trim().uppercase())
+            .put("automatic_task_routing", automaticTaskRouting)
+        if (!automaticTaskRouting) {
+            body.put("provider_id", providerId)
+            body.put("model", model)
+        }
             .put("exchange", exchange.uppercase())
             .put("from_date", fromDate)
             .put("to_date", toDate)
@@ -1075,7 +1125,14 @@ object QuantApi {
         credentialId = json.optString("credential_id").takeIf { it.isNotBlank() && it != "null" },
         model = json.optString("model"),
         content = json.optString("content"),
-        fallbackUsed = json.optBoolean("fallback_used", false)
+        fallbackUsed = json.optBoolean("fallback_used", false),
+        taskType = json.optString("task_type", "chat"),
+        promptTokens = json.optInt("usage_prompt_tokens", json.optJSONObject("usage")?.optInt("prompt_tokens") ?: 0),
+        completionTokens = json.optInt("usage_completion_tokens", json.optJSONObject("usage")?.optInt("completion_tokens") ?: 0),
+        totalTokens = json.optInt("usage_total_tokens", json.optJSONObject("usage")?.optInt("total_tokens") ?: 0),
+        costUsd = json.optJSONObject("cost")?.optDouble("usd")?.takeIf { it.isFinite() }
+            ?: json.optDouble("cost_usd", Double.NaN).takeIf { it.isFinite() },
+        costStatus = json.optString("cost_status", "UNKNOWN_MODEL_PRICING")
     )
 
     private fun JSONObject.optionalDouble(key: String): Double? {
