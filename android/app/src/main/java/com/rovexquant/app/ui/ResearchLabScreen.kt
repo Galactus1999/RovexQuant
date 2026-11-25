@@ -3,6 +3,8 @@ package com.rovexquant.app.ui
 import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.local.TejHqOhlcvStore
+import com.rovexquant.app.data.local.ResearchCsvDatasetStore
+import com.rovexquant.app.data.local.ResearchCsvFolderImporter
 import com.rovexquant.app.data.model.MacroResearchSummary
 import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.repository.QuantDataRepository
@@ -49,6 +51,11 @@ fun ResearchLabScreen(
     var datasetName by remember { mutableStateOf("No dataset loaded") }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var csvFolderUri by remember { mutableStateOf(ResearchCsvFolderImporter.savedFolderUri(context)?.toString()) }
+    var csvFolderLoading by remember { mutableStateOf(false) }
+    var csvFolderStatus by remember { mutableStateOf<String?>(null) }
+    var csvFolderError by remember { mutableStateOf<String?>(null) }
+    var csvFolderDatasets by remember { mutableStateOf(ResearchCsvDatasetStore.list(context)) }
     var macroSummary by remember { mutableStateOf<MacroResearchSummary?>(null) }
     var macroLoading by remember { mutableStateOf(false) }
     var macroError by remember { mutableStateOf<String?>(null) }
@@ -126,6 +133,44 @@ fun ResearchLabScreen(
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) loadSelectedFile(uri)
+    }
+
+    suspend fun scanCsvFolder(uriString: String) {
+        if (csvFolderLoading) return
+        csvFolderLoading = true
+        csvFolderError = null
+        try {
+            val report = withContext(Dispatchers.IO) {
+                ResearchCsvFolderImporter.scan(context, Uri.parse(uriString))
+            }
+            csvFolderDatasets = report.datasets
+            csvFolderStatus = report.summary
+            csvFolderError = report.errors.take(5).joinToString(" · ").takeIf { it.isNotBlank() }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            csvFolderError = failure.message ?: "Selected CSV folder could not be scanned."
+        } finally {
+            csvFolderLoading = false
+        }
+    }
+
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            val sameFolder = csvFolderUri == uri.toString()
+            try {
+                ResearchCsvFolderImporter.persistFolder(context, uri)
+                csvFolderUri = uri.toString()
+                csvFolderStatus = "Folder permission saved. Scanning daily CSV files…"
+                if (sameFolder) scope.launch { scanCsvFolder(uri.toString()) }
+            } catch (failure: Exception) {
+                csvFolderError = failure.message ?: "Could not persist folder permission."
+            }
+        }
+    }
+
+    LaunchedEffect(context, csvFolderUri) {
+        csvFolderUri?.let { scanCsvFolder(it) }
     }
 
     LaunchedEffect(context, repository) {
@@ -237,6 +282,86 @@ fun ResearchLabScreen(
                             report.providerErrors.forEach { Text(it, color = Gold, fontSize = 9.sp) }
                         }
                         Text("Retrieved ${report.retrievedAt}. Annual macro observations and daily fund NAVs are not equity quotes or intraday signals.", color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
+                    }
+                }
+            }
+        }
+        item {
+            TerminalCard {
+                Eyebrow("Automatic CSV folder import")
+                Text(
+                    "Choose a folder once. Its immediate CSV files are rescanned whenever Research Lab opens or when you tap Scan now. Only this selected folder is read; the app does not crawl device storage.",
+                    color = Muted,
+                    fontSize = 10.sp,
+                    lineHeight = 16.sp
+                )
+                Text(
+                    "Daily filenames: NSE_RELIANCE.csv, BSE_TCS.csv, NSE_NIFTY_50.csv. Required columns: timestamp, open, high, low, close, volume; timestamps need an ISO-8601 offset. Limits: 20 MB/file, 100 MB/scan, 100 CSV files.",
+                    color = Muted,
+                    fontSize = 10.sp,
+                    lineHeight = 16.sp
+                )
+                Button(
+                    onClick = { folderPicker.launch(null) },
+                    enabled = !csvFolderLoading,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (csvFolderUri == null) "Choose CSV folder" else "Change CSV folder")
+                }
+                if (csvFolderUri != null) {
+                    Text("Folder permission saved · auto-scan on Research Lab open", color = Mint, fontSize = 10.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(
+                            onClick = { scope.launch { scanCsvFolder(csvFolderUri!!) } },
+                            enabled = !csvFolderLoading
+                        ) { Text(if (csvFolderLoading) "Scanning…" else "Scan now") }
+                        TextButton(onClick = {
+                            ResearchCsvFolderImporter.clearFolder(context)
+                            csvFolderUri = null
+                            csvFolderStatus = "Folder access removed. Imported datasets are retained."
+                            csvFolderError = null
+                        }) { Text("Forget folder") }
+                    }
+                }
+                csvFolderStatus?.let {
+                    Text(it, color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
+                }
+                csvFolderError?.let {
+                    Text(it, color = Coral, fontSize = 10.sp, lineHeight = 15.sp)
+                }
+                if (csvFolderDatasets.isNotEmpty()) {
+                    Text("IMPORTED DAILY DATASETS", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    csvFolderDatasets.take(12).forEach { dataset ->
+                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(dataset.label, color = MaterialTheme.colorScheme.onBackground, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    dataset.rowCount.toString() + " bars · " +
+                                        dataset.firstTimestamp.substringBefore("T") + " to " +
+                                        dataset.lastTimestamp.substringBefore("T"),
+                                    color = Muted,
+                                    fontSize = 9.sp
+                                )
+                            }
+                            TextButton(onClick = {
+                                scope.launch {
+                                    try {
+                                        val bars = withContext(Dispatchers.IO) {
+                                            ResearchCsvDatasetStore.load(context, dataset)
+                                        }
+                                        if (bars != null) {
+                                            summary = OhlcvCsvResearch.summarize(bars)
+                                            datasetName = "Folder CSV · " + dataset.label
+                                            error = null
+                                        } else {
+                                            csvFolderError = "Imported dataset file is no longer available."
+                                        }
+                                    } catch (failure: Exception) {
+                                        csvFolderError = failure.message ?: "Imported dataset could not be opened."
+                                    }
+                                }
+                            }) { Text("Open") }
+                        }
                     }
                 }
             }
