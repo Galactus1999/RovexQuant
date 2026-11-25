@@ -433,7 +433,10 @@ class QuantDashboardRegressionTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
 
-        composeRule.onNodeWithTag("ai.dalalos.enable.get_company_exposures").performClick()
+        // The checkbox is below the connector discovery controls; make it
+        // visible before injecting the tap so the state change is deterministic.
+        composeRule.onNodeWithTag("ai.dalalos.enable.get_company_exposures")
+            .performScrollTo().assertIsDisplayed().performClick()
         composeRule.waitForIdle()
         // The selectable tool row is rendered only after the checkbox state is
         // committed. Verify that state transition before looking for its scroller.
