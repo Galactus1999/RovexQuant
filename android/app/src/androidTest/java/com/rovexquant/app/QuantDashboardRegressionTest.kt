@@ -388,7 +388,8 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("ai.workspace.list")
             .performScrollToNode(hasTestTag("ai.chat.input"))
         composeRule.onNodeWithTag("ai.chat.input").performTextInput("Review this supplied evidence using the research route.")
-        composeRule.onNodeWithTag("ai.chat.send").assertIsEnabled()
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.chat.send"))
+        composeRule.onNodeWithTag("ai.chat.send").assertIsDisplayed().assertIsEnabled()
         composeRule.onNodeWithTag("ai.chat.send").performClick()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithText("Deterministic AI fixture response.").fetchSemanticsNodes().isNotEmpty()
