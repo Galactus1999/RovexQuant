@@ -345,6 +345,8 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
         }
         completion = None
         ai_error = None
+        verification = None
+        research_run = {"archive_status": "NOT_CREATED"}
         if request.provider_id and request.model:
             try:
                 completion = await complete_chat(
@@ -363,6 +365,57 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
                 ai_error = f"Data was recovered, but AI commentary is unavailable: {error}"
         else:
             ai_error = "Data was recovered. Configure an AI provider and model to generate the strategy commentary."
+
+        if completion is not None:
+            source_ref = (
+                f"market:EOD:{provider_id}:{request.exchange}:{request.symbol.upper()}:"
+                f"{request.from_date.isoformat()}:{request.to_date.isoformat()}"
+            )
+            evidence_text = (
+                f"[{source_ref}]\\n"
+                + json.dumps(user_evidence, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+            )
+            try:
+                verification = await verify_research_claims(
+                    draft=str(completion.get("content", "")),
+                    evidence_text=evidence_text,
+                    allowed_source_refs=[source_ref],
+                    research_provider=str(completion.get("provider_id", request.provider_id)),
+                    research_model=str(completion.get("model", request.model)),
+                    max_tokens=1200,
+                )
+            except (GatewayError, EodStoreError, TypeError, ValueError) as error:
+                verification = {
+                    "status": "VERIFICATION_FAILED",
+                    "method": "SECOND_MODEL_WITH_EXACT_QUOTE_VALIDATION",
+                    "summary": f"Independent claim verification did not complete: {error}",
+                    "claims": [],
+                }
+            try:
+                run_id = persist_ai_research_run(
+                    task_type="research",
+                    provider_id=str(completion.get("provider_id", request.provider_id)),
+                    model=str(completion.get("model", request.model)),
+                    credential_id=completion.get("credential_id"),
+                    request_payload=user_evidence,
+                    response_payload={
+                        "content": str(completion.get("content", "")),
+                        "verification": verification or {},
+                    },
+                    usage=completion.get("usage") if isinstance(completion.get("usage"), dict) else {},
+                    fallback_used=bool(completion.get("fallback_used")),
+                    source_refs=[{
+                        "source_ref": source_ref,
+                        "provider": provider_id,
+                        "exchange": request.exchange,
+                        "symbol": request.symbol.upper(),
+                        "from": request.from_date.isoformat(),
+                        "to": request.to_date.isoformat(),
+                    }],
+                )
+                research_run = {"archive_status": "SAVED", "run_id": run_id}
+            except EodStoreError as error:
+                research_run = {"archive_status": "UNAVAILABLE", "error": str(error)}
 
         return {
             "provider": provider_id,
@@ -390,6 +443,8 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
             ],
             "ai": completion,
             "ai_error": ai_error,
+            "verification": verification,
+            "research_run": research_run,
             "data_rights": (
                 "Private personal research only. Do not redistribute raw data or expose it to other users. "
                 "Exchange terms may independently apply; this endpoint does not grant exchange display rights."
