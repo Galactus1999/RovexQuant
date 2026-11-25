@@ -12,12 +12,14 @@ from pydantic import BaseModel, Field, SecretStr, model_validator
 
 from rovexquant.ai.gateway import (
     GatewayError, authorize_gateway, complete_chat, configured_providers, configured_task_routes,
+    resolve_task_route,
 )
-from rovexquant.ai.claim_verifier import verify_research_claims
+from rovexquant.ai.claim_verifier import extract_research_source_refs, verify_research_claims
 from rovexquant.market_data.eod_store import EodStoreError
 from rovexquant.ai.research_archive import (
-    get_ai_research_run, get_ai_token_budget_status, list_ai_research_runs,
-    persist_ai_research_run,
+    ai_token_budgets_enabled, estimate_reserved_tokens, fail_ai_research_run,
+    finish_ai_research_run, get_ai_research_run, get_ai_token_budget_status,
+    list_ai_research_runs, reserve_ai_research_run,
 )
 from rovexquant.ai.providers import SUPPORTED
 from rovexquant.market_data import tejhq_service
@@ -271,7 +273,11 @@ def delete_app_ai_provider_credential(provider_id: str):
 )
 async def app_ai_chat(request: AIChatRequest):
     """Mobile AI access is authorized by the short-lived Quant app session."""
+    run_id = None
     try:
+        provider_id, model, fallback_providers = resolve_task_route(
+            request.task_type, request.provider_id, request.model, request.fallback_providers
+        )
         mobile_messages = [
             {
                 "role": "system",
@@ -287,19 +293,90 @@ async def app_ai_chat(request: AIChatRequest):
             },
             *[message.model_dump() for message in request.messages if message.role != "system"],
         ]
-        return await complete_chat(
-            provider_id=request.provider_id,
-            model=request.model,
-            messages=mobile_messages,
-            max_tokens=request.max_tokens,
-            temperature=request.temperature,
-            credential_id=request.credential_id,
-            fallback_providers=request.fallback_providers,
-            task_type=request.task_type,
+        request_payload = {
+            "messages": mobile_messages,
+            "max_tokens": request.max_tokens,
+            "temperature": request.temperature,
+        }
+        evidence_text = "\n".join(
+            message["content"] for message in mobile_messages if message.get("role") == "user"
         )
+        allowed_source_refs = extract_research_source_refs(evidence_text)
+        archive_error = None
+        try:
+            run_id = reserve_ai_research_run(
+                task_type=request.task_type,
+                provider_id=provider_id,
+                model=model,
+                credential_id=request.credential_id,
+                request_payload=request_payload,
+                estimated_tokens=estimate_reserved_tokens(request_payload, request.max_tokens),
+                source_refs=[{"source_ref": ref} for ref in allowed_source_refs],
+            )
+        except EodStoreError as error:
+            if ai_token_budgets_enabled() or error.status_code == 429:
+                raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+            archive_error = str(error)
+
+        try:
+            completion = await complete_chat(
+                provider_id=provider_id,
+                model=model,
+                messages=mobile_messages,
+                max_tokens=request.max_tokens,
+                temperature=request.temperature,
+                credential_id=request.credential_id,
+                fallback_providers=fallback_providers,
+                task_type=request.task_type,
+            )
+        except GatewayError:
+            if run_id:
+                fail_ai_research_run(run_id)
+            raise
+
+        verification = None
+        run_status = "SUCCEEDED"
+        if request.task_type in {"research", "macro_analysis", "filing_extraction"}:
+            try:
+                verification = await verify_research_claims(
+                    draft=completion.get("content", ""),
+                    evidence_text=evidence_text,
+                    allowed_source_refs=allowed_source_refs,
+                    research_provider=completion.get("provider_id", provider_id),
+                    research_model=completion.get("model", model),
+                )
+            except Exception as error:
+                verification = {
+                    "status": "VERIFICATION_FAILED",
+                    "method": "SECOND_MODEL_WITH_EXACT_QUOTE_VALIDATION",
+                    "summary": f"Verifier failed safely: {error}",
+                    "claims": [],
+                }
+            completion["verification"] = verification
+            if verification.get("status") == "VERIFIED":
+                run_status = "VERIFIED"
+            elif verification.get("status") == "PARTIALLY_VERIFIED":
+                run_status = "PARTIALLY_VERIFIED"
+            elif verification.get("status") == "REJECTED":
+                run_status = "REJECTED"
+            else:
+                run_status = "VERIFICATION_PENDING"
+        if run_id:
+            try:
+                finish_ai_research_run(run_id, completion, status=run_status, verification=verification)
+                completion["run_id"] = run_id
+                completion["archive_status"] = "PERSISTED"
+            except EodStoreError as error:
+                completion["run_id"] = run_id
+                completion["archive_status"] = "UNAVAILABLE"
+                completion["archive_error"] = str(error)
+        else:
+            completion["archive_status"] = "UNAVAILABLE"
+            if archive_error:
+                completion["archive_error"] = archive_error
+        return completion
     except GatewayError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
-
 
 @router.post(
     "/api/v1/app/ai/strategy-brief",
@@ -364,77 +441,96 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
         verification = None
         research_run = {"archive_status": "NOT_CREATED"}
         if (request.provider_id and request.model) or request.automatic_task_routing:
-            try:
-                completion = await complete_chat(
-                    provider_id=None if request.automatic_task_routing else request.provider_id,
-                    model=None if request.automatic_task_routing else request.model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": json.dumps(user_evidence, separators=(",", ":"), sort_keys=True)},
-                    ],
-                    max_tokens=1400,
-                    temperature=0.1,
-                    credential_id=request.credential_id,
-                    fallback_providers=request.fallback_providers,
-                    task_type="research",
-                )
-            except GatewayError as error:
-                ai_error = f"Data was recovered, but AI commentary is unavailable: {error}"
-        else:
-            ai_error = "Data was recovered. Configure an AI provider and model to generate the strategy commentary."
-
-        if completion is not None:
+            run_id = None
+            archive_error_message = None
             source_ref = (
                 f"market:EOD:{provider_id}:{request.exchange}:{request.symbol.upper()}:"
                 f"{request.from_date.isoformat()}:{request.to_date.isoformat()}"
             )
             evidence_text = (
-                f"[{source_ref}]\\n"
+                f"[{source_ref}]\n"
                 + json.dumps(user_evidence, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
             )
+            request_payload = {"system_prompt": system_prompt, "evidence": user_evidence}
             try:
-                verification = await verify_research_claims(
-                    draft=str(completion.get("content", "")),
-                    evidence_text=evidence_text,
-                    allowed_source_refs=[source_ref],
-                    research_provider=str(completion.get("provider_id", request.provider_id)),
-                    research_model=str(completion.get("model", request.model)),
-                    max_tokens=1200,
+                route_provider, route_model, route_fallbacks = resolve_task_route(
+                    "research", request.provider_id, request.model, request.fallback_providers
                 )
-            except (GatewayError, EodStoreError, TypeError, ValueError) as error:
-                verification = {
-                    "status": "VERIFICATION_FAILED",
-                    "method": "SECOND_MODEL_WITH_EXACT_QUOTE_VALIDATION",
-                    "summary": f"Independent claim verification did not complete: {error}",
-                    "claims": [],
-                }
-            try:
-                run_id = persist_ai_research_run(
-                    task_type="research",
-                    provider_id=str(completion.get("provider_id", request.provider_id)),
-                    model=str(completion.get("model", request.model)),
-                    credential_id=completion.get("credential_id"),
-                    request_payload=user_evidence,
-                    response_payload={
-                        "content": str(completion.get("content", "")),
-                        "verification": verification or {},
-                    },
-                    usage=completion.get("usage") if isinstance(completion.get("usage"), dict) else {},
-                    cost_usd=completion.get("cost_usd"),
-                    cost_status=str(completion.get("cost_status", "NOT_TRACKED")),
-                    fallback_used=bool(completion.get("fallback_used")),
-                    source_refs=[{
-                        "source_ref": source_ref,
-                        "provider": provider_id,
-                        "exchange": request.exchange,
-                        "symbol": request.symbol.upper(),
-                        "from": request.from_date.isoformat(),
-                        "to": request.to_date.isoformat(),
-                    }],
+                try:
+                    run_id = reserve_ai_research_run(
+                        task_type="research", provider_id=route_provider, model=route_model,
+                        credential_id=request.credential_id, request_payload=request_payload,
+                        estimated_tokens=estimate_reserved_tokens(request_payload, 1400),
+                        source_refs=[{
+                            "source_ref": source_ref, "provider": provider_id,
+                            "exchange": request.exchange, "symbol": request.symbol.upper(),
+                            "from": request.from_date.isoformat(), "to": request.to_date.isoformat(),
+                        }],
+                    )
+                except EodStoreError as archive_error:
+                    if ai_token_budgets_enabled() or archive_error.status_code == 429:
+                        raise
+                    archive_error_message = str(archive_error)
+
+                completion = await complete_chat(
+                    provider_id=route_provider, model=route_model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": json.dumps(user_evidence, separators=(",", ":"), sort_keys=True)},
+                    ],
+                    max_tokens=1400, temperature=0.1, credential_id=request.credential_id,
+                    fallback_providers=route_fallbacks, task_type="research",
                 )
-                research_run = {"archive_status": "SAVED", "run_id": run_id}
+                try:
+                    verification = await verify_research_claims(
+                        draft=str(completion.get("content", "")), evidence_text=evidence_text,
+                        allowed_source_refs=[source_ref],
+                        research_provider=str(completion.get("provider_id", route_provider)),
+                        research_model=str(completion.get("model", route_model)), max_tokens=1200,
+                    )
+                except Exception as verifier_error:
+                    verification = {
+                        "status": "VERIFICATION_FAILED",
+                        "method": "SECOND_MODEL_WITH_EXACT_QUOTE_VALIDATION",
+                        "summary": f"Independent claim verification did not complete: {verifier_error}",
+                        "claims": [],
+                    }
+                completion["verification"] = verification
+                verification_status = str(verification.get("status", "VERIFICATION_PENDING"))
+                terminal_status = (
+                    "VERIFIED" if verification_status == "VERIFIED" else
+                    "PARTIALLY_VERIFIED" if verification_status == "PARTIALLY_VERIFIED" else
+                    "REJECTED" if verification_status == "REJECTED" else
+                    "VERIFICATION_PENDING"
+                )
+                if run_id:
+                    try:
+                        finish_ai_research_run(run_id, completion, status=terminal_status, verification=verification)
+                        research_run = {
+                            "run_id": run_id, "archive_status": "PERSISTED",
+                            "verification_status": verification_status,
+                            "verification_summary": verification.get("summary", ""),
+                        }
+                    except EodStoreError as archive_error:
+                        research_run = {
+                            "run_id": run_id, "archive_status": "UNAVAILABLE",
+                            "verification_status": verification_status, "error": str(archive_error),
+                        }
+                else:
+                    research_run = {
+                        "archive_status": "UNAVAILABLE", "verification_status": verification_status,
+                        "verification_summary": verification.get("summary", ""), "error": archive_error_message,
+                    }
             except EodStoreError as error:
-                research_run = {"archive_status": "UNAVAILABLE", "error": str(error)}
+                ai_error = f"Data was recovered, but the AI token budget or research archive is unavailable: {error}"
+                research_run = {"archive_status": "BLOCKED", "error": str(error)}
+            except GatewayError as error:
+                if run_id:
+                    fail_ai_research_run(run_id)
+                    research_run = {"run_id": run_id, "archive_status": "FAILED"}
+                ai_error = f"Data was recovered, but AI commentary is unavailable: {error}"
+        else:
+            ai_error = "Data was recovered. Configure an AI provider/model or enable the configured research task route to receive AI commentary."
 
         return {
             "provider": provider_id,

@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -16,13 +17,43 @@ from rovexquant.market_data.eod_store import EodStoreError, connect
 _MAX_DOCUMENT_BYTES = 128 * 1024
 
 
+_SENSITIVE_KEY = re.compile(
+    r"^(?:api[_-]?key|secret[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|password|authorization|private[_-]?key|client[_-]?secret)$",
+    re.IGNORECASE,
+)
+_SECRET_TEXT_PATTERNS = (
+    (re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{12,}"), "Bearer [REDACTED]"),
+    (re.compile(r"(?i)\b(?:sk-or-v1-|sk-|gsk_|rk-)[A-Za-z0-9_-]{16,}\b"), "[REDACTED_API_KEY]"),
+    (re.compile(r"\bAIza[0-9A-Za-z_-]{30,}\b"), "[REDACTED_API_KEY]"),
+    (re.compile(r"(?i)\b(api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|authorization)\s*[:=]\s*([^\s,;]+)"), r"\1=[REDACTED]"),
+    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.DOTALL), "[REDACTED_PRIVATE_KEY]"),
+)
+
+
+def _redact_archive_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            str(key): "[REDACTED]" if _SENSITIVE_KEY.fullmatch(str(key)) else _redact_archive_value(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_archive_value(item) for item in value]
+    if isinstance(value, str):
+        redacted = value
+        for pattern, replacement in _SECRET_TEXT_PATTERNS:
+            redacted = pattern.sub(replacement, redacted)
+        return redacted
+    return value
+
+
 def _bounded(value: Any, label: str) -> dict[str, Any] | list[Any]:
     if not isinstance(value, (dict, list)):
         raise EodStoreError(f"AI research {label} must be an object or array", 422)
-    encoded = json.dumps(value, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+    sanitized = _redact_archive_value(value)
+    encoded = json.dumps(sanitized, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
     if len(encoded.encode("utf-8")) > _MAX_DOCUMENT_BYTES:
         raise EodStoreError(f"AI research {label} exceeds the 128 KB archive limit", 413)
-    return value
+    return sanitized
 
 
 

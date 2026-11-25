@@ -158,3 +158,16 @@ The historical backfill / official reconciliation workflow is operator-initiated
 - `BSE_OFFICIAL_AUTOMATED_DATA_PERMISSION=true` and `BSE_OFFICIAL_PERMISSION_REFERENCE=<permission reference>`
 
 The permission flags are exchange-specific. A permission for NSE does not authorize BSE retrieval. The workflow and backend both enforce this default-deny check. Without permission, use TejHQ for automatic EOD collection and the official NSE MCP only for on-demand informational queries. An operator-supplied official-file reconciliation path is not yet implemented; do not report official reconciliation as complete until a report exists.
+
+
+## AI task routing and token budgets
+
+AI task routing is configured server-side with `QUANT_AI_TASK_ROUTES`, a single-line JSON object. Each task key must be one of `chat`, `research`, `macro_analysis`, `filing_extraction`, `claim_verification`, or `summarization`. Each value must be an object containing:
+
+- `provider_id`: a provider ID present in the backend's supported-provider registry
+- `model`: the exact model ID accepted by that provider
+- `fallback_providers`: optional list of at most three supported provider IDs
+
+Do not use the older `"provider:model"` string form; the current gateway requires structured route objects. Configure `claim_verification` to a different provider/model from `research`; otherwise the verifier reports `NOT_INDEPENDENT` and does not claim independent verification.
+
+Set `QUANT_AI_DAILY_TOKEN_BUDGET` and `QUANT_AI_MONTHLY_TOKEN_BUDGET` to positive integer ceilings to enable atomic pre-call reservations. A value of `0` disables that ceiling. When a budget is enabled, a failed reservation prevents the model call. EOD data recovery remains available even when AI commentary is blocked by a budget or provider failure.

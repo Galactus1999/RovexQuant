@@ -101,7 +101,8 @@ def test_strategy_evidence_summary_does_not_claim_live_data(monkeypatch):
         return {"status": "VERIFIED", "claims": []}
 
     monkeypatch.setattr(ai_router, "verify_research_claims", fake_verify)
-    monkeypatch.setattr(ai_router, "persist_ai_research_run", lambda **kwargs: "research-run-test")
+    monkeypatch.setattr(ai_router, "reserve_ai_research_run", lambda **kwargs: "research-run-test")
+    monkeypatch.setattr(ai_router, "finish_ai_research_run", lambda *args, **kwargs: None)
     from rovexquant.api.routers.ai import AIStrategyBriefRequest, app_ai_strategy_brief
     request = AIStrategyBriefRequest(
         provider_id="groq", model="test-model", exchange="NSE", symbol="RELIANCE",
@@ -441,8 +442,8 @@ def test_strategy_brief_can_use_server_owned_research_route(mobile_client, monke
         return "tejhq_eod", bars
 
     async def fake_complete(**kwargs):
-        assert kwargs["provider_id"] is None
-        assert kwargs["model"] is None
+        assert kwargs["provider_id"] == "groq"
+        assert kwargs["model"] == "server-research-model"
         assert kwargs["task_type"] == "research"
         return {
             "provider_id": "groq", "model": "server-research-model",
@@ -457,7 +458,8 @@ def test_strategy_brief_can_use_server_owned_research_route(mobile_client, monke
     monkeypatch.setattr(ai_router.tejhq_service, "fetch_ohlcv", fake_fetch)
     monkeypatch.setattr(ai_router, "complete_chat", fake_complete)
     monkeypatch.setattr(ai_router, "verify_research_claims", fake_verify)
-    monkeypatch.setattr(ai_router, "persist_ai_research_run", lambda **kwargs: "server-routed-run")
+    monkeypatch.setattr(ai_router, "reserve_ai_research_run", lambda **kwargs: "server-routed-run")
+    monkeypatch.setattr(ai_router, "finish_ai_research_run", lambda *args, **kwargs: None)
 
     response = client.post(
         "/api/v1/app/ai/strategy-brief",
@@ -475,3 +477,64 @@ def test_strategy_brief_can_use_server_owned_research_route(mobile_client, monke
     assert response.json()["ai"]["provider_id"] == "groq"
     assert response.json()["ai"]["model"] == "server-research-model"
     assert response.json()["research_run"]["run_id"] == "server-routed-run"
+    assert response.json()["research_run"]["archive_status"] == "PERSISTED"
+
+
+def test_research_chat_runs_independent_verifier_and_persists_claim_status(mobile_client, monkeypatch):
+    from rovexquant.api.routers import ai as ai_router
+    client, headers = mobile_client
+
+    monkeypatch.setattr(ai_router, "resolve_task_route", lambda *args: ("groq", "research-model", []))
+    monkeypatch.setattr(ai_router, "reserve_ai_research_run", lambda **kwargs: "00000000-0000-0000-0000-000000000001")
+
+    async def fake_complete_chat(**kwargs):
+        return {
+            "provider_id": "groq",
+            "model": "research-model",
+            "credential_id": "app",
+            "content": "RELIANCE closed at 1,234.50. [market:EOD:2026-11-20:NSE:RELIANCE]",
+            "fallback_used": False,
+            "task_type": "research",
+            "usage": {"prompt_tokens": 100, "completion_tokens": 30, "total_tokens": 130},
+            "cost_usd": None,
+            "cost_status": "UNKNOWN_MODEL_PRICING",
+        }
+
+    async def fake_verify(**kwargs):
+        assert "market:EOD:2026-11-20:NSE:RELIANCE" in kwargs["allowed_source_refs"]
+        return {
+            "status": "VERIFIED",
+            "summary": "1 supported, 0 contradicted, 0 insufficient of 1 claims.",
+            "claims": [{
+                "claim": "RELIANCE closed at 1,234.50.",
+                "source_ref": "market:EOD:2026-11-20:NSE:RELIANCE",
+                "evidence_quote": "close 1,234.50",
+                "verdict": "supported",
+                "reason": "Exact value is present in the supplied snapshot.",
+            }],
+        }
+
+    persisted = {}
+    def fake_finish(run_id, completion, **kwargs):
+        persisted.update({"run_id": run_id, "status": kwargs.get("status"), "verification": kwargs.get("verification")})
+
+    monkeypatch.setattr(ai_router, "complete_chat", fake_complete_chat)
+    monkeypatch.setattr(ai_router, "verify_research_claims", fake_verify)
+    monkeypatch.setattr(ai_router, "finish_ai_research_run", fake_finish)
+
+    response = client.post(
+        "/api/v1/app/ai/chat",
+        headers=headers,
+        json={
+            "task_type": "research",
+            "messages": [{
+                "role": "user",
+                "content": "Evidence [market:EOD:2026-11-20:NSE:RELIANCE]: close 1,234.50",
+            }],
+            "max_tokens": 1000,
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["verification"]["status"] == "VERIFIED"
+    assert persisted["status"] == "VERIFIED"
+    assert persisted["verification"]["claims"][0]["verdict"] == "supported"
