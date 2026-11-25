@@ -70,6 +70,11 @@ class MarketStreamController(
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
         onUndeliveredElement = { droppedFrames.incrementAndGet() }
     )
+    private val mutableChartTicks = MutableSharedFlow<List<MarketTick>>(
+        replay = 0,
+        extraBufferCapacity = 32,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
     private val mutableDashboardTicks = MutableSharedFlow<List<MarketTick>>(
         replay = 0,
         extraBufferCapacity = 1,
@@ -82,6 +87,8 @@ class MarketStreamController(
     @Volatile private var attempts = 0
     @Volatile private var keys: List<String> = emptyList()
     private val retry = Runnable { connect() }
+
+    override val chartTicks = mutableChartTicks.asSharedFlow()
 
     override val droppedFrameCount: Long
         get() = droppedFrames.get()
@@ -235,6 +242,9 @@ class MarketStreamController(
                 }
             }
             if (parsedTicks.isNotEmpty()) {
+                // Chart consumers receive each parsed frame through a bounded flow.
+                // The dashboard separately coalesces latest-per-instrument snapshots.
+                mutableChartTicks.tryEmit(parsedTicks)
                 mergeLatestMarketTicks(latestByInstrument, parsedTicks)
             }
             if (json.optString("type") == "initial_feed" || json.optString("type") == "live_feed") {
