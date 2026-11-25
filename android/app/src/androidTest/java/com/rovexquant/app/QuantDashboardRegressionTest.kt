@@ -241,7 +241,13 @@ class QuantDashboardRegressionTest {
                 composeRule.onAllNodesWithTag("instrument.chart.candles")
                     .fetchSemanticsNodes().isNotEmpty()
             }
+            // A semantics node can exist outside the viewport. Bring each nested
+            // chart component into view before asserting visibility.
+            composeRule.onNodeWithTag("instrument.research.screen")
+                .performScrollToNode(hasTestTag("instrument.chart.candles"))
             composeRule.onNodeWithTag("instrument.chart.candles").assertIsDisplayed()
+            composeRule.onNodeWithTag("instrument.research.screen")
+                .performScrollToNode(hasTestTag("instrument.chart.indicator.controls"))
             composeRule.onNodeWithTag("instrument.chart.indicator.controls").assertIsDisplayed()
             composeRule.onNodeWithTag("instrument.overview.panel").performScrollTo()
             composeRule.onNodeWithText("Last price").assertIsDisplayed()
@@ -328,10 +334,12 @@ class QuantDashboardRegressionTest {
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("ai.research.run.detail.response").fetchSemanticsNodes().isNotEmpty()
         }
+        // The archive stores JSON payloads; assert the expected content within
+        // the serialized object rather than requiring it to equal the whole node.
         composeRule.onNodeWithTag("ai.research.run.detail.response")
-            .assertTextContains("Deterministic archived research detail.")
+            .assertTextContains("Deterministic archived research detail.", substring = true)
         composeRule.onNodeWithTag("ai.research.run.detail.request")
-            .assertTextContains("Fixture research prompt")
+            .assertTextContains("Fixture research prompt", substring = true)
         composeRule.onNodeWithText("Groq", substring = true).assertIsDisplayed()
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.model"))
         composeRule.onNodeWithTag("ai.model").performTextInput("test-model")
@@ -422,6 +430,8 @@ class QuantDashboardRegressionTest {
         }
 
         composeRule.onNodeWithTag("ai.dalalos.enable.get_company_exposures").performClick()
+        composeRule.onNodeWithTag("ai.dalalos.tools.readonly")
+            .performScrollToNode(hasTestTag("ai.dalalos.tool.get_company_exposures"))
         composeRule.onNodeWithTag("ai.dalalos.tool.get_company_exposures").performClick()
         composeRule.onNodeWithTag("ai.dalalos.arguments").performTextClearance()
         composeRule.onNodeWithTag("ai.dalalos.arguments").performTextInput("{\"query\":\"RELIANCE\"}")
