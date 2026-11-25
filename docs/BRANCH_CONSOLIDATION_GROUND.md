@@ -154,3 +154,23 @@ Compare `feat/p0-bounded-market-stream` with the current backend/client protocol
 - No AI-owned market-data truth, execution, or risk decisions.
 - No autonomous trading or broker order placement.
 - No claims of a successful build, live feed, migration, deployment, or device test without corresponding evidence.
+
+
+## Preparation work now present on this branch
+
+The following work has been ported onto the staging ground after file-level review:
+
+1. **P2 charting / instrument identity / CSV import** — PR #36 was merged into this staging branch as merge commit `067b1829ef1ec756042f89852a5bdb9804b42e36`. It has not been merged into `main`.
+2. **AI research archive foundation** — added migration `0008_ai_research_runs`, bounded research-run persistence, source-reference storage, and claim-verifier primitives from the AI research-history branch.
+3. **AI task routing** — added validated server-owned `QUANT_AI_TASK_ROUTES` routing for supported task types; explicit provider/model pairs remain supported for existing callers.
+4. **Authenticated AI archive APIs** — added owner-session-protected budget, run-list, run-detail, and task-route endpoints.
+5. **Evidence-bounded strategy verification** — strategy briefs now attach a deterministic EOD source reference, call an independently configured verifier when available, and persist the research run. If no independent route or archive is configured, the core EOD result remains available and the verification/archive status is reported rather than fabricated.
+6. **Bounded market-stream processing** — ported the small unique P0 stream change set: bounded frame ingress, latest-value dashboard coalescing, optional bounded chart tick flow, dropped-frame telemetry, and regression tests. The Android-to-backend subscription remains a text JSON control frame; the backend-to-Upstox subscription protocol remains a separate binary UTF-8 JSON frame.
+
+These changes are preparation work only. They have not yet been proven by a new full CI run on the combined staging SHA. The next step is to run exact-head CI and repair any failures before promoting this ground to `main`.
+
+## Updated staging comparisons
+
+After P2 was merged into the ground, the old P2 branch `feat/p2-indicator-integration` is now behind and has no unique commits against this staging branch. The P0 bounded-stream branch has only four commits / three files not already in the ground; those three files have now been ported. The other old P2 branches remain comparison-only unless a later file-level review identifies a genuinely unique correction.
+
+The AI research-history branches remain far behind and diverged. Their whole trees are still excluded: only the backend archive/verifier/task-routing foundation has been ported so far. AI UI panels, full AI route orchestration, NSE MCP enhancements, and broader ingestion/macro/event features remain pending selective review and integration.
