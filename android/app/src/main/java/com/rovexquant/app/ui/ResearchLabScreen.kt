@@ -346,11 +346,12 @@ fun ResearchLabScreen(
                             TextButton(onClick = {
                                 scope.launch {
                                     try {
-                                        val bars = withContext(Dispatchers.IO) {
-                                            ResearchCsvDatasetStore.load(context, dataset)
+                                        val opened = withContext(Dispatchers.IO) {
+                                            val bars = ResearchCsvDatasetStore.load(context, dataset)
+                                            bars?.let { it to OhlcvCsvResearch.summarize(it) }
                                         }
-                                        if (bars != null) {
-                                            summary = OhlcvCsvResearch.summarize(bars)
+                                        if (opened != null) {
+                                            summary = opened.second
                                             datasetName = "Folder CSV · " + dataset.label
                                             error = null
                                         } else {
@@ -361,6 +362,14 @@ fun ResearchLabScreen(
                                     }
                                 }
                             }) { Text("Open") }
+                            TextButton(onClick = {
+                                ResearchCsvDatasetStore.delete(context, dataset)
+                                csvFolderDatasets = ResearchCsvDatasetStore.list(context)
+                                if (datasetName == "Folder CSV · " + dataset.label) {
+                                    summary = null
+                                    datasetName = "No dataset loaded"
+                                }
+                            }) { Text("Delete") }
                         }
                     }
                 }

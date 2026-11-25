@@ -43,10 +43,21 @@ object ResearchCsvFolderImporter {
             ?.let { runCatching { Uri.parse(it) }.getOrNull() }
 
     fun persistFolder(context: Context, uri: Uri) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val previous = savedFolderUri(context)
         context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString(KEY_TREE_URI, uri.toString())
-            .apply()
+        val saved = prefs.edit().putString(KEY_TREE_URI, uri.toString()).commit()
+        if (!saved) {
+            runCatching {
+                context.contentResolver.releasePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            throw IllegalStateException("Folder permission could not be saved.")
+        }
+        if (previous != null && previous != uri) {
+            runCatching {
+                context.contentResolver.releasePersistableUriPermission(previous, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+        }
     }
 
     fun clearFolder(context: Context) {
@@ -99,12 +110,16 @@ object ResearchCsvFolderImporter {
 
                     val documentId = rows.getString(idColumn)
                     val documentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId)
-                    val bytes = resolver.openInputStream(documentUri)?.use { it.readBounded(readLimit) }
+                    val bounded = resolver.openInputStream(documentUri)?.use { it.readBounded(readLimit) }
                         ?: throw IllegalArgumentException("Could not open CSV file.")
-                    totalBytes += bytes.size
+                    totalBytes += bounded.bytesRead
+                    require(!bounded.exceeded) { "CSV exceeds the configured per-file or folder byte limit." }
+                    val bytes = bounded.bytes
                     val instrument = resolveInstrumentFromFileName(displayName)
                     val contentHash = sha256(bytes)
-                    val ledgerKey = FILE_HASH_PREFIX + sha256(documentId.toByteArray(Charsets.UTF_8))
+                    val ledgerIdentity = documentId + "|" + instrument.exchange + "|" +
+                        instrument.canonicalSymbol + "|" + instrument.instrumentType.name
+                    val ledgerKey = FILE_HASH_PREFIX + sha256(ledgerIdentity.toByteArray(Charsets.UTF_8))
                     val existing = ResearchCsvDatasetStore.load(context, instrument)
                     if (prefs.getString(ledgerKey, null) == contentHash && existing != null) {
                         skipped++
@@ -160,16 +175,22 @@ object ResearchCsvFolderImporter {
         }
     }
 
-    private fun InputStream.readBounded(maxBytes: Int): ByteArray {
+    private data class BoundedRead(val bytes: ByteArray, val bytesRead: Int, val exceeded: Boolean)
+
+    private fun InputStream.readBounded(maxBytes: Int): BoundedRead {
         val output = ByteArrayOutputStream(minOf(maxBytes, 64 * 1024))
         val buffer = ByteArray(8192)
         while (true) {
             val count = read(buffer)
             if (count < 0) break
-            require(output.size() + count <= maxBytes) { "CSV exceeds the configured folder scan byte limit." }
+            val remaining = maxBytes - output.size()
+            if (count > remaining) {
+                if (remaining > 0) output.write(buffer, 0, remaining)
+                return BoundedRead(output.toByteArray(), maxBytes, true)
+            }
             output.write(buffer, 0, count)
         }
-        return output.toByteArray()
+        return BoundedRead(output.toByteArray(), output.size(), false)
     }
 
     private fun sha256(bytes: ByteArray): String =

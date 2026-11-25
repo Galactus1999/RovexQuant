@@ -110,6 +110,20 @@ object ResearchCsvDatasetStore {
         return metadata
     }
 
+    fun delete(context: Context, metadata: ResearchCsvDatasetMetadata) {
+        if (!filePattern.matches(metadata.fileName)) return
+        val identityKey = metadata.exchange + "|" + metadata.instrumentType.name + "|" +
+            metadata.canonicalSymbol + "|" + metadata.interval.key
+        val key = sha256(identityKey.toByteArray(Charsets.UTF_8))
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val current = prefs.getString(ENTRY_PREFIX + key, null)
+            ?.let { runCatching { decode(it) }.getOrNull() }
+        if (current?.fileName == metadata.fileName) {
+            prefs.edit().remove(ENTRY_PREFIX + key).commit()
+        }
+        File(context.filesDir, metadata.fileName).delete()
+    }
+
     private fun encode(metadata: ResearchCsvDatasetMetadata): String = JSONObject()
         .put("exchange", metadata.exchange)
         .put("canonicalSymbol", metadata.canonicalSymbol)
