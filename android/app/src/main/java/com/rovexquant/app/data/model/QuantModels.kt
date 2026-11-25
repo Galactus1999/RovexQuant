@@ -67,3 +67,18 @@ data class MarketIngestionStatus(
     val lastSuccessfulRows: Int = 0,
     val lastSuccessfulAt: String? = null
 )
+
+/** Provider-backed quote metadata. Missing fundamentals remain null, never imputed. */
+data class InstrumentQuoteSnapshot(
+    val symbol: String,
+    val provider: String,
+    val lastPrice: Double?,
+    val previousClose: Double?,
+    val changePercent: Double?,
+    val volume: Long?,
+    val yearHigh: Double?,
+    val yearLow: Double?,
+    val exchangeTimestamp: String?,
+    val receivedAt: String,
+    val quality: String
+)

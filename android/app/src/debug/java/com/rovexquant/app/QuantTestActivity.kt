@@ -29,10 +29,13 @@ import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.QuantSession
+import com.rovexquant.app.data.model.TechnicalIndicators
+import com.rovexquant.app.data.model.TechnicalIndicatorPeriods
 import com.rovexquant.app.data.repository.MarketStream
 import com.rovexquant.app.data.repository.QuantDataRepository
 import com.rovexquant.app.domain.OhlcvBar
 import com.rovexquant.app.domain.InstrumentIdentity
+import com.rovexquant.app.domain.InstrumentType
 import com.rovexquant.app.domain.MarketOhlcvSeries
 import com.rovexquant.app.domain.OhlcvProvider
 import java.time.LocalDate
@@ -193,26 +196,42 @@ class FakeQuantRepository(
         to: LocalDate
     ): MarketOhlcvSeries {
         val bars = buildList {
-            var date = to.minusDays(160)
+            var date = if (instrument.interval.isIntraday) from else to.minusDays(160)
             var index = 0
             while (!date.isAfter(to)) {
                 if (date.dayOfWeek.value <= 5) {
-                    val close = 100.0 + index * 0.25
-                    val open = close - 0.2
-                    add(
-                        OhlcvBar(
-                            timestamp = OffsetDateTime.of(
+                    val intradayStepMinutes = when (instrument.interval.apiUnit) {
+                        "hours" -> (instrument.interval.apiInterval ?: 1) * 60
+                        "minutes" -> instrument.interval.apiInterval ?: 5
+                        else -> 0
+                    }
+                    val observations = if (instrument.interval.isIntraday) 30 else 1
+                    repeat(observations) { candleIndex ->
+                        val close = 100.0 + index * 0.25
+                        val open = close - 0.2
+                        val timestamp = if (instrument.interval.isIntraday) {
+                            OffsetDateTime.of(
+                                date.year, date.monthValue, date.dayOfMonth, 9, 15, 0, 0,
+                                ZoneOffset.ofHoursMinutes(5, 30)
+                            ).plusMinutes((candleIndex * intradayStepMinutes).toLong())
+                        } else {
+                            OffsetDateTime.of(
                                 date.year, date.monthValue, date.dayOfMonth, 15, 30, 0, 0,
                                 ZoneOffset.ofHoursMinutes(5, 30)
-                            ),
-                            open = open,
-                            high = close + 0.5,
-                            low = open - 0.5,
-                            close = close,
-                            volume = if (instrument.provider == OhlcvProvider.TEJHQ_EOD) 100_000L + index else 0L
+                            )
+                        }
+                        add(
+                            OhlcvBar(
+                                timestamp = timestamp,
+                                open = open,
+                                high = close + 0.5,
+                                low = open - 0.5,
+                                close = close,
+                                volume = if (instrument.instrumentType == InstrumentType.EQUITY) 100_000L + index else 0L
+                            )
                         )
-                    )
-                    index++
+                        index++
+                    }
                 }
                 date = date.plusDays(1)
             }
@@ -221,8 +240,10 @@ class FakeQuantRepository(
             instrument = instrument,
             bars = bars,
             retrievedAt = Instant.parse("2026-11-24T10:00:00Z"),
-            volumeAvailable = instrument.provider == OhlcvProvider.TEJHQ_EOD,
-            adjustmentStatus = if (instrument.provider == OhlcvProvider.TEJHQ_EOD) {
+            volumeAvailable = instrument.instrumentType == InstrumentType.EQUITY,
+            adjustmentStatus = if (instrument.interval.isIntraday) {
+                "Deterministic test fixture · raw intraday OHLCV"
+            } else if (instrument.instrumentType == InstrumentType.EQUITY) {
                 "Deterministic test fixture · raw EOD"
             } else {
                 "Deterministic test fixture · price-return index OHLC"
@@ -233,6 +254,31 @@ class FakeQuantRepository(
     override suspend fun fetchTejHqOhlcv(
         exchange: String, symbol: String, from: LocalDate, to: LocalDate
     ): List<OhlcvBar> = emptyList()
+
+    override suspend fun fetchTechnicalIndicators(
+        bars: List<OhlcvBar>,
+        startIndex: Int,
+        periods: TechnicalIndicatorPeriods
+    ): TechnicalIndicators {
+        val count = bars.size
+        fun series(period: Int, value: (Int) -> Double): List<Double?> =
+            List(count) { index -> if (index + 1 < period) null else value(index) }
+        return TechnicalIndicators(
+            startIndex = startIndex,
+            barCount = count,
+            sma = series(periods.sma) { bars[it].close },
+            ema = series(periods.ema) { bars[it].close },
+            rsi = series(periods.rsi + 1) { 50.0 },
+            macdLine = series(26) { 0.5 },
+            macdSignal = series(34) { 0.4 },
+            macdHistogram = series(34) { 0.1 },
+            bollingerUpper = series(periods.bollinger) { bars[it].close + 1.0 },
+            bollingerMiddle = series(periods.bollinger) { bars[it].close },
+            bollingerLower = series(periods.bollinger) { bars[it].close - 1.0 },
+            atr = series(periods.atr + 1) { 1.0 },
+            adx = series(periods.adx * 2) { 25.0 }
+        )
+    }
 
     override suspend fun fetchEventStudy(
         session: QuantSession, symbol: String, eventDate: String, benchmarkSymbol: String?

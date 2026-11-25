@@ -9,6 +9,7 @@ import com.rovexquant.app.data.model.AiStrategyEvidence
 import com.rovexquant.app.data.model.EodMarketSnapshot
 import com.rovexquant.app.data.model.EodStockMove
 import com.rovexquant.app.data.model.IntelligenceFeed
+import com.rovexquant.app.data.model.InstrumentQuoteSnapshot
 import com.rovexquant.app.data.model.IntelligenceSource
 import com.rovexquant.app.data.model.IssuerMapping
 import com.rovexquant.app.data.model.MarketEvent
@@ -32,6 +33,9 @@ import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.NseMcpTool
 import com.rovexquant.app.data.model.QuantSession
+import com.rovexquant.app.data.model.TechnicalIndicators
+import com.rovexquant.app.data.model.TechnicalIndicatorPeriods
+import com.rovexquant.app.domain.OhlcvBar
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -182,6 +186,51 @@ object QuantApi {
         }
     }
 
+
+    fun fetchInstrumentQuote(session: QuantSession, symbol: String): InstrumentQuoteSnapshot? {
+        require(symbol.isNotBlank() && symbol.length <= 80) { "Enter a valid NSE instrument name or symbol." }
+        val body = JSONObject()
+            .put("provider_order", JSONArray().put("upstox"))
+            .put("instruments", JSONArray().put(JSONObject().put("symbol", symbol.trim())))
+            .toString()
+            .toRequestBody("application/json; charset=utf-8".toMediaType())
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/market/quotes")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .post(body)
+            .build()
+        http.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            require(text.toByteArray(Charsets.UTF_8).size <= 128 * 1024) {
+                "Instrument quote snapshot exceeds the 128 KB safety limit."
+            }
+            val root = JSONObject(text)
+            val rows = root.optJSONArray("quotes") ?: return null
+            val quote = rows.optJSONObject(0) ?: return null
+            fun optionalNumber(key: String): Double? =
+                quote.optDouble(key, Double.NaN).takeIf { it.isFinite() && it > 0.0 }
+            val high = optionalNumber("year_high")
+            val low = optionalNumber("year_low")
+            require(high == null || low == null || high >= low) {
+                "Market provider returned an invalid 52-week range."
+            }
+            val volume = quote.optLong("volume", -1L).takeIf { it >= 0L }
+            return InstrumentQuoteSnapshot(
+                symbol = quote.optString("symbol", symbol),
+                provider = quote.optString("provider", root.optString("provider", "unknown")),
+                lastPrice = optionalNumber("last_price"),
+                previousClose = optionalNumber("previous_close"),
+                changePercent = quote.optDouble("change_percent", Double.NaN).takeIf { it.isFinite() },
+                volume = volume,
+                yearHigh = high,
+                yearLow = low,
+                exchangeTimestamp = quote.optString("exchange_timestamp").takeIf { it.isNotBlank() && it != "null" },
+                receivedAt = quote.optString("received_at", root.optString("received_at")),
+                quality = quote.optString("quality", "UNKNOWN")
+            )
+        }
+    }
 
     fun fetchIntelligenceEvents(
         session: QuantSession,
@@ -353,6 +402,130 @@ object QuantApi {
                 reconciliation = parseItem(json.optJSONObject("reconciliation"), "Reconciliation"),
                 notes = notes
             )
+        }
+    }
+
+    /** Fetches server-authorized Upstox V3 intraday candles; provider credentials stay server-side. */
+    fun fetchUpstoxOhlcv(
+        session: QuantSession,
+        exchange: String,
+        symbol: String,
+        interval: String,
+        from: java.time.LocalDate,
+        to: java.time.LocalDate
+    ): List<OhlcvBar> {
+        require(exchange.equals("NSE", ignoreCase = true)) {
+            "Upstox V3 candles are currently supported for NSE only."
+        }
+        require(interval in setOf("1d", "1m", "5m", "10m", "15m", "30m", "1h", "4h")) {
+            "Unsupported chart timeframe."
+        }
+        require(from <= to) { "Chart start date must not be after its end date." }
+        val encodedSymbol = java.net.URLEncoder.encode(symbol.trim(), Charsets.UTF_8.name())
+        val url = "${session.baseUrl}/api/v1/app/market/candles" +
+            "?exchange=NSE&symbol=$encodedSymbol&interval=$interval&from=$from&to=$to"
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        researchHttp.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(body, response.code))
+            require(body.toByteArray(Charsets.UTF_8).size <= 8 * 1024 * 1024) {
+                "Candle response exceeds the 8 MB mobile safety limit."
+            }
+            val rows = JSONObject(body).optJSONArray("bars")
+                ?: throw IllegalStateException("Candle response is missing its bars array.")
+            require(rows.length() <= 20_000) { "Candle response exceeds the 20,000-bar limit." }
+            return buildList(rows.length()) {
+                for (index in 0 until rows.length()) {
+                    val row = rows.optJSONObject(index)
+                        ?: throw IllegalStateException("Candle ${index + 1} is malformed.")
+                    val timestamp = try {
+                        java.time.OffsetDateTime.parse(row.getString("timestamp"))
+                    } catch (failure: Exception) {
+                        throw IllegalStateException("Intraday candle ${index + 1} has an invalid timestamp.", failure)
+                    }
+                    val bar = OhlcvBar(
+                        timestamp = timestamp,
+                        open = row.optDouble("open", Double.NaN),
+                        high = row.optDouble("high", Double.NaN),
+                        low = row.optDouble("low", Double.NaN),
+                        close = row.optDouble("close", Double.NaN),
+                        volume = row.optLong("volume", -1L)
+                    )
+                    require(
+                        bar.open.isFinite() && bar.high.isFinite() && bar.low.isFinite() &&
+                            bar.close.isFinite() && bar.volume >= 0L &&
+                            bar.open > 0.0 && bar.high >= maxOf(bar.open, bar.close) &&
+                            bar.low <= minOf(bar.open, bar.close) && bar.high >= bar.low
+                    ) { "Intraday candle ${index + 1} failed OHLCV validation." }
+                    add(bar)
+                }
+            }
+        }
+    }
+
+    /**
+     * Calls the authenticated deterministic backend indicator engine. Input order is
+     * preserved exactly; JSON null warm-up values remain null and every returned
+     * array is checked against the requested bar count before reaching the chart.
+     */
+    fun fetchTechnicalIndicators(
+        session: QuantSession,
+        bars: List<OhlcvBar>,
+        startIndex: Int,
+        periods: TechnicalIndicatorPeriods = TechnicalIndicatorPeriods()
+    ): TechnicalIndicators {
+        require(bars.isNotEmpty() && bars.size <= 10_000) {
+            "Indicator calculations require between 1 and 10,000 aligned OHLC bars."
+        }
+        require(startIndex >= 0) { "Indicator source offset cannot be negative." }
+        bars.forEachIndexed { index, bar ->
+            require(
+                bar.open.isFinite() && bar.open > 0.0 &&
+                    bar.high.isFinite() && bar.high > 0.0 &&
+                    bar.low.isFinite() && bar.low > 0.0 &&
+                    bar.close.isFinite() && bar.close > 0.0 &&
+                    bar.high >= maxOf(bar.open, bar.close) &&
+                    bar.low <= minOf(bar.open, bar.close) &&
+                    bar.high >= bar.low
+            ) { "OHLC bar ${index + 1} failed validation before indicator calculation." }
+        }
+
+        val close = JSONArray()
+        val high = JSONArray()
+        val low = JSONArray()
+        bars.forEach { bar ->
+            close.put(bar.close)
+            high.put(bar.high)
+            low.put(bar.low)
+        }
+        val payload = JSONObject()
+            .put("close", close)
+            .put("high", high)
+            .put("low", low)
+            .put("sma_period", periods.sma)
+            .put("ema_period", periods.ema)
+            .put("rsi_period", periods.rsi)
+            .put("bollinger_period", periods.bollinger)
+            .put("bollinger_deviations", periods.bollingerDeviations)
+            .put("atr_period", periods.atr)
+            .put("adx_period", periods.adx)
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/research/indicators")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .post(payload.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+
+        researchHttp.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(body, response.code))
+            require(body.toByteArray(Charsets.UTF_8).size <= 2 * 1024 * 1024) {
+                "Indicator response exceeds the 2 MB mobile safety limit."
+            }
+            return parseTechnicalIndicatorsResponse(body, startIndex, bars.size)
         }
     }
 
@@ -1081,7 +1254,7 @@ object QuantApi {
                     val symbol = item.optString("trading_symbol")
                     val name = item.optString("name")
                     val isin = item.optString("isin")
-                    if (key.startsWith("NSE_EQ|INE") && symbol.isNotBlank() && name.isNotBlank()
+                    if (key.startsWith("NSE_EQ|IN") && symbol.isNotBlank() && name.isNotBlank()
                         && isin.isNotBlank() && key == "NSE_EQ|$isin") {
                         add(MarketEquityInstrument(key, name, symbol, isin))
                     }

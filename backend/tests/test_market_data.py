@@ -29,6 +29,7 @@ def test_upstox_v3_quote_normalizes_snapshot():
             "NSE_INDEX|Nifty Bank": {
                 "last_price": 51000.0, "prev_close_price": 50000.0,
                 "net_change": 1000.0, "volume": 1200, "timestamp": now_ms,
+                "year_high": 55000.0, "year_low": 42000.0,
             }
         }})
     provider = UpstoxV3QuoteProvider("secret", transport=httpx.MockTransport(handler))
@@ -38,6 +39,8 @@ def test_upstox_v3_quote_normalizes_snapshot():
     assert quotes[0].last_price == 51000.0
     assert quotes[0].change_percent == 2.0
     assert quotes[0].volume == 1200
+    assert quotes[0].year_high == 55000.0
+    assert quotes[0].year_low == 42000.0
     assert quotes[0].exchange_timestamp is not None
     assert quotes[0].quality == "VALID"
 

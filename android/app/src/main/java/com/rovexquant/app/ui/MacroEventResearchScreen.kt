@@ -23,6 +23,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.MacroResearchSummary
 import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.model.QuantSession
@@ -34,7 +35,12 @@ import java.time.ZoneOffset
 import java.util.Locale
 
 @Composable
-fun MacroEventResearchScreen(session: QuantSession, repository: QuantDataRepository) {
+fun MacroEventResearchScreen(
+    session: QuantSession,
+    repository: QuantDataRepository,
+    equityInstruments: List<MarketEquityInstrument> = emptyList(),
+    indexKeys: Map<String, String> = emptyMap()
+) {
     val factory = remember(session, repository) {
         object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
@@ -137,17 +143,28 @@ fun MacroEventResearchScreen(session: QuantSession, repository: QuantDataReposit
                 Text("Test a dated event against a stock and benchmark",
                     color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold)
-                OutlinedTextField(value = state.symbol, onValueChange = model::setSymbol,
-                    label = { Text("NSE symbol") }, placeholder = { Text("RELIANCE") },
-                    singleLine = true, modifier = Modifier.fillMaxWidth().testTag("event.symbol"))
+                InstrumentSymbolPicker(
+                    value = state.symbol,
+                    onValueChange = model::setSymbol,
+                    label = "NSE company or index",
+                    testTag = "event.symbol",
+                    equities = equityInstruments,
+                    indexKeys = indexKeys
+                )
                 EventDatePickerField(
                     value = state.eventDate,
                     onValueChange = model::setEventDate,
                     modifier = Modifier.fillMaxWidth().testTag("event.date")
                 )
-                OutlinedTextField(value = state.benchmarkSymbol, onValueChange = model::setBenchmarkSymbol,
-                    label = { Text("Benchmark symbol (optional)") }, placeholder = { Text("NIFTYBEES (ETF proxy)") },
-                    singleLine = true, modifier = Modifier.fillMaxWidth().testTag("event.benchmark"))
+                InstrumentSymbolPicker(
+                    value = state.benchmarkSymbol,
+                    onValueChange = model::setBenchmarkSymbol,
+                    label = "Benchmark company or index · optional",
+                    testTag = "event.benchmark",
+                    equities = equityInstruments,
+                    indexKeys = indexKeys,
+                    placeholder = "NIFTY 50, NIFTYBEES, or company"
+                )
                 Button(onClick = model::runEventStudy, enabled = !state.eventLoading,
                     modifier = Modifier.fillMaxWidth().testTag("event.run")) {
                     Text(if (state.eventLoading) "Running…" else "Run study")

@@ -8,20 +8,21 @@ class InstrumentIdentityTest {
     @Test fun nifty50RoutesToBroadMarketIndexProvider() {
         val identity = InstrumentCatalog.resolve(" nifty 50 ")
         assertEquals(InstrumentType.BROAD_MARKET_INDEX, identity.instrumentType)
-        assertEquals(OhlcvProvider.NSE_INDICES_PORTAL, identity.provider)
+        assertEquals(OhlcvProvider.UPSTOX_V3_HISTORICAL, identity.provider)
         assertEquals("NIFTY 50", identity.providerSymbol)
     }
 
     @Test fun niftyBankRoutesToSectorIndexProvider() {
         val identity = InstrumentCatalog.resolve("NIFTY BANK")
         assertEquals(InstrumentType.SECTOR_INDEX, identity.instrumentType)
-        assertEquals(OhlcvProvider.NSE_INDICES_PORTAL, identity.provider)
+        assertEquals(OhlcvProvider.UPSTOX_V3_HISTORICAL, identity.provider)
     }
 
-    @Test fun sectorIndexRoutesToNseIndicesProvider() {
+    @Test fun sectorIndexRoutesToUpstoxHistoricalProvider() {
         val identity = InstrumentCatalog.resolve("NIFTY IT")
         assertEquals(InstrumentType.SECTOR_INDEX, identity.instrumentType)
-        assertEquals(OhlcvProvider.NSE_INDICES_PORTAL, identity.provider)
+        assertEquals(OhlcvProvider.UPSTOX_V3_HISTORICAL, identity.provider)
+        assertEquals(true, InstrumentCatalog.isRegisteredIndex(identity))
     }
 
     @Test fun dashboardOilAndGasAliasMapsToOfficialIndexName() {
@@ -61,5 +62,26 @@ class InstrumentIdentityTest {
         val index = InstrumentCatalog.resolve("NIFTY 50")
         assertEquals(false, equity.cacheIdentity == index.cacheIdentity)
         assertEquals("NSE_BROAD_MARKET_INDEX_1d_NIFTY 50", index.cacheIdentity)
+    }
+
+    @Test fun slashBearingOfficialIndexNameRemainsSearchable() {
+        val identity = InstrumentCatalog.resolve("NIFTY FINANCIAL SERVICES 25/50")
+        assertEquals(InstrumentType.SECTOR_INDEX, identity.instrumentType)
+        assertEquals("NIFTY FINANCIAL SERVICES 25/50", identity.canonicalSymbol)
+    }
+
+    @Test fun intradayEquityAndIndexUseUpstoxV3WithDistinctCacheKeys() {
+        val daily = InstrumentCatalog.resolve("RELIANCE")
+        val minute = InstrumentCatalog.resolve("RELIANCE", interval = OhlcvInterval.MINUTE_1)
+        val fourHourIndex = InstrumentCatalog.resolve("NIFTY BANK", interval = OhlcvInterval.HOUR_4)
+
+        assertEquals(OhlcvProvider.UPSTOX_V3_INTRADAY, minute.provider)
+        assertEquals("minutes", minute.interval.apiUnit)
+        assertEquals(1, minute.interval.apiInterval)
+        assertEquals(OhlcvProvider.UPSTOX_V3_INTRADAY, fourHourIndex.provider)
+        assertEquals(true, InstrumentCatalog.isRegisteredIndex(fourHourIndex))
+        assertEquals("hours", fourHourIndex.interval.apiUnit)
+        assertEquals(4, fourHourIndex.interval.apiInterval)
+        assertEquals(false, minute.cacheIdentity == daily.cacheIdentity)
     }
 }
