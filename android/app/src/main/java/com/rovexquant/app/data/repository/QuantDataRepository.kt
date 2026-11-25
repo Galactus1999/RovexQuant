@@ -47,6 +47,7 @@ interface QuantDataRepository {
     suspend fun deleteDalalOsApiKey(session: QuantSession)
     suspend fun fetchDalalOsConfigured(session: QuantSession): Boolean
     suspend fun fetchAiProviders(session: QuantSession): List<AiProvider>
+    suspend fun fetchAiTaskRoutes(session: QuantSession): Map<String, AiTaskRoute>
     suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String)
     suspend fun deleteAiProviderCredential(session: QuantSession, providerId: String)
     suspend fun saveUpstoxAnalyticsToken(session: QuantSession, token: String)
@@ -83,23 +84,25 @@ interface QuantDataRepository {
     suspend fun fetchEventStudy(session: QuantSession, symbol: String, eventDate: String, benchmarkSymbol: String?): EventStudyResult
     suspend fun sendAiMessage(
         session: QuantSession,
-        providerId: String,
-        model: String,
+        providerId: String?,
+        model: String?,
         messages: List<AiChatMessage>,
         credentialId: String? = null,
-        fallbackProviders: List<String> = emptyList()
+        fallbackProviders: List<String> = emptyList(),
+        taskType: String = "chat"
     ): AiCompletion
     suspend fun requestAiStrategyBrief(
         session: QuantSession,
-        providerId: String,
-        model: String,
+        providerId: String?,
+        model: String?,
         symbol: String,
         exchange: String,
         fromDate: String,
         toDate: String,
         strategyContext: String,
         credentialId: String? = null,
-        fallbackProviders: List<String> = emptyList()
+        fallbackProviders: List<String> = emptyList(),
+        automaticTaskRouting: Boolean = false
     ): AiStrategyBrief
     suspend fun callNseMcpTool(
         session: QuantSession,
