@@ -375,10 +375,16 @@ class QuantWorkspaceViewModel(
                         indexKeys = resolvedIndices,
                         equities = equities,
                         streamStatus = when {
-                            equityMasterFailure != null && equities.isNotEmpty() ->
-                                "Using cached NSE company library · refresh failed: $equityMasterFailure"
+                            resolvedIndices.isEmpty() ->
+                                "Equities-only feed · index master unavailable: ${indexMasterFailure ?: "no benchmark matches"}"
+                            equities.isEmpty() ->
+                                "Indices-only feed · equity master unavailable: ${equityMasterFailure ?: "no cached instruments"}"
+                            indexMasterFailure != null && equityMasterFailure != null ->
+                                "Degraded · using cached instrument masters"
+                            indexMasterFailure != null ->
+                                "Using cached index master · refresh failed: $indexMasterFailure"
                             equityMasterFailure != null ->
-                                "NSE equity master unavailable: $equityMasterFailure · index-only feed"
+                                "Using cached NSE company library · refresh failed: $equityMasterFailure"
                             else -> "Connecting · ${equities.size} equities + ${resolvedIndices.size} indices"
                         }
                     )
