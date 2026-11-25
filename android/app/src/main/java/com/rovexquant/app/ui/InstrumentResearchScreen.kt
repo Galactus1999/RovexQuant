@@ -127,7 +127,7 @@ fun InstrumentResearchScreen(
         }
     }
 
-    LaunchedEffect(identity, session) {
+    LaunchedEffect(symbol, displayName, session) {
         quoteSnapshot = null
         quoteError = null
         val selected = identity
@@ -146,7 +146,7 @@ fun InstrumentResearchScreen(
         }
     }
 
-    LaunchedEffect(identity, session) {
+    LaunchedEffect(symbol, displayName, session) {
         intelligenceFeed = null
         intelligenceError = null
         val selected = identity
