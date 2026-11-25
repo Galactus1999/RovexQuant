@@ -278,6 +278,8 @@ class QuantDashboardRegressionTest {
         // Scroll its container into composition before waiting for lazy children.
         composeRule.onNodeWithTag("ai.workspace.list")
             .performScrollToNode(hasTestTag("ai.research.history"))
+        composeRule.onNodeWithTag("ai.workspace.list")
+            .performScrollToNode(hasTestTag("ai.research.history"))
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("ai.research.run.fixture-research").fetchSemanticsNodes().isNotEmpty() &&
                 composeRule.onAllNodesWithTag("ai.research.budget.daily").fetchSemanticsNodes().isNotEmpty()
@@ -367,7 +369,12 @@ class QuantDashboardRegressionTest {
         // Typing opens the IME and can move the save control below the viewport.
         // Scroll it into the visible area before injecting the click.
         composeRule.onNodeWithTag("ai.dalalos.save").performScrollTo().assertIsDisplayed().assertIsEnabled()
+        composeRule.onNodeWithTag("ai.dalalos.terms").assertIsOn()
+        composeRule.onNodeWithTag("ai.dalalos.save").assertIsEnabled()
         composeRule.onNodeWithTag("ai.dalalos.save").performClick()
+        // Save is below the key field; return to the status row before asserting it.
+        composeRule.onNodeWithTag("ai.workspace.list")
+            .performScrollToNode(hasTestTag("ai.dalalos.panel"))
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithText("KEY STORED").fetchSemanticsNodes().isNotEmpty()
         }
