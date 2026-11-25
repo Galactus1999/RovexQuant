@@ -274,6 +274,10 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithText("Open AI data recovery").performClick()
         composeRule.onNodeWithText("Quant Intelligence.").assertIsDisplayed()
 
+        // The research history is below the initial viewport in a LazyColumn.
+        // Scroll its container into composition before waiting for lazy children.
+        composeRule.onNodeWithTag("ai.workspace.list")
+            .performScrollToNode(hasTestTag("ai.research.history"))
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("ai.research.run.fixture-research").fetchSemanticsNodes().isNotEmpty() &&
                 composeRule.onAllNodesWithTag("ai.research.budget.daily").fetchSemanticsNodes().isNotEmpty()
@@ -360,6 +364,9 @@ class QuantDashboardRegressionTest {
             .performScrollToNode(hasTestTag("ai.dalalos.panel"))
         composeRule.onNodeWithTag("ai.dalalos.key").performTextInput("d".repeat(32))
         composeRule.onNodeWithTag("ai.dalalos.terms").performClick()
+        // Typing opens the IME and can move the save control below the viewport.
+        // Scroll it into the visible area before injecting the click.
+        composeRule.onNodeWithTag("ai.dalalos.save").performScrollTo().assertIsDisplayed().assertIsEnabled()
         composeRule.onNodeWithTag("ai.dalalos.save").performClick()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithText("KEY STORED").fetchSemanticsNodes().isNotEmpty()
