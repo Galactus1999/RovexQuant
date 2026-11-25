@@ -1,7 +1,10 @@
 package com.rovexquant.app.ui
 
 import com.rovexquant.app.data.model.QuantSession
+import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.local.TejHqOhlcvStore
+import com.rovexquant.app.data.local.ResearchCsvDatasetStore
+import com.rovexquant.app.data.local.ResearchCsvFolderImporter
 import com.rovexquant.app.data.model.MacroResearchSummary
 import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.repository.QuantDataRepository
@@ -13,7 +16,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -31,23 +33,29 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
-import java.io.File
 import java.io.InputStream
-import java.nio.file.AtomicMoveNotSupportedException
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import java.util.Locale
 
 private const val MAX_CSV_BYTES = 20 * 1024 * 1024
 
 @Composable
-fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataRepository? = null) {
+fun ResearchLabScreen(
+    session: QuantSession? = null,
+    repository: QuantDataRepository? = null,
+    equityInstruments: List<MarketEquityInstrument> = emptyList(),
+    indexKeys: Map<String, String> = emptyMap()
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var summary by remember { mutableStateOf<OhlcvResearchSummary?>(null) }
     var datasetName by remember { mutableStateOf("No dataset loaded") }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var csvFolderUri by remember { mutableStateOf(ResearchCsvFolderImporter.savedFolderUri(context)?.toString()) }
+    var csvFolderLoading by remember { mutableStateOf(false) }
+    var csvFolderStatus by remember { mutableStateOf<String?>(null) }
+    var csvFolderError by remember { mutableStateOf<String?>(null) }
+    var csvFolderDatasets by remember { mutableStateOf(ResearchCsvDatasetStore.list(context)) }
     var macroSummary by remember { mutableStateOf<MacroResearchSummary?>(null) }
     var macroLoading by remember { mutableStateOf(false) }
     var macroError by remember { mutableStateOf<String?>(null) }
@@ -107,15 +115,8 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
                     val csv = context.contentResolver.openInputStream(uri)?.use { it.readUtf8Limited() }
                         ?: throw IllegalArgumentException("Could not open the selected file")
                     val bars = OhlcvCsvResearch.parse(csv)
-                    TejHqOhlcvStore.clear(context)
-                    val temporary = File(context.filesDir, OhlcvCsvResearch.STORAGE_FILE_NAME + ".tmp")
-                    val destination = File(context.filesDir, OhlcvCsvResearch.STORAGE_FILE_NAME)
-                    temporary.writeText(csv, Charsets.UTF_8)
-                    try {
-                        Files.move(temporary.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
-                    } catch (_: AtomicMoveNotSupportedException) {
-                        Files.move(temporary.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
-                    }
+                    // Keep manual research imports isolated from every typed instrument cache.
+                    TejHqOhlcvStore.save(context, bars)
                     OhlcvCsvResearch.summarize(bars)
                 }
                 summary = loaded
@@ -132,6 +133,44 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) loadSelectedFile(uri)
+    }
+
+    suspend fun scanCsvFolder(uriString: String) {
+        if (csvFolderLoading) return
+        csvFolderLoading = true
+        csvFolderError = null
+        try {
+            val report = withContext(Dispatchers.IO) {
+                ResearchCsvFolderImporter.scan(context, Uri.parse(uriString))
+            }
+            csvFolderDatasets = report.datasets
+            csvFolderStatus = report.summary
+            csvFolderError = report.errors.take(5).joinToString(" · ").takeIf { it.isNotBlank() }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            csvFolderError = failure.message ?: "Selected CSV folder could not be scanned."
+        } finally {
+            csvFolderLoading = false
+        }
+    }
+
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            val sameFolder = csvFolderUri == uri.toString()
+            try {
+                ResearchCsvFolderImporter.persistFolder(context, uri)
+                csvFolderUri = uri.toString()
+                csvFolderStatus = "Folder permission saved. Scanning daily CSV files…"
+                if (sameFolder) scope.launch { scanCsvFolder(uri.toString()) }
+            } catch (failure: Exception) {
+                csvFolderError = failure.message ?: "Could not persist folder permission."
+            }
+        }
+    }
+
+    LaunchedEffect(context, csvFolderUri) {
+        csvFolderUri?.let { scanCsvFolder(it) }
     }
 
     LaunchedEffect(context, repository) {
@@ -157,34 +196,41 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
     LazyColumn(modifier = Modifier.fillMaxSize().testTag("research.lab.list"), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { SectionHeading("RESEARCH", "Research lab.", "") }
         item {
-            TejHqOhlcvPanel(repository) { loaded, name ->
+            TejHqOhlcvPanel(
+                repository = repository,
+                onDatasetLoaded = { loaded, name ->
                 summary = loaded
                 datasetName = name
-            }
+                },
+                equityInstruments = equityInstruments,
+                indexKeys = indexKeys
+            )
         }
         if (session != null && repository != null) {
-            item { NseMcpResearchPanel(session, repository) }
+            item { NseMcpResearchPanel(session, repository, equityInstruments = equityInstruments, indexKeys = indexKeys) }
             item {
                 TerminalCard {
                     Eyebrow("Event study")
-                    OutlinedTextField(
+                    InstrumentSymbolPicker(
                         value = eventSymbol,
-                        onValueChange = { eventSymbol = it.take(40).uppercase() },
-                        label = { Text("NSE symbol") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                        onValueChange = { eventSymbol = it.uppercase().take(80) },
+                        label = "NSE company or index",
+                        testTag = "research.lab.event.symbol",
+                        equities = equityInstruments,
+                        indexKeys = indexKeys
                     )
                     EventDatePickerField(
                         value = eventDate,
                         onValueChange = { eventDate = it },
                         modifier = Modifier.fillMaxWidth()
                     )
-                    OutlinedTextField(
+                    InstrumentSymbolPicker(
                         value = benchmarkSymbol,
-                        onValueChange = { benchmarkSymbol = it.take(40).uppercase() },
-                        label = { Text("Benchmark · optional") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                        onValueChange = { benchmarkSymbol = it.uppercase().take(80) },
+                        label = "Benchmark company or index · optional",
+                        testTag = "research.lab.event.benchmark",
+                        equities = equityInstruments,
+                        indexKeys = indexKeys
                     )
                     Button(
                         onClick = { runEventStudy() },
@@ -242,6 +288,95 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
         }
         item {
             TerminalCard {
+                Eyebrow("Automatic CSV folder import")
+                Text(
+                    "Choose a folder once. Its immediate CSV files are rescanned whenever Research Lab opens or when you tap Scan now. Only this selected folder is read; the app does not crawl device storage.",
+                    color = Muted,
+                    fontSize = 10.sp,
+                    lineHeight = 16.sp
+                )
+                Text(
+                    "Daily filenames: NSE_RELIANCE.csv, BSE_TCS.csv, NSE_NIFTY_50.csv. Supports Date/Datetime/Timestamp, Open, High, Low, Close and common Volume/Vol exports. Date-only and local timestamps are interpreted as Asia/Kolkata; equity files require volume, while index volume may be omitted. Limits: 20 MB/file, 100 MB/scan, 100 CSV files.",
+                    color = Muted,
+                    fontSize = 10.sp,
+                    lineHeight = 16.sp
+                )
+                Button(
+                    onClick = { folderPicker.launch(null) },
+                    enabled = !csvFolderLoading,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (csvFolderUri == null) "Choose CSV folder" else "Change CSV folder")
+                }
+                if (csvFolderUri != null) {
+                    Text("Folder permission saved · auto-scan on Research Lab open", color = Mint, fontSize = 10.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(
+                            onClick = { scope.launch { scanCsvFolder(csvFolderUri!!) } },
+                            enabled = !csvFolderLoading
+                        ) { Text(if (csvFolderLoading) "Scanning…" else "Scan now") }
+                        TextButton(onClick = {
+                            ResearchCsvFolderImporter.clearFolder(context)
+                            csvFolderUri = null
+                            csvFolderStatus = "Folder access removed. Imported datasets are retained."
+                            csvFolderError = null
+                        }) { Text("Forget folder") }
+                    }
+                }
+                csvFolderStatus?.let {
+                    Text(it, color = Muted, fontSize = 10.sp, lineHeight = 15.sp)
+                }
+                csvFolderError?.let {
+                    Text(it, color = Coral, fontSize = 10.sp, lineHeight = 15.sp)
+                }
+                if (csvFolderDatasets.isNotEmpty()) {
+                    Text("IMPORTED DAILY DATASETS", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    csvFolderDatasets.take(12).forEach { dataset ->
+                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(dataset.label, color = MaterialTheme.colorScheme.onBackground, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    dataset.rowCount.toString() + " bars · " +
+                                        dataset.firstTimestamp.substringBefore("T") + " to " +
+                                        dataset.lastTimestamp.substringBefore("T"),
+                                    color = Muted,
+                                    fontSize = 9.sp
+                                )
+                            }
+                            TextButton(onClick = {
+                                scope.launch {
+                                    try {
+                                        val opened = withContext(Dispatchers.IO) {
+                                            val bars = ResearchCsvDatasetStore.load(context, dataset)
+                                            bars?.let { it to OhlcvCsvResearch.summarize(it) }
+                                        }
+                                        if (opened != null) {
+                                            summary = opened.second
+                                            datasetName = "Folder CSV · " + dataset.label
+                                            error = null
+                                        } else {
+                                            csvFolderError = "Imported dataset file is no longer available."
+                                        }
+                                    } catch (failure: Exception) {
+                                        csvFolderError = failure.message ?: "Imported dataset could not be opened."
+                                    }
+                                }
+                            }) { Text("Open") }
+                            TextButton(onClick = {
+                                ResearchCsvDatasetStore.delete(context, dataset)
+                                csvFolderDatasets = ResearchCsvDatasetStore.list(context)
+                                if (datasetName == "Folder CSV · " + dataset.label) {
+                                    summary = null
+                                    datasetName = "No dataset loaded"
+                                }
+                            }) { Text("Delete") }
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            TerminalCard {
                 Eyebrow("Offline dataset")
                 Spacer(Modifier.height(7.dp))
                 Text(datasetName, color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
@@ -253,7 +388,7 @@ fun ResearchLabScreen(session: QuantSession? = null, repository: QuantDataReposi
                 }
                 if (summary != null) {
                     TextButton(onClick = {
-                        TejHqOhlcvStore.clear(context)
+                        TejHqOhlcvStore.clearResearchDataset(context)
                         summary = null
                         datasetName = "No dataset loaded"
                         error = null

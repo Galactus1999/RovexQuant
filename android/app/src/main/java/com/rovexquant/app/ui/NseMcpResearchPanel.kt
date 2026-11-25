@@ -1,5 +1,6 @@
 package com.rovexquant.app.ui
 
+import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.NseMcpTool
@@ -57,7 +58,13 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 @Composable
-fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, onAttachToAi: ((String) -> Unit)? = null) {
+fun NseMcpResearchPanel(
+    session: QuantSession,
+    repository: QuantDataRepository,
+    onAttachToAi: ((String) -> Unit)? = null,
+    equityInstruments: List<MarketEquityInstrument> = emptyList(),
+    indexKeys: Map<String, String> = emptyMap()
+) {
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     var server by remember { mutableStateOf("bhavcopy") }
@@ -237,6 +244,8 @@ fun NseMcpResearchPanel(session: QuantSession, repository: QuantDataRepository, 
                                         label = fieldLabel,
                                         value = current,
                                         enabled = !calling,
+                                        equities = equityInstruments,
+                                        indexKeys = indexKeys,
                                         onValueChange = { formValues = formValues + (key to it) }
                                     )
                                     normalizedKey.contains("timespan") || normalizedKey.contains("period") ||
@@ -533,16 +542,20 @@ private fun ToolInstrumentField(
     label: String,
     value: String,
     enabled: Boolean,
+    equities: List<MarketEquityInstrument>,
+    indexKeys: Map<String, String>,
     onValueChange: (String) -> Unit
 ) {
-    OutlinedTextField(
+    val fieldTag = "nse.mcp.instrument." + label.lowercase().replace(Regex("[^a-z0-9]+"), ".")
+    InstrumentSymbolPicker(
         value = value,
         onValueChange = { onValueChange(it.take(80).uppercase()) },
-        modifier = Modifier.fillMaxWidth(),
-        label = { Text(label) },
-        placeholder = { Text("Stock or index symbol") },
-        singleLine = true,
-        enabled = enabled
+        label = label,
+        testTag = fieldTag,
+        equities = equities,
+        indexKeys = indexKeys,
+        enabled = enabled,
+        placeholder = "Company name, ticker or index"
     )
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         listOf("RELIANCE", "TCS", "INFY", "NIFTY 50", "BANKNIFTY", "NIFTYBEES").forEach { symbol ->

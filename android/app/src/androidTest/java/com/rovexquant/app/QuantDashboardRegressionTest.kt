@@ -1,10 +1,15 @@
 package com.rovexquant.app
 
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -14,6 +19,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -33,6 +40,23 @@ class QuantDashboardRegressionTest {
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("quant.header").fetchSemanticsNodes().isNotEmpty()
         }
+    }
+
+    private fun clickIndicator(key: String) {
+        val tag = "instrument.chart.indicator.$key.toggle"
+        // The controls live in a nested horizontal scroller inside the screen's
+        // vertical scroller. Scroll the horizontal container itself so the
+        // pointer injected by performClick lands inside the clipped viewport.
+        // Explicitly return the vertical screen scroller to its start. The
+        // control row then reveals the requested chip using its horizontal axis.
+        composeRule.onNodeWithTag("instrument.research.screen")
+            .performSemanticsAction(SemanticsActions.ScrollBy) { scrollBy ->
+                scrollBy(0f, -10_000f)
+            }
+        composeRule.onNodeWithTag("instrument.chart.indicator.controls")
+            .performScrollToNode(hasTestTag(tag))
+        composeRule.onNodeWithTag(tag).assertIsDisplayed().performClick()
+        composeRule.waitForIdle()
     }
 
     @Test fun appStartsWithQuantMarketPulseAndHonestOfflineState() {
@@ -64,20 +88,23 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("market.sector.heading"))
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("market.sector.heading").assertIsDisplayed()
-        // Sector cards are ranked by verified live performance; expand the list before
-        // asserting a specific benchmark so the test does not assume a fixed rank.
-        composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasText("View all sector benchmarks"))
+        composeRule.onNodeWithTag("market.pulse.list")
+            .performScrollToNode(hasTestTag("market.sector.cube.open"))
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("View all sector benchmarks").performScrollTo().performClick()
+        composeRule.onNodeWithTag("market.sector.cube.open").performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("sector.index.NIFTY BANK"))
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag("sector.index.NIFTY BANK").assertIsDisplayed()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag("sector.index.NIFTY BANK").performClick()
+        composeRule.onNodeWithTag("market.sector.heatmap.dialog").assertIsDisplayed()
+        composeRule.onNodeWithTag("market.sector.heatmap.grid").assertIsDisplayed()
+        composeRule.onNodeWithTag("sector.heatmap.NIFTY BANK").assertIsDisplayed()
+        composeRule.onNodeWithTag("sector.heatmap.NIFTY BANK").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("instrument.research.screen").assertIsDisplayed()
         composeRule.onNodeWithText("NIFTY BANK").assertIsDisplayed()
+        composeRule.onNodeWithTag("instrument.overview.panel").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("52-week high").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("52-week low").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("INDEX COMPOSITION & BREADTH").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("INDEX & SECTOR DEVELOPMENTS").performScrollTo().assertIsDisplayed()
         composeRule.waitUntil(15_000) {
             composeRule.onAllNodesWithTag("instrument.chart.candles")
                 .fetchSemanticsNodes().isNotEmpty()
@@ -90,6 +117,84 @@ class QuantDashboardRegressionTest {
             .performScrollTo().assertIsDisplayed()
         composeRule.waitForIdle()
         composeRule.onAllNodesWithTag("instrument.chart.volume.toggle").assertCountEquals(0)
+        for (timeframe in listOf("1m", "5m", "10m", "15m", "30m", "1h", "4h", "1d")) {
+            composeRule.onAllNodesWithTag("instrument.chart.timeframe.$timeframe").assertCountEquals(1)
+        }
+        composeRule.onNodeWithTag("instrument.chart.timeframes").performScrollTo()
+        composeRule.onNodeWithTag("instrument.chart.timeframe.5m").performClick()
+        composeRule.waitUntil(15_000) {
+            composeRule.onAllNodesWithText("Upstox V3 intraday candles", substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("instrument.chart.timeframe.5m").assertIsSelected()
+        composeRule.onNodeWithTag("instrument.chart.time.labels").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("instrument.chart.time.labels")
+            .assert(hasContentDescription("Intraday chart time labels", substring = true))
+            .assert(hasContentDescription(":", substring = true))
+        composeRule.onAllNodesWithTag("instrument.chart.volume.toggle").assertCountEquals(0)
+        composeRule.waitUntil(15_000) {
+            runCatching {
+                composeRule.onNodeWithTag("instrument.chart.indicator.rsi.toggle").assertIsEnabled()
+            }.isSuccess
+        }
+        composeRule.waitForIdle()
+        clickIndicator("rsi")
+        composeRule.waitForIdle()
+        // Prove the control state changed before waiting for its dependent pane.
+        composeRule.onNodeWithTag("instrument.chart.indicator.rsi.toggle").assertIsSelected()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("instrument.chart.indicator.rsi.pane")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithTag("instrument.chart.indicator.rsi.pane").assertCountEquals(1)
+        composeRule.onNodeWithTag("instrument.chart.indicator.rsi.pane.plot")
+            .assert(hasContentDescription("non-null plotted samples", substring = true))
+        composeRule.onNodeWithTag("instrument.chart.indicator.rsi.toggle").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("instrument.chart.indicator.rsi.toggle").assertIsNotSelected()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("instrument.chart.indicator.rsi.pane").fetchSemanticsNodes().isEmpty()
+        }
+        composeRule.waitForIdle()
+        clickIndicator("macd")
+        composeRule.waitForIdle()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("instrument.chart.indicator.macd.pane")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithTag("instrument.chart.indicator.macd.pane").assertCountEquals(1)
+        composeRule.onNodeWithTag("instrument.chart.indicator.macd.pane.plot")
+            .assert(hasContentDescription("non-null plotted samples", substring = true))
+        composeRule.waitForIdle()
+        clickIndicator("atr")
+        composeRule.waitForIdle()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("instrument.chart.indicator.atr.pane")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithTag("instrument.chart.indicator.atr.pane").assertCountEquals(1)
+        composeRule.onNodeWithTag("instrument.chart.indicator.atr.pane.plot")
+            .assert(hasContentDescription("non-null plotted samples", substring = true))
+        composeRule.waitForIdle()
+        clickIndicator("adx")
+        composeRule.waitForIdle()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("instrument.chart.indicator.adx.pane")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithTag("instrument.chart.indicator.adx.pane").assertCountEquals(1)
+        composeRule.onNodeWithTag("instrument.chart.indicator.adx.pane.plot")
+            .assert(hasContentDescription("non-null plotted samples", substring = true))
+        composeRule.waitForIdle()
+        for (key in listOf("sma", "ema", "bollinger")) {
+            clickIndicator(key)
+            composeRule.onNodeWithTag("instrument.chart.indicator.$key.toggle").assertIsSelected()
+        }
         composeRule.onNodeWithText("← Back to Pulse").performScrollTo().performClick()
         composeRule.waitForIdle()
         composeRule.waitUntil(10_000) {
@@ -102,6 +207,22 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("market.eod.snapshot").assertIsDisplayed()
     }
 
+    @Test fun globalInstrumentSearchFindsCompaniesAndIndicesByName() {
+        waitForDashboard()
+        composeRule.onNodeWithTag("instrument.global.search.open").performClick()
+        composeRule.onNodeWithTag("instrument.global.search.dialog").assertIsDisplayed()
+        composeRule.onNodeWithTag("instrument.global.search.input").performTextInput("Reliance Industries")
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag("instrument.global.search.result.RELIANCE")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("RELIANCE INDUSTRIES LTD").assertIsDisplayed()
+        composeRule.onNodeWithTag("instrument.global.search.result.RELIANCE").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("instrument.research.screen").assertIsDisplayed()
+        composeRule.onNodeWithText("RELIANCE INDUSTRIES LTD").assertIsDisplayed()
+    }
+
     @Test fun bottomNavigationOpensAllWorkspacesAndSectorCoverage() {
         waitForDashboard()
         composeRule.onNodeWithText("Scan").performClick()
@@ -112,14 +233,18 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithText("Signals").performClick()
         composeRule.onNodeWithText("Signal centre.").assertIsDisplayed()
         composeRule.onNodeWithText("Lab").performClick()
+        composeRule.waitForIdle()
         composeRule.onNodeWithText("Research lab.").assertIsDisplayed()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("research.lab.list").performScrollToNode(hasText("Choose CSV folder"))
+        composeRule.onNodeWithText("AUTOMATIC CSV FOLDER IMPORT").assertIsDisplayed()
+        composeRule.onNodeWithText("Choose CSV folder").assertIsDisplayed()
         composeRule.onNodeWithTag("research.lab.list").performScrollToNode(hasText("Import OHLCV CSV"))
         composeRule.onNodeWithText("Import OHLCV CSV").assertIsDisplayed()
         composeRule.onNodeWithText("More").performClick()
         composeRule.onNodeWithText("Portfolio").performClick()
         composeRule.onNodeWithText("Portfolio & risk.").assertIsDisplayed()
-        composeRule.onNodeWithTag("portfolio.screen")
-            .performScrollToNode(hasTestTag("portfolio.entry"))
+        composeRule.onNodeWithTag("portfolio.entry").performScrollTo()
         composeRule.onNodeWithTag("portfolio.entry").assertIsDisplayed()
     }
 
@@ -158,6 +283,16 @@ class QuantDashboardRegressionTest {
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithText("Deterministic AI fixture response.").fetchSemanticsNodes().isNotEmpty()
         }
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.recovery.symbol.find"))
+        composeRule.onNodeWithTag("ai.recovery.symbol.find").performClick()
+        composeRule.onNodeWithTag("instrument.global.search.input").performTextInput("Reliance Industries")
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag("instrument.global.search.result.RELIANCE")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("instrument.global.search.result.RELIANCE").performClick()
+        composeRule.onNodeWithTag("ai.recovery.symbol")
+            .assertTextEquals("NSE/BSE trading symbol", "RELIANCE")
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.recovery.run"))
         composeRule.onNodeWithTag("ai.recovery.run").performClick()
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(

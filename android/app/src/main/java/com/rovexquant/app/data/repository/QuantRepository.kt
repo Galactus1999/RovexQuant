@@ -2,6 +2,8 @@ package com.rovexquant.app.data.repository
 
 import android.content.Context
 import com.rovexquant.app.data.local.QuantSessionStore
+import com.rovexquant.app.data.local.InstrumentMasterStore
+import com.rovexquant.app.data.local.InstrumentMasterCache
 import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiProvider
@@ -11,6 +13,7 @@ import com.rovexquant.app.data.model.IntelligenceFeed
 import com.rovexquant.app.data.model.MarketIndexInstrument
 import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.MarketTick
+import com.rovexquant.app.data.model.InstrumentQuoteSnapshot
 import com.rovexquant.app.data.model.MarketIngestionStatus
 import com.rovexquant.app.data.model.MacroResearchSummary
 import com.rovexquant.app.data.model.MarketIntegrityStatus
@@ -19,10 +22,11 @@ import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.QuantSession
+import com.rovexquant.app.data.model.TechnicalIndicators
+import com.rovexquant.app.data.model.TechnicalIndicatorPeriods
 import com.rovexquant.app.data.remote.MarketStreamController
 import com.rovexquant.app.data.remote.QuantApi
 import com.rovexquant.app.data.remote.TejHqOhlcvClient
-import com.rovexquant.app.data.remote.NiftyIndicesOhlcvClient
 import com.rovexquant.app.domain.OhlcvBar
 import com.rovexquant.app.domain.InstrumentIdentity
 import com.rovexquant.app.domain.MarketOhlcvSeries
@@ -60,6 +64,18 @@ class QuantRepository(context: Context) : QuantDataRepository {
 
     override suspend fun fetchEquityInstruments(session: QuantSession): List<MarketEquityInstrument> =
         withContext(Dispatchers.IO) { QuantApi.fetchEquityInstruments(session) }
+
+    override suspend fun loadCachedIndexInstruments(): InstrumentMasterCache<MarketIndexInstrument>? =
+        withContext(Dispatchers.IO) { InstrumentMasterStore.loadIndices(appContext) }
+
+    override suspend fun loadCachedEquityInstruments(): InstrumentMasterCache<MarketEquityInstrument>? =
+        withContext(Dispatchers.IO) { InstrumentMasterStore.loadEquities(appContext) }
+
+    override suspend fun saveCachedIndexInstruments(instruments: List<MarketIndexInstrument>) =
+        withContext(Dispatchers.IO) { InstrumentMasterStore.saveIndices(appContext, instruments) }
+
+    override suspend fun saveCachedEquityInstruments(instruments: List<MarketEquityInstrument>) =
+        withContext(Dispatchers.IO) { InstrumentMasterStore.saveEquities(appContext, instruments) }
 
     override suspend fun fetchNseMcpTools(session: QuantSession, server: String): List<NseMcpCatalog> =
         withContext(Dispatchers.IO) { QuantApi.fetchNseMcpTools(session, server) }
@@ -109,6 +125,12 @@ class QuantRepository(context: Context) : QuantDataRepository {
         QuantApi.fetchMarketIngestionStatus(session, exchange)
     }
 
+    override suspend fun fetchInstrumentQuote(
+        session: QuantSession, symbol: String
+    ): InstrumentQuoteSnapshot? = withContext(Dispatchers.IO) {
+        QuantApi.fetchInstrumentQuote(session, symbol)
+    }
+
     override suspend fun fetchIntelligenceEvents(
         session: QuantSession, query: String, timespan: String
     ): IntelligenceFeed = withContext(Dispatchers.IO) {
@@ -129,22 +151,48 @@ class QuantRepository(context: Context) : QuantDataRepository {
         val bars = when (instrument.provider) {
             OhlcvProvider.TEJHQ_EOD ->
                 TejHqOhlcvClient.fetch(instrument.exchange, instrument.providerSymbol, from, to)
-            OhlcvProvider.NSE_INDICES_PORTAL ->
-                NiftyIndicesOhlcvClient.fetch(instrument, from, to)
+            OhlcvProvider.UPSTOX_V3_HISTORICAL, OhlcvProvider.UPSTOX_V3_INTRADAY -> {
+                require(
+                    if (instrument.provider == OhlcvProvider.UPSTOX_V3_HISTORICAL) {
+                        instrument.interval == com.rovexquant.app.domain.OhlcvInterval.DAILY
+                    } else instrument.interval.isIntraday
+                ) { "Upstox V3 provider and chart timeframe do not match." }
+                val session = QuantSessionStore.load(appContext)
+                    ?: throw IllegalStateException("Sign in again before requesting intraday candles.")
+                QuantApi.fetchUpstoxOhlcv(
+                    session, instrument.exchange, instrument.providerSymbol, instrument.interval.key, from, to
+                )
+            }
         }
         MarketOhlcvSeries(
             instrument = instrument,
             bars = bars,
             retrievedAt = Instant.now(),
-            volumeAvailable = instrument.provider == OhlcvProvider.TEJHQ_EOD,
+            volumeAvailable = instrument.instrumentType == com.rovexquant.app.domain.InstrumentType.EQUITY,
             adjustmentStatus = when (instrument.provider) {
                 OhlcvProvider.TEJHQ_EOD -> "Raw end-of-day bhavcopy prices; corporate-action adjustment not applied"
-                OhlcvProvider.NSE_INDICES_PORTAL -> "Price Return Index OHLC; dividends are not included"
+                OhlcvProvider.UPSTOX_V3_HISTORICAL -> "NSE index daily OHLC; total-return treatment is not assumed"
+                OhlcvProvider.UPSTOX_V3_INTRADAY -> "Raw intraday OHLCV; corporate-action adjustment not applied"
             },
-            providerNote = if (instrument.provider == OhlcvProvider.NSE_INDICES_PORTAL) {
-                "Official NSE Indices website-backed historical form; its underlying request contract is undocumented and may change."
-            } else null
+            providerNote = when (instrument.provider) {
+                OhlcvProvider.UPSTOX_V3_HISTORICAL ->
+                    "Upstox V3 historical daily candles; server-side read-only Analytics Token; index volume is not available."
+                OhlcvProvider.UPSTOX_V3_INTRADAY ->
+                    "Upstox V3 historical/intraday candles; server-side read-only Analytics Token; interval history is provider-limited."
+                OhlcvProvider.TEJHQ_EOD -> null
+            }
         )
+    }
+
+    override suspend fun fetchTechnicalIndicators(
+        bars: List<OhlcvBar>,
+        startIndex: Int,
+        periods: TechnicalIndicatorPeriods
+    ): TechnicalIndicators = withContext(Dispatchers.IO) {
+        require(bars.size in 1..10_000) { "Indicator request window must contain at most 10,000 bars." }
+        val session = QuantSessionStore.load(appContext)
+            ?: throw IllegalStateException("Sign in again before calculating technical indicators.")
+        QuantApi.fetchTechnicalIndicators(session, bars, startIndex, periods)
     }
 
     override suspend fun fetchEventStudy(

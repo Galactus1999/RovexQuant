@@ -136,3 +136,36 @@ The Android wrapper executes chart calls asynchronously in WebView. Its document
 - The Android client does not yet call the backend `/api/v1/research/indicators` endpoint through a typed repository/API contract.
 - No Android renderer interaction tests, index/equity chart emulator test, real-device performance profile, fullscreen, multi-instrument comparison or event markers have passed yet.
 - The exact latest branch head must pass a fresh complete CI run. An earlier run was cancelled after subsequent branch pushes; do not treat it as verification of the latest head.
+
+
+## P2.3 implementation batch — 24 November 2026
+
+**Implemented on `feat/p2-indicator-integration`; exact-head CI and emulator validation pending.**
+
+- Added typed `TechnicalIndicators` and `TechnicalIndicatorPeriods` contracts. All arrays preserve backend null warm-up values, must be finite when populated, and must exactly match the requested bar count.
+- Added authenticated Android transport for `POST /api/v1/research/indicators`. Requests carry aligned close/high/low arrays, are bounded to 10,000 OHLC bars, and use the existing research timeout/client and session bearer token.
+- Response parsing is isolated in a side-effect-free parser and exercised on the Android runtime. It validates payload size, required arrays, MACD arity, exact array lengths, JSON numeric types, finite values and source-window alignment. The typed model additionally rejects out-of-range RSI/ADX, negative ATR and unordered Bollinger bands. No local formula fallback is used.
+- Added the feature-facing repository port and `QuantRepository` IO/session coordination. The UI does not call `QuantApi` directly.
+- Instrument research requests indicators for the latest maximum 10,000 bars. The returned `startIndex` and count preserve alignment with the larger chart history; older bars are explicitly outside the indicator coverage window.
+- Replaced local chart SMA calculations with backend SMA/EMA/Bollinger overlays and added RSI, MACD, ATR and ADX subpanels. Controls are wired to actual renderer data, and the chart remains available if indicator calculation fails.
+- Added deterministic fake indicator fixtures for UI tests, model alignment/warm-up tests, and Android emulator assertions for RSI, MACD, ATR and ADX pane activation plus SMA/EMA/Bollinger control selection.
+- Added backend API regression for all returned array lengths and expected RSI, ATR, ADX and MACD warm-up indices; added independent Wilder RSI edge cases, ATR gap handling and MACD histogram identity tests.
+- Moved the index volume-unavailable disclaimer into the visible chart controls area so it does not depend on selecting a candle or scrolling to the OHLC readout.
+
+### P2.3 remaining verification and next batch
+
+- Run exact-head Android unit, compile/lint/APK, backend/security and Android 15 emulator CI on this branch. Do not mark complete until all required gates pass.
+- Inspect the emulator report for the earlier PR #30 regression and confirm the disclaimer fix on its exact head independently.
+- Add a focused transport/parser test with malformed lengths, missing arrays, non-finite values, HTTP auth/error and null warm-up fixtures.
+- Verify indicator reference values against backend tests and independent hand-computed fixtures for EMA/RSI/MACD/ATR/ADX; confirm warm-up indices exactly.
+- Add chart interaction tests for each overlay/pane, range changes, old-history coverage, refresh cancellation and chart recreation.
+- Profile 1k/5k/10k input windows, Compose jank and memory on emulator, then validate on OnePlus CPH2691 Android 16.
+- P2.4 remains: compare instruments with compatible adjustment/time semantics, sourced event/corporate-action markers, fullscreen, richer accessibility/theme behavior, and a formal renderer comparison/decision. Do not claim P2 complete before these and acceptance gates are done.
+
+## Mainline integration verification
+
+The P2 implementation is integrated on top of the current mainline in PR #36, preserving the newer wide-layout navigation and global instrument search while adding instrument identity, Upstox V3 candle routing, index/sector charting, technical indicators and bounded folder-based CSV import.
+
+The original P2 branch's exact-head workflow passed after correcting three CSV test fixtures that contained literal backslash-n sequences instead of line breaks. The first integrated PR run also passed backend regression, backend static quality, migration/vault, API/security and secret-scan checks; Android unit tests passed. Its separate Android compile job was blocked before Kotlin compilation because Gradle could not resolve the Kotlin Android plugin artifact (HTTP/repository resolution failure), so that run is not an application-code compile result. A fresh exact-head CI run is required before merge.
+
+Index constituent weights, advances/declines and constituent contribution remain unavailable until a separately validated point-in-time constituent/breadth provider is connected. Index candles must not be used to invent those fields. CSV folder scanning is limited to immediate children of the user-selected folder; it is not a background filesystem watcher.

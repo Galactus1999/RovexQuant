@@ -47,3 +47,39 @@ def test_opening_range_emits_only_first_breakout_crossing():
         [10, 11, 12, 13, 14], [9, 10, 10, 11, 12], [9.5, 10.5, 10.5, 12.5, 13.5], ["A"] * 5, 2
     )
     assert signals == ["NO_SIGNAL", "NO_SIGNAL", "NO_SIGNAL", "BULLISH_BREAKOUT", "NO_SIGNAL"]
+
+
+def test_rsi_wilder_edge_cases_and_seed():
+    from rovexquant.indicators.momentum import rsi
+
+    rising = rsi([float(value) for value in range(1, 17)], period=14)
+    falling = rsi([float(value) for value in range(16, 0, -1)], period=14)
+    flat = rsi([10.0] * 16, period=14)
+    assert rising[:14] == [None] * 14
+    assert rising[14:] == [100.0, 100.0]
+    assert falling[14:] == [0.0, 0.0]
+    assert flat[14:] == [50.0, 50.0]
+
+
+def test_atr_uses_previous_close_for_gap_and_wilder_smoothing():
+    from rovexquant.indicators.volatility import atr
+
+    values = atr(
+        highs=[11.0, 15.0, 14.0],
+        lows=[9.0, 13.0, 12.0],
+        closes=[10.0, 14.0, 13.0],
+        period=2,
+    )
+    assert values[:2] == [None, None]
+    assert values[2] == pytest.approx(3.5)
+
+
+def test_macd_histogram_is_line_minus_signal_and_warmup_is_null():
+    line, signal, histogram = macd([float(value) for value in range(1, 100)])
+    assert line[:25] == [None] * 25
+    assert signal[:33] == [None] * 33
+    for index, (macd_value, signal_value, histogram_value) in enumerate(zip(line, signal, histogram, strict=True)):
+        if macd_value is not None and signal_value is not None:
+            assert histogram_value == pytest.approx(macd_value - signal_value)
+        else:
+            assert histogram_value is None

@@ -295,20 +295,73 @@ class QuantWorkspaceViewModel(
 
         marketJob = viewModelScope.launch {
             try {
-                val indexMaster = repository.fetchIndexInstruments(session)
-                val resolvedIndices = resolveDashboardIndices(indexMaster)
-                if (resolvedIndices.isEmpty()) {
-                    throw IllegalStateException("Official NSE index master contained no dashboard benchmark matches.")
+                val cachedIndices = try {
+                    repository.loadCachedIndexInstruments()?.instruments.orEmpty()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    emptyList()
                 }
+                val cachedEquities = try {
+                    repository.loadCachedEquityInstruments()?.instruments.orEmpty()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    emptyList()
+                }
+                val cachedResolvedIndices = resolveDashboardIndices(cachedIndices)
+                if (cachedResolvedIndices.isNotEmpty() || cachedEquities.isNotEmpty()) {
+                    _uiState.update {
+                        it.copy(
+                            indexKeys = cachedResolvedIndices,
+                            equities = cachedEquities,
+                            streamStatus = "Loaded on-device NSE instrument library · refreshing master"
+                        )
+                    }
+                }
+
+                suspend fun persistMaster(block: suspend () -> Unit) {
+                    try {
+                        block()
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        // Cache write failure must not block market data or company search.
+                    }
+                }
+
+                var indexMasterFailure: String? = null
+                val indexMaster = try {
+                    val fresh = repository.fetchIndexInstruments(session)
+                    val merged = (fresh + cachedIndices).distinctBy { it.instrumentKey }
+                    require(merged.isNotEmpty()) { "NSE index master returned no instruments." }
+                    persistMaster { repository.saveCachedIndexInstruments(merged) }
+                    merged
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    indexMasterFailure = failure.message ?: "NSE index master unavailable"
+                    cachedIndices
+                }
+                val resolvedIndices = resolveDashboardIndices(indexMaster)
 
                 var equityMasterFailure: String? = null
                 val equities = try {
-                    repository.fetchEquityInstruments(session)
+                    val fresh = repository.fetchEquityInstruments(session)
+                    if (fresh.isEmpty()) throw IllegalStateException("NSE equity master returned no instruments.")
+                    persistMaster { repository.saveCachedEquityInstruments(fresh) }
+                    fresh
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (failure: Exception) {
                     equityMasterFailure = failure.message ?: "NSE equity master unavailable"
-                    emptyList()
+                    cachedEquities
+                }
+
+                if (resolvedIndices.isEmpty() && equities.isEmpty()) {
+                    throw IllegalStateException(
+                        "No usable NSE instrument master is available. Index: ${indexMasterFailure ?: "no benchmark matches"}; equities: ${equityMasterFailure ?: "no cached instruments"}."
+                    )
                 }
 
                 val subscriptions = (resolvedIndices.values + equities.map { it.instrumentKey }).distinct()
@@ -321,9 +374,19 @@ class QuantWorkspaceViewModel(
                     it.copy(
                         indexKeys = resolvedIndices,
                         equities = equities,
-                        streamStatus = equityMasterFailure?.let {
-                            "NSE equity master unavailable: $it · index-only feed"
-                        } ?: "Connecting · ${equities.size} equities + ${resolvedIndices.size} indices"
+                        streamStatus = when {
+                            resolvedIndices.isEmpty() ->
+                                "Equities-only feed · index master unavailable: ${indexMasterFailure ?: "no benchmark matches"}"
+                            equities.isEmpty() ->
+                                "Indices-only feed · equity master unavailable: ${equityMasterFailure ?: "no cached instruments"}"
+                            indexMasterFailure != null && equityMasterFailure != null ->
+                                "Degraded · using cached instrument masters"
+                            indexMasterFailure != null ->
+                                "Using cached index master · refresh failed: $indexMasterFailure"
+                            equityMasterFailure != null ->
+                                "Using cached NSE company library · refresh failed: $equityMasterFailure"
+                            else -> "Connecting · ${equities.size} equities + ${resolvedIndices.size} indices"
+                        }
                     )
                 }
                 controller.start(subscriptions)
@@ -331,7 +394,7 @@ class QuantWorkspaceViewModel(
                 throw cancelled
             } catch (failure: Exception) {
                 _uiState.update {
-                    it.copy(streamStatus = failure.message ?: "Unable to load official NSE instrument master")
+                    it.copy(streamStatus = failure.message ?: "Unable to load official or cached NSE instrument master")
                 }
             }
         }

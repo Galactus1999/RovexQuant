@@ -32,6 +32,8 @@ class MarketQuote:
     exchange_timestamp: datetime | None
     received_at: datetime
     quality: str
+    year_high: float | None = None
+    year_low: float | None = None
 
 
 class ProviderError(Exception):
@@ -109,6 +111,8 @@ def _normalize_quote(symbol: str, provider: str, raw: dict[str, Any], received_a
         symbol=symbol, provider=provider, last_price=last, previous_close=previous,
         net_change=change, change_percent=change_pct, volume=_integer(raw.get("volume")),
         exchange_timestamp=exchange_ts, received_at=received_at, quality=quality,
+        year_high=_number(raw.get("year_high")),
+        year_low=_number(raw.get("year_low")),
     )
 
 

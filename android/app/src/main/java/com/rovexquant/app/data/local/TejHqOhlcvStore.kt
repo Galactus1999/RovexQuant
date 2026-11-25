@@ -165,6 +165,12 @@ object TejHqOhlcvStore {
         KEY_SERIES_LAST_SYNC_PREFIX + exchange.trim().uppercase(Locale.ROOT) +
             "_" + symbol.trim().uppercase(Locale.ROOT)
 
+    /** Clears only the user-imported research CSV; typed instrument caches remain intact. */
+    fun clearResearchDataset(context: Context) {
+        File(context.filesDir, FILE_NAME).delete()
+        File(context.filesDir, "$FILE_NAME.tmp").delete()
+    }
+
     fun clear(context: Context) {
         File(context.filesDir, FILE_NAME).delete()
         File(context.filesDir, "$FILE_NAME.tmp").delete()

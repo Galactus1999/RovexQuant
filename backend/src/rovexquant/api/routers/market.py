@@ -3,16 +3,16 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field, model_validator
 
 from rovexquant.api.dependencies import require_market_gateway
 from rovexquant.auth import AppAuthError, bearer_claims
+from rovexquant.market_data.data_health import get_market_data_health
 from rovexquant.market_data.eod_store import EodStoreError
 from rovexquant.market_data.integrity_service import latest_data_integrity
-from rovexquant.market_data.data_health import get_market_data_health
 from rovexquant.market_data.instruments import (
     InstrumentMasterError,
     get_nse_equity_instruments,
@@ -25,7 +25,11 @@ from rovexquant.market_data.service import (
     provider_status,
 )
 from rovexquant.market_data.streaming import StreamError, stream_upstox_market_data
+from rovexquant.market_data.upstox_candles import (
+    UpstoxCandleError, fetch_intraday_candles, resolve_nse_instrument_key,
+)
 from rovexquant.security.dependencies import require_app_session
+from rovexquant.security.request_controls import backtest_rate_limit
 
 router = APIRouter()
 
@@ -54,15 +58,20 @@ class MarketQuotesRequest(BaseModel):
 
 
 async def _quote_response(request: MarketQuotesRequest) -> dict[str, object]:
-    instruments = [
-        QuoteInstrument(
+    instruments = []
+    for item in request.instruments:
+        instrument_key = item.upstox_instrument_key
+        if instrument_key is None and "upstox" in request.provider_order:
+            try:
+                instrument_key = await resolve_nse_instrument_key(item.symbol)
+            except UpstoxCandleError as error:
+                raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+        instruments.append(QuoteInstrument(
             symbol=item.symbol,
-            upstox_instrument_key=item.upstox_instrument_key,
+            upstox_instrument_key=instrument_key,
             dhan_exchange_segment=item.dhan_exchange_segment,
             dhan_security_id=item.dhan_security_id,
-        )
-        for item in request.instruments
-    ]
+        ))
     provider, quotes, fallback_used = await fetch_quotes(instruments, request.provider_order)
     quoted_symbols = {item.symbol for item in quotes}
     return {
@@ -114,6 +123,26 @@ async def app_market_equity_instruments():
     except InstrumentMasterError as error:
         from fastapi import HTTPException
 
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+
+
+@router.get(
+    "/api/v1/app/market/candles",
+    dependencies=[Depends(require_app_session), Depends(backtest_rate_limit)],
+)
+async def app_intraday_market_candles(
+    exchange: str = Query(..., min_length=3, max_length=3),
+    symbol: str = Query(..., min_length=1, max_length=80),
+    interval: str = Query(..., min_length=2, max_length=3),
+    from_date: date = Query(..., alias="from"),
+    to_date: __import__("datetime").date = Query(..., alias="to"),
+):
+    """Return validated NSE historical/current-session candles using the server-side Upstox token vault."""
+    try:
+        return await fetch_intraday_candles(
+            exchange, symbol, interval, from_date, to_date
+        )
+    except UpstoxCandleError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
 

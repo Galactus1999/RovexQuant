@@ -52,6 +52,9 @@ def test_instrument_master_selects_verified_nse_cash_equities_only():
         {"segment": "NSE_EQ", "instrument_type": "BE", "name": "JOCIL LIMITED",
          "trading_symbol": "JOCIL", "isin": "INE839G01010",
          "instrument_key": "NSE_EQ|INE839G01010"},
+        {"segment": "NSE_EQ", "instrument_type": "ETF", "name": "NIPPON INDIA ETF NIFTY 50 BEES",
+         "trading_symbol": "NIFTYBEES", "isin": "INF204KB17I5",
+         "instrument_key": "NSE_EQ|INF204KB17I5"},
         {"segment": "NSE_FO", "instrument_type": "FUT", "name": "RELIANCE",
          "trading_symbol": "RELIANCE FUT", "isin": "INE002A01018",
          "instrument_key": "NSE_FO|12345"},
@@ -60,8 +63,9 @@ def test_instrument_master_selects_verified_nse_cash_equities_only():
          "instrument_key": "https://bad.example"},
     ]
     result = normalize_nse_equity_master(json.dumps(records).encode())
-    assert [item["trading_symbol"] for item in result] == ["JOCIL", "RELIANCE"]
-    assert result[1]["instrument_key"] == "NSE_EQ|INE002A01018"
+    assert [item["trading_symbol"] for item in result] == ["JOCIL", "NIFTYBEES", "RELIANCE"]
+    assert result[2]["instrument_key"] == "NSE_EQ|INE002A01018"
+    assert result[1]["isin"] == "INF204KB17I5"
 
 
 def test_equity_master_supports_gzip_and_rejects_empty_universe():
