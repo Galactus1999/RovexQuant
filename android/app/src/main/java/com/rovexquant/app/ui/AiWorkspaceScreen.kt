@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -25,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiStrategyBrief
+import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.data.repository.QuantDataRepository
 import kotlinx.coroutines.CancellationException
@@ -44,6 +46,10 @@ fun AiWorkspaceScreen(
     var providersLoading by remember { mutableStateOf(true) }
     var providers by remember { mutableStateOf(emptyList<com.rovexquant.app.data.model.AiProvider>()) }
     var providerError by remember { mutableStateOf<String?>(null) }
+    var configuredTaskRoutes by remember { mutableStateOf<Map<String, AiTaskRoute>>(emptyMap()) }
+    var taskRoutesError by remember { mutableStateOf<String?>(null) }
+    var selectedTaskType by rememberSaveable { mutableStateOf("research") }
+    var automaticTaskRouting by rememberSaveable { mutableStateOf(false) }
     var credentialInput by remember { mutableStateOf("") }
     var credentialSaving by remember { mutableStateOf(false) }
     var credentialError by remember { mutableStateOf<String?>(null) }
@@ -91,15 +97,26 @@ fun AiWorkspaceScreen(
         } finally {
             providersLoading = false
         }
+        try {
+            configuredTaskRoutes = repository.fetchAiTaskRoutes(session)
+            taskRoutesError = null
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            configuredTaskRoutes = emptyMap()
+            taskRoutesError = failure.message ?: "Server task routes are unavailable."
+        }
     }
 
     val configuredProviders = providers.filter { it.configured }
     val canUseAi = selectedProvider.isNotBlank() && model.isNotBlank() &&
         configuredProviders.any { it.providerId == selectedProvider }
+    val canSendChat = if (automaticTaskRouting) selectedTaskType in configuredTaskRoutes else canUseAi
+    val canUseResearch = if (automaticTaskRouting) "research" in configuredTaskRoutes else canUseAi
 
     fun sendMessage() {
         val prompt = chatInput.trim()
-        if (prompt.isEmpty() || !canUseAi || chatLoading) return
+        if (prompt.isEmpty() || !canSendChat || chatLoading) return
         val updated = (messages + AiChatMessage("user", prompt)).takeLast(10)
         messages = updated
         chatInput = ""
@@ -109,10 +126,11 @@ fun AiWorkspaceScreen(
             try {
                 val response = repository.sendAiMessage(
                     session = session,
-                    providerId = selectedProvider,
-                    model = model.trim(),
+                    providerId = if (automaticTaskRouting) null else selectedProvider,
+                    model = if (automaticTaskRouting) null else model.trim(),
                     messages = updated,
-                    fallbackProviders = selectedFallbacks.toList()
+                    fallbackProviders = if (automaticTaskRouting) emptyList() else selectedFallbacks.toList(),
+                    taskType = selectedTaskType
                 )
                 messages = (updated + AiChatMessage("assistant", response.content)).takeLast(10)
             } catch (cancelled: CancellationException) {
@@ -134,14 +152,15 @@ fun AiWorkspaceScreen(
             try {
                 brief = repository.requestAiStrategyBrief(
                     session = session,
-                    providerId = selectedProvider,
-                    model = model.trim(),
+                    providerId = if (automaticTaskRouting) null else selectedProvider,
+                    model = if (automaticTaskRouting) null else model.trim(),
                     symbol = symbol.trim(),
                     exchange = exchange,
                     fromDate = fromDate.trim(),
                     toDate = toDate.trim(),
                     strategyContext = strategyContext.trim(),
-                    fallbackProviders = selectedFallbacks.toList()
+                    fallbackProviders = if (automaticTaskRouting) emptyList() else selectedFallbacks.toList(),
+                    automaticTaskRouting = automaticTaskRouting
                 )
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -336,6 +355,45 @@ fun AiWorkspaceScreen(
                     }
                     Text("Fallback providers need a server-side fallback model and credential. Authentication and entitlement errors never silently switch providers.", color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
                 }
+                Spacer(Modifier.height(10.dp))
+                Eyebrow("Task-specific server routing")
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf("research", "chat", "macro_analysis", "filing_extraction", "claim_verification", "summarization").forEach { task ->
+                        FilterChip(
+                            selected = selectedTaskType == task,
+                            onClick = { selectedTaskType = task },
+                            enabled = !chatLoading && !briefLoading,
+                            label = { Text(task.replace('_', ' ').replaceFirstChar { it.uppercase() }) },
+                            modifier = Modifier.testTag("ai.task.type.$task")
+                        )
+                    }
+                }
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = automaticTaskRouting,
+                        onCheckedChange = { automaticTaskRouting = it },
+                        enabled = !chatLoading && !briefLoading,
+                        modifier = Modifier.testTag("ai.task.auto")
+                    )
+                    Text("Use server-owned task route instead of manual provider/model", color = Muted, fontSize = 10.sp)
+                }
+                configuredTaskRoutes[selectedTaskType]?.let { route ->
+                    Text(
+                        "Configured route · ${route.providerId}/${route.model}" +
+                            if (route.fallbackProviders.isEmpty()) " · no failover" else " · failover: ${route.fallbackProviders.joinToString()}",
+                        color = Mint, fontSize = 9.sp, lineHeight = 14.sp, modifier = Modifier.testTag("ai.task.route")
+                    )
+                }
+                if (automaticTaskRouting && selectedTaskType !in configuredTaskRoutes) {
+                    Text(
+                        "No server route is configured for this task. Add QUANT_AI_TASK_ROUTES on the backend or switch to manual provider selection.",
+                        color = Gold, fontSize = 9.sp, lineHeight = 14.sp
+                    )
+                }
+                taskRoutesError?.let { Text("Task routes unavailable: $it", color = Gold, fontSize = 9.sp) }
                 credentialError?.let { Text(it, color = Coral, fontSize = 10.sp, lineHeight = 15.sp) }
             }
         }
@@ -352,7 +410,7 @@ fun AiWorkspaceScreen(
                 providerId = selectedProvider,
                 model = model,
                 fallbackProviders = selectedFallbacks.toList(),
-                canUseAi = canUseAi,
+                canUseAi = canUseResearch,
                 evidenceDraft = chatInput
             )
         }
@@ -385,7 +443,7 @@ fun AiWorkspaceScreen(
             TerminalCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Eyebrow("AI conversation")
-                    StatusPill(if (chatLoading) "Thinking" else if (canUseAi) "Configured" else "Setup required", if (chatLoading) Gold else if (canUseAi) Mint else Gold)
+                    StatusPill(if (chatLoading) "Thinking" else if (canSendChat) "Configured" else "Setup required", if (chatLoading) Gold else if (canSendChat) Mint else Gold)
                 }
                 Spacer(Modifier.height(8.dp))
                 if (messages.isEmpty()) {
@@ -424,7 +482,7 @@ fun AiWorkspaceScreen(
                 Spacer(Modifier.height(8.dp))
                 Button(
                     onClick = ::sendMessage,
-                    enabled = canUseAi && chatInput.isNotBlank() && !chatLoading,
+                    enabled = canSendChat && chatInput.isNotBlank() && !chatLoading,
                     modifier = Modifier.fillMaxWidth().testTag("ai.chat.send")
                 ) {
                     Text(if (chatLoading) "Generating…" else "Send to Quant AI")
@@ -484,7 +542,7 @@ fun AiWorkspaceScreen(
                 ) {
                     Text(
                         if (briefLoading) "Retrieving and analysing…"
-                        else if (canUseAi) "Recover EOD data + analyse"
+                        else if (canUseResearch) "Recover EOD data + analyse"
                         else "Recover adjusted EOD data"
                     )
                 }
