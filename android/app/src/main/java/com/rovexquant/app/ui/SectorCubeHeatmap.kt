@@ -38,6 +38,7 @@ data class SectorHeatmapTile(
     val benchmark: String,
     val changePercent: Double?,
     val lastPrice: Double?,
+    val receivedAt: String?,
     val isFresh: Boolean
 )
 
@@ -84,7 +85,7 @@ fun SectorHeatmapDialog(
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Each sector is one flat tile. Green = positive, red = negative. Tap a tile to open its index chart.",
+                    "Each tile shows the sector index move and last price. Tap a tile to open its index chart; this is not constituent breadth or contribution data.",
                     color = Muted,
                     fontSize = 10.sp
                 )
@@ -118,12 +119,13 @@ fun SectorHeatmapDialog(
                                 verticalArrangement = Arrangement.Center
                             ) {
                                 Text(
-                                    sector.shortLabel,
+                                    sector.label.uppercase(),
                                     color = Color.White,
-                                    fontSize = 11.sp,
+                                    fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 2
                                 )
+                                Text(sector.benchmark, color = Color.White.copy(alpha = 0.82f), fontSize = 8.sp, maxLines = 1)
                                 Spacer(Modifier.height(5.dp))
                                 Text(
                                     if (fresh) String.format(Locale.US, "%+.2f%%", sector.changePercent)
@@ -138,10 +140,16 @@ fun SectorHeatmapDialog(
                                     color = Color.White.copy(alpha = 0.86f),
                                     fontSize = 9.sp
                                 )
+                                if (fresh) Text(
+                                    "Updated " + (sector.receivedAt?.take(19)?.replace("T", " ") ?: "time unavailable"),
+                                    color = Color.White.copy(alpha = 0.78f), fontSize = 7.sp, maxLines = 1
+                                )
                             }
                         }
                     }
                 }
+                Spacer(Modifier.height(8.dp))
+                Text("Index-level price change only. Constituent weights, advances/declines and index contribution require a separate validated point-in-time constituent feed.", color = Muted, fontSize = 9.sp, lineHeight = 13.sp)
                 Spacer(Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
