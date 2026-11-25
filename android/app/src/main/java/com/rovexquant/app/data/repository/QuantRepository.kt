@@ -9,6 +9,7 @@ import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiProvider
 import com.rovexquant.app.data.model.AiResearchRun
 import com.rovexquant.app.data.model.AiBudgetStatus
+import com.rovexquant.app.data.model.AiResearchRunDetail
 import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.EodMarketSnapshot
@@ -103,6 +104,9 @@ class QuantRepository(context: Context) : QuantDataRepository {
 
     override suspend fun fetchAiBudgetStatus(session: QuantSession): AiBudgetStatus =
         withContext(Dispatchers.IO) { QuantApi.fetchAiBudgetStatus(session) }
+
+    override suspend fun fetchAiResearchRun(session: QuantSession, runId: String): AiResearchRunDetail =
+        withContext(Dispatchers.IO) { QuantApi.fetchAiResearchRun(session, runId) }
 
     override suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) =
         withContext(Dispatchers.IO) { QuantApi.saveAiProviderCredential(session, providerId, apiKey) }
