@@ -1007,10 +1007,10 @@ object QuantApi {
         val body = JSONObject()
             .put("messages", messageArray)
             .put("task_type", taskType)
-        if (!providerId.isNullOrBlank()) body.put("provider_id", providerId)
-        if (!model.isNullOrBlank()) body.put("model", model)
             .put("max_tokens", 1200)
             .put("temperature", 0.2)
+        if (!providerId.isNullOrBlank()) body.put("provider_id", providerId)
+        if (!model.isNullOrBlank()) body.put("model", model)
         if (!credentialId.isNullOrBlank()) body.put("credential_id", credentialId)
         body.put("fallback_providers", JSONArray().apply { fallbackProviders.distinct().take(3).forEach { put(it) } })
         val request = Request.Builder()
@@ -1047,14 +1047,14 @@ object QuantApi {
         val body = JSONObject()
             .put("symbol", symbol.trim().uppercase())
             .put("automatic_task_routing", automaticTaskRouting)
-        if (!automaticTaskRouting) {
-            body.put("provider_id", providerId)
-            body.put("model", model)
-        }
             .put("exchange", exchange.uppercase())
             .put("from_date", fromDate)
             .put("to_date", toDate)
             .put("strategy_context", strategyContext)
+        if (!automaticTaskRouting) {
+            body.put("provider_id", providerId)
+            body.put("model", model)
+        }
         if (!credentialId.isNullOrBlank()) body.put("credential_id", credentialId)
         body.put("fallback_providers", JSONArray().apply { fallbackProviders.distinct().take(3).forEach { put(it) } })
         val request = Request.Builder()
