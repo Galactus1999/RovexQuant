@@ -58,7 +58,10 @@ async def resolve_nse_instrument_key(symbol: str) -> str:
         normalized_query = " ".join(query.upper().split())
         candidates = [normalized_query]
         if normalized_query.endswith(" INDEX"):
-            candidates.append(normalized_query[:-6].strip())
+            normalized_without_suffix = normalized_query[:-6].strip()
+            candidates.append(normalized_without_suffix)
+            if " AND " in normalized_without_suffix:
+                candidates.append(normalized_without_suffix.replace(" AND ", " & "))
         if " AND " in normalized_query:
             candidates.append(normalized_query.replace(" AND ", " & "))
         if normalized_query == "NIFTY FINANCIAL SERVICES":

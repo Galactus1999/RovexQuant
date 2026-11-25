@@ -139,6 +139,18 @@ def test_upstox_v3_resolves_nifty_financial_services_official_master_alias(monke
     )) == "NSE_INDEX|Nifty Fin Service"
 
 
+
+
+def test_upstox_v3_resolves_oil_and_gas_catalog_alias(monkeypatch):
+    monkeypatch.setattr(upstox_candles, "get_nse_index_instruments", lambda: asyncio.sleep(0, result=[{
+        "instrument_key": "NSE_INDEX|Nifty Oil & Gas",
+        "name": "Nifty Oil & Gas",
+        "trading_symbol": "Nifty Oil & Gas",
+    }]))
+    assert asyncio.run(upstox_candles.resolve_nse_instrument_key(
+        "NIFTY OIL AND GAS INDEX"
+    )) == "NSE_INDEX|Nifty Oil & Gas"
+
 def test_upstox_v3_rejects_daily_history_beyond_provider_decade_limit():
     with pytest.raises(upstox_candles.UpstoxCandleError, match="limited"):
         asyncio.run(upstox_candles.fetch_intraday_candles(
