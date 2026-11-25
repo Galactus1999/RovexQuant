@@ -10,6 +10,8 @@ import java.time.LocalDate
 import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiProvider
+import com.rovexquant.app.data.model.AiResearchRun
+import com.rovexquant.app.data.model.AiBudgetStatus
 import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.EodMarketSnapshot
@@ -49,6 +51,8 @@ interface QuantDataRepository {
     suspend fun fetchDalalOsConfigured(session: QuantSession): Boolean
     suspend fun fetchAiProviders(session: QuantSession): List<AiProvider>
     suspend fun fetchAiTaskRoutes(session: QuantSession): Map<String, AiTaskRoute>
+    suspend fun fetchAiResearchRuns(session: QuantSession, limit: Int = 20): List<AiResearchRun>
+    suspend fun fetchAiBudgetStatus(session: QuantSession): AiBudgetStatus
     suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String)
     suspend fun deleteAiProviderCredential(session: QuantSession, providerId: String)
     suspend fun saveUpstoxAnalyticsToken(session: QuantSession, token: String)
