@@ -12,6 +12,7 @@ import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiProvider
 import com.rovexquant.app.data.model.AiResearchRun
 import com.rovexquant.app.data.model.AiBudgetStatus
+import com.rovexquant.app.data.model.AiResearchRunDetail
 import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.EodMarketSnapshot
@@ -53,6 +54,7 @@ interface QuantDataRepository {
     suspend fun fetchAiTaskRoutes(session: QuantSession): Map<String, AiTaskRoute>
     suspend fun fetchAiResearchRuns(session: QuantSession, limit: Int = 20): List<AiResearchRun>
     suspend fun fetchAiBudgetStatus(session: QuantSession): AiBudgetStatus
+    suspend fun fetchAiResearchRun(session: QuantSession, runId: String): AiResearchRunDetail
     suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String)
     suspend fun deleteAiProviderCredential(session: QuantSession, providerId: String)
     suspend fun saveUpstoxAnalyticsToken(session: QuantSession, token: String)
