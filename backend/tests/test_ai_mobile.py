@@ -93,6 +93,14 @@ def test_strategy_evidence_summary_does_not_claim_live_data(monkeypatch):
         return {"provider_id": "groq", "model": "test-model", "content": "EOD analysis only.", "usage": {}, "fallback_used": False}
     monkeypatch.setattr(ai_router.tejhq_service, "fetch_ohlcv", fake_fetch)
     monkeypatch.setattr(ai_router, "complete_chat", fake_complete)
+
+    async def fake_verify(**kwargs):
+        assert kwargs["allowed_source_refs"][0].startswith("market:EOD:")
+        assert "END_OF_DAY_ADJUSTED" in kwargs["evidence_text"]
+        return {"status": "VERIFIED", "claims": []}
+
+    monkeypatch.setattr(ai_router, "verify_research_claims", fake_verify)
+    monkeypatch.setattr(ai_router, "persist_ai_research_run", lambda **kwargs: "research-run-test")
     from rovexquant.api.routers.ai import AIStrategyBriefRequest, app_ai_strategy_brief
     request = AIStrategyBriefRequest(
         provider_id="groq", model="test-model", exchange="NSE", symbol="RELIANCE",
@@ -103,6 +111,8 @@ def test_strategy_evidence_summary_does_not_claim_live_data(monkeypatch):
     assert result["data_mode"] == "END_OF_DAY_ADJUSTED"
     assert result["bar_count"] == 70
     assert result["ai"]["content"] == "EOD analysis only."
+    assert result["verification"]["status"] == "VERIFIED"
+    assert result["research_run"]["run_id"] == "research-run-test"
     assert "not suitable for intraday" in result["limitations"][0]
 
 
