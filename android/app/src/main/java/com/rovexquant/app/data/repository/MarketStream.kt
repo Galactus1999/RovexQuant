@@ -9,6 +9,7 @@ interface MarketStream {
     fun stop()
 
     /** Bounded higher-frequency feed for chart-only consumers; default keeps legacy fakes compatible. */
+    val chartTicks: kotlinx.coroutines.flow.Flow<List<MarketTick>>
         get() = emptyFlow()
 
     /** Number of frames discarded because the bounded ingress queue overflowed. */
