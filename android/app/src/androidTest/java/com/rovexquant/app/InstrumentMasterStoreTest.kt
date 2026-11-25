@@ -78,8 +78,8 @@ class InstrumentMasterStoreTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val etf = MarketEquityInstrument(
             "NSE_EQ|INF204KB17I5",
-            "NIPPON INDIA ETF NIFTY 50 BEES",
-            "NIFTYBEES",
+            "NIPPON INDIA ETF GOLD BEES",
+            "GOLDBEES",
             "INF204KB17I5"
         )
 
