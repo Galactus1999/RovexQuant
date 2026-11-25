@@ -41,11 +41,12 @@ class AIMessage(BaseModel):
 
 
 class AIChatRequest(BaseModel):
-    provider_id: str
-    model: str = Field(min_length=1, max_length=160)
+    provider_id: str | None = Field(default=None, max_length=40)
+    model: str | None = Field(default=None, max_length=160)
     messages: list[AIMessage] = Field(min_length=1, max_length=32)
     credential_id: str | None = Field(default=None, min_length=1, max_length=80)
     fallback_providers: list[str] = Field(default_factory=list, max_length=3)
+    task_type: str = Field(default="chat", min_length=1, max_length=48)
     max_tokens: int = Field(default=1200, ge=1, le=4096)
     temperature: float = Field(default=0.2, ge=0, le=2)
 
@@ -66,6 +67,7 @@ class AIStrategyBriefRequest(BaseModel):
     strategy_context: str = Field(min_length=1, max_length=1500)
     credential_id: str | None = Field(default=None, min_length=1, max_length=80)
     fallback_providers: list[str] = Field(default_factory=list, max_length=3)
+    automatic_task_routing: bool = False
 
     @model_validator(mode="after")
     def validate_date_range(self):
@@ -189,6 +191,7 @@ async def ai_chat(
             temperature=request.temperature,
             credential_id=request.credential_id,
             fallback_providers=request.fallback_providers,
+            task_type=request.task_type,
         )
     except GatewayError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
@@ -349,11 +352,11 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
         ai_error = None
         verification = None
         research_run = {"archive_status": "NOT_CREATED"}
-        if request.provider_id and request.model:
+        if (request.provider_id and request.model) or request.automatic_task_routing:
             try:
                 completion = await complete_chat(
-                    provider_id=request.provider_id,
-                    model=request.model,
+                    provider_id=None if request.automatic_task_routing else request.provider_id,
+                    model=None if request.automatic_task_routing else request.model,
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": json.dumps(user_evidence, separators=(",", ":"), sort_keys=True)},
@@ -362,6 +365,7 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
                     temperature=0.1,
                     credential_id=request.credential_id,
                     fallback_providers=request.fallback_providers,
+                    task_type="research",
                 )
             except GatewayError as error:
                 ai_error = f"Data was recovered, but AI commentary is unavailable: {error}"
@@ -405,6 +409,8 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
                         "verification": verification or {},
                     },
                     usage=completion.get("usage") if isinstance(completion.get("usage"), dict) else {},
+                    cost_usd=completion.get("cost_usd"),
+                    cost_status=str(completion.get("cost_status", "NOT_TRACKED")),
                     fallback_used=bool(completion.get("fallback_used")),
                     source_refs=[{
                         "source_ref": source_ref,
