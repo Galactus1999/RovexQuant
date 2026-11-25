@@ -137,7 +137,7 @@ async def app_intraday_market_candles(
     from_date: date = Query(..., alias="from"),
     to_date: __import__("datetime").date = Query(..., alias="to"),
 ):
-    """Return validated NSE intraday candles using the server-side Upstox token vault."""
+    """Return validated NSE historical/current-session candles using the server-side Upstox token vault."""
     try:
         return await fetch_intraday_candles(
             exchange, symbol, interval, from_date, to_date

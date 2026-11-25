@@ -1,4 +1,4 @@
-"""Authorized Upstox V3 OHLC candle adapter for intraday chart resolutions."""
+"""Authorized Upstox V3 OHLC candle adapter for historical and current-session chart resolutions."""
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
@@ -26,6 +26,7 @@ class UpstoxCandleError(Exception):
 
 
 _INTERVALS = {
+    "1d": ("days", 1, 3650),
     "1m": ("minutes", 1, 30),
     "5m": ("minutes", 5, 30),
     "10m": ("minutes", 10, 30),
@@ -45,7 +46,7 @@ def interval_contract(interval: str) -> tuple[str, int, int]:
     try:
         return _INTERVALS[interval]
     except KeyError as error:
-        raise UpstoxCandleError("Unsupported intraday interval.", 422) from error
+        raise UpstoxCandleError("Unsupported candle interval.", 422) from error
 
 
 async def resolve_nse_instrument_key(symbol: str) -> str:
@@ -54,19 +55,33 @@ async def resolve_nse_instrument_key(symbol: str) -> str:
         raise UpstoxCandleError("A valid NSE company symbol or index name is required.", 422)
 
     def matching(records: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
-        return [
-            record for record in records
-            if query in {
-                " ".join(str(record.get("name", "")).upper().split()),
-                " ".join(str(record.get("trading_symbol", "")).upper().split()),
-            }
-        ]
+        normalized_query = " ".join(query.upper().split())
+        candidates = [normalized_query]
+        if normalized_query.endswith(" INDEX"):
+            candidates.append(normalized_query[:-6].strip())
+        if " AND " in normalized_query:
+            candidates.append(normalized_query.replace(" AND ", " & "))
+        if normalized_query == "NIFTY FINANCIAL SERVICES":
+            candidates.append("NIFTY FIN SERVICE")
+        for candidate in candidates:
+            matches = [
+                record for record in records
+                if candidate in {
+                    " ".join(str(record.get("name", "")).upper().split()),
+                    " ".join(str(record.get("trading_symbol", "")).upper().split()),
+                }
+            ]
+            if matches:
+                return matches
+        return []
 
     index_master_error: InstrumentMasterError | None = None
     if normalized.startswith("NIFTY") or normalized.startswith("BANKNIFTY"):
         index_query = "NIFTY BANK" if normalized == "BANKNIFTY" else normalized
         try:
             index_matches = matching(await get_nse_index_instruments(), index_query)
+            if len(index_matches) > 1:
+                raise UpstoxCandleError("Index name resolves to multiple current NSE instruments.", 409)
             if index_matches:
                 key = index_matches[0].get("instrument_key")
                 if isinstance(key, str) and _KEY_PATTERN.fullmatch(key):
@@ -146,13 +161,13 @@ async def fetch_intraday_candles(
     today: date | None = None,
 ) -> dict[str, Any]:
     if exchange.strip().upper() != "NSE":
-        raise UpstoxCandleError("Upstox intraday candles are currently enabled for NSE only.", 422)
+        raise UpstoxCandleError("Upstox candles are currently enabled for NSE only.", 422)
     unit, resolution, maximum_days = interval_contract(interval)
     if from_date > to_date:
         raise UpstoxCandleError("The chart start date must not be after its end date.", 422)
     market_today = today or datetime.now(_MARKET_ZONE).date()
     if to_date > market_today:
-        raise UpstoxCandleError("Intraday chart end date cannot be in the future.", 422)
+        raise UpstoxCandleError("Chart end date cannot be in the future.", 422)
     if (to_date - from_date).days > maximum_days:
         raise UpstoxCandleError(
             f"{interval} history is limited to approximately {maximum_days} calendar days per request.",
@@ -187,7 +202,7 @@ async def fetch_intraday_candles(
 
     async with httpx.AsyncClient(timeout=timeout, transport=transport) as client:
         # Historical V3 serves completed dates. The separate intraday V3 endpoint
-        # supplies today's evolving candles; merge by exchange timestamp.
+        # supplies today's evolving candle (including the 1d daily candle); merge by exchange timestamp.
         historical_to = min(to_date, market_today - timedelta(days=1))
         if from_date <= historical_to:
             historical_url = (
@@ -210,7 +225,7 @@ async def fetch_intraday_candles(
         candles = candles[-_MAX_CANDLES:]
     return {
         "provider": "UPSTOX_V3",
-        "data_mode": "INTRADAY_HISTORICAL",
+        "data_mode": "DAILY_HISTORY_AND_CURRENT_SESSION" if interval == "1d" else "INTRADAY_HISTORICAL",
         "exchange": "NSE",
         "symbol": symbol.strip().upper(),
         "instrument_key": instrument_key,

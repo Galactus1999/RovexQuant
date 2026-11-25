@@ -406,7 +406,7 @@ object QuantApi {
     }
 
     /** Fetches server-authorized Upstox V3 intraday candles; provider credentials stay server-side. */
-    fun fetchIntradayOhlcv(
+    fun fetchUpstoxOhlcv(
         session: QuantSession,
         exchange: String,
         symbol: String,
@@ -415,10 +415,10 @@ object QuantApi {
         to: java.time.LocalDate
     ): List<OhlcvBar> {
         require(exchange.equals("NSE", ignoreCase = true)) {
-            "Upstox V3 intraday candles are currently supported for NSE only."
+            "Upstox V3 candles are currently supported for NSE only."
         }
-        require(interval in setOf("1m", "5m", "10m", "15m", "30m", "1h", "4h")) {
-            "Unsupported intraday chart timeframe."
+        require(interval in setOf("1d", "1m", "5m", "10m", "15m", "30m", "1h", "4h")) {
+            "Unsupported chart timeframe."
         }
         require(from <= to) { "Chart start date must not be after its end date." }
         val encodedSymbol = java.net.URLEncoder.encode(symbol.trim(), Charsets.UTF_8.name())
@@ -433,15 +433,15 @@ object QuantApi {
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) throw IllegalStateException(apiError(body, response.code))
             require(body.toByteArray(Charsets.UTF_8).size <= 8 * 1024 * 1024) {
-                "Intraday candle response exceeds the 8 MB mobile safety limit."
+                "Candle response exceeds the 8 MB mobile safety limit."
             }
             val rows = JSONObject(body).optJSONArray("bars")
-                ?: throw IllegalStateException("Intraday candle response is missing its bars array.")
-            require(rows.length() <= 20_000) { "Intraday candle response exceeds the 20,000-bar limit." }
+                ?: throw IllegalStateException("Candle response is missing its bars array.")
+            require(rows.length() <= 20_000) { "Candle response exceeds the 20,000-bar limit." }
             return buildList(rows.length()) {
                 for (index in 0 until rows.length()) {
                     val row = rows.optJSONObject(index)
-                        ?: throw IllegalStateException("Intraday candle ${index + 1} is malformed.")
+                        ?: throw IllegalStateException("Candle ${index + 1} is malformed.")
                     val timestamp = try {
                         java.time.OffsetDateTime.parse(row.getString("timestamp"))
                     } catch (failure: Exception) {

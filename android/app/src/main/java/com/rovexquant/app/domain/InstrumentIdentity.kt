@@ -33,7 +33,7 @@ enum class OhlcvInterval(
 
 enum class OhlcvProvider(val sourceLabel: String) {
     TEJHQ_EOD("TejHQ · NSE/BSE EOD"),
-    NSE_INDICES_PORTAL("NSE Indices historical portal"),
+    UPSTOX_V3_HISTORICAL("Upstox V3 historical candles"),
     UPSTOX_V3_INTRADAY("Upstox V3 intraday candles")
 }
 
@@ -135,7 +135,7 @@ object InstrumentCatalog {
                 exchange = market,
                 canonicalSymbol = canonical,
                 instrumentType = InstrumentType.BROAD_MARKET_INDEX,
-                provider = if (interval.isIntraday) OhlcvProvider.UPSTOX_V3_INTRADAY else OhlcvProvider.NSE_INDICES_PORTAL,
+                provider = if (interval.isIntraday) OhlcvProvider.UPSTOX_V3_INTRADAY else OhlcvProvider.UPSTOX_V3_HISTORICAL,
                 providerSymbol = canonical,
                 interval = interval
             )
@@ -167,7 +167,9 @@ object InstrumentCatalog {
     }
 
     fun isRegisteredIndex(instrument: InstrumentIdentity): Boolean {
-        if (instrument.exchange != "NSE" || instrument.provider != OhlcvProvider.NSE_INDICES_PORTAL) return false
+        if (instrument.exchange != "NSE" || instrument.provider !in setOf(
+                OhlcvProvider.UPSTOX_V3_HISTORICAL, OhlcvProvider.UPSTOX_V3_INTRADAY
+            )) return false
         val expectedProviderSymbol = when {
             instrument.canonicalSymbol in broadMarketIndices -> instrument.canonicalSymbol
             instrument.canonicalSymbol in sectorIndices ->

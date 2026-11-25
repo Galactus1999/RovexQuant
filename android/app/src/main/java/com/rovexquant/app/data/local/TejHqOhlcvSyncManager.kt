@@ -34,7 +34,7 @@ object TejHqOhlcvSyncManager {
                         volumeAvailable = instrument.instrumentType == com.rovexquant.app.domain.InstrumentType.EQUITY,
                         adjustmentStatus = when (instrument.provider) {
                             OhlcvProvider.TEJHQ_EOD -> "Raw end-of-day bhavcopy prices; corporate-action adjustment not applied"
-                            OhlcvProvider.NSE_INDICES_PORTAL -> "Price Return Index OHLC; dividends are not included"
+                            OhlcvProvider.UPSTOX_V3_HISTORICAL -> "NSE index daily OHLC; total-return treatment is not assumed"
                             OhlcvProvider.UPSTOX_V3_INTRADAY -> "Raw intraday OHLCV; corporate-action adjustment not applied"
                         }
                     )

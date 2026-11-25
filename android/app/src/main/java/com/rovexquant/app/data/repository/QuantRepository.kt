@@ -27,7 +27,6 @@ import com.rovexquant.app.data.model.TechnicalIndicatorPeriods
 import com.rovexquant.app.data.remote.MarketStreamController
 import com.rovexquant.app.data.remote.QuantApi
 import com.rovexquant.app.data.remote.TejHqOhlcvClient
-import com.rovexquant.app.data.remote.NiftyIndicesOhlcvClient
 import com.rovexquant.app.domain.OhlcvBar
 import com.rovexquant.app.domain.InstrumentIdentity
 import com.rovexquant.app.domain.MarketOhlcvSeries
@@ -152,13 +151,15 @@ class QuantRepository(context: Context) : QuantDataRepository {
         val bars = when (instrument.provider) {
             OhlcvProvider.TEJHQ_EOD ->
                 TejHqOhlcvClient.fetch(instrument.exchange, instrument.providerSymbol, from, to)
-            OhlcvProvider.NSE_INDICES_PORTAL ->
-                NiftyIndicesOhlcvClient.fetch(instrument, from, to)
-            OhlcvProvider.UPSTOX_V3_INTRADAY -> {
-                require(instrument.interval.isIntraday) { "Upstox V3 provider requires an intraday timeframe." }
+            OhlcvProvider.UPSTOX_V3_HISTORICAL, OhlcvProvider.UPSTOX_V3_INTRADAY -> {
+                require(
+                    if (instrument.provider == OhlcvProvider.UPSTOX_V3_HISTORICAL) {
+                        instrument.interval == com.rovexquant.app.domain.OhlcvInterval.DAILY
+                    } else instrument.interval.isIntraday
+                ) { "Upstox V3 provider and chart timeframe do not match." }
                 val session = QuantSessionStore.load(appContext)
                     ?: throw IllegalStateException("Sign in again before requesting intraday candles.")
-                QuantApi.fetchIntradayOhlcv(
+                QuantApi.fetchUpstoxOhlcv(
                     session, instrument.exchange, instrument.providerSymbol, instrument.interval.key, from, to
                 )
             }
@@ -170,12 +171,12 @@ class QuantRepository(context: Context) : QuantDataRepository {
             volumeAvailable = instrument.instrumentType == com.rovexquant.app.domain.InstrumentType.EQUITY,
             adjustmentStatus = when (instrument.provider) {
                 OhlcvProvider.TEJHQ_EOD -> "Raw end-of-day bhavcopy prices; corporate-action adjustment not applied"
-                OhlcvProvider.NSE_INDICES_PORTAL -> "Price Return Index OHLC; dividends are not included"
+                OhlcvProvider.UPSTOX_V3_HISTORICAL -> "NSE index daily OHLC; total-return treatment is not assumed"
                 OhlcvProvider.UPSTOX_V3_INTRADAY -> "Raw intraday OHLCV; corporate-action adjustment not applied"
             },
             providerNote = when (instrument.provider) {
-                OhlcvProvider.NSE_INDICES_PORTAL ->
-                    "Official NSE Indices website-backed historical form; its underlying request contract is undocumented and may change."
+                OhlcvProvider.UPSTOX_V3_HISTORICAL ->
+                    "Upstox V3 historical daily candles; server-side read-only Analytics Token; index volume is not available."
                 OhlcvProvider.UPSTOX_V3_INTRADAY ->
                     "Upstox V3 historical/intraday candles; server-side read-only Analytics Token; interval history is provider-limited."
                 OhlcvProvider.TEJHQ_EOD -> null

@@ -92,6 +92,60 @@ def test_upstox_v3_rejects_unsupported_intervals_and_excessive_history():
         ))
 
 
+
+def test_upstox_v3_fetches_daily_index_history_and_current_session(monkeypatch):
+    today = date(2026, 11, 24)
+    yesterday = date(2026, 11, 23)
+    monkeypatch.setattr(upstox_candles, "get_upstox_analytics_token", lambda: "fake-token")
+    monkeypatch.setattr(upstox_candles, "get_nse_index_instruments", lambda: asyncio.sleep(0, result=[{
+        "instrument_key": "NSE_INDEX|Nifty Bank",
+        "name": "Nifty Bank",
+        "trading_symbol": "Nifty Bank",
+    }]))
+    requested = []
+
+    async def handler(request):
+        requested.append(request.url.path)
+        if "/intraday/" in request.url.path:
+            return httpx.Response(200, json={"data": {"candles": [[
+                f"{today.isoformat()}T00:00:00+05:30", 50050, 50200, 49950, 50100, 0
+            ]]}})
+        return httpx.Response(200, json={"data": {"candles": [[
+            f"{yesterday.isoformat()}T00:00:00+05:30", 49800, 50100, 49700, 50050, 0
+        ]]}})
+
+    result = asyncio.run(upstox_candles.fetch_intraday_candles(
+        "NSE", "NIFTY BANK", "1d", yesterday, today,
+        transport=httpx.MockTransport(handler), today=today,
+    ))
+
+    assert result["provider"] == "UPSTOX_V3"
+    assert result["data_mode"] == "DAILY_HISTORY_AND_CURRENT_SESSION"
+    assert result["volume_available"] is False
+    assert result["count"] == 2
+    assert [item["timestamp"].date() for item in result["bars"]] == [yesterday, today]
+    assert any("/historical-candle/NSE_INDEX%7CNifty%20Bank/days/1/" in path for path in requested)
+    assert any("/historical-candle/intraday/NSE_INDEX%7CNifty%20Bank/days/1" in path for path in requested)
+
+
+def test_upstox_v3_resolves_nifty_financial_services_official_master_alias(monkeypatch):
+    monkeypatch.setattr(upstox_candles, "get_nse_index_instruments", lambda: asyncio.sleep(0, result=[{
+        "instrument_key": "NSE_INDEX|Nifty Fin Service",
+        "name": "Nifty Fin Service",
+        "trading_symbol": "Nifty Fin Service",
+    }]))
+    assert asyncio.run(upstox_candles.resolve_nse_instrument_key(
+        "NIFTY FINANCIAL SERVICES"
+    )) == "NSE_INDEX|Nifty Fin Service"
+
+
+def test_upstox_v3_rejects_daily_history_beyond_provider_decade_limit():
+    with pytest.raises(upstox_candles.UpstoxCandleError, match="limited"):
+        asyncio.run(upstox_candles.fetch_intraday_candles(
+            "NSE", "NIFTY BANK", "1d", date(2016, 11, 1), date(2026, 11, 24),
+            today=date(2026, 11, 24),
+        ))
+
 def test_upstox_v3_rejects_malformed_ohlc_and_naive_timestamps():
     with pytest.raises(upstox_candles.UpstoxCandleError, match="invalid OHLCV"):
         upstox_candles._parse_candles({"data": {"candles": [[
