@@ -542,9 +542,9 @@ fun AiWorkspaceScreen(
                         ) {
                             Eyebrow("Archived run detail · ${detail.status}")
                             Text("Request", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                            Text(detail.requestPayloadJson.take(6000), color = MaterialTheme.colorScheme.onBackground, fontSize = 9.sp, lineHeight = 13.sp)
+                            Text(detail.requestPayloadJson.take(6000), modifier = Modifier.testTag("ai.research.run.detail.request"), color = MaterialTheme.colorScheme.onBackground, fontSize = 9.sp, lineHeight = 13.sp)
                             Text("Response", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                            Text(detail.responsePayloadJson.take(12000), color = MaterialTheme.colorScheme.onBackground, fontSize = 9.sp, lineHeight = 13.sp)
+                            Text(detail.responsePayloadJson.take(12000), modifier = Modifier.testTag("ai.research.run.detail.response"), color = MaterialTheme.colorScheme.onBackground, fontSize = 9.sp, lineHeight = 13.sp)
                             Text("Source references", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                             Text(detail.sourceRefsJson.take(6000), color = Cyan, fontSize = 9.sp, lineHeight = 13.sp)
                             Text("Verification", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
