@@ -310,3 +310,36 @@ def test_postgres_ingestion_worker_recovers_expired_lease_and_reconciles_commit(
         connection.execute("DELETE FROM market_ingestion_runs WHERE run_id=%s", (run_id,))
 
     assert job == ("SUCCEEDED", 2, None)
+
+
+def test_postgres_ai_research_archive_migration_creates_bounded_history_table(migrated_postgres):
+    with psycopg.connect(migrated_postgres, sslmode="disable") as connection:
+        columns = {
+            row[0] for row in connection.execute(
+                """
+                SELECT column_name FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                  AND table_name = 'ai_research_runs'
+                """
+            ).fetchall()
+        }
+        indexes = {
+            row[0] for row in connection.execute(
+                """
+                SELECT indexname FROM pg_indexes
+                WHERE schemaname = current_schema()
+                  AND tablename = 'ai_research_runs'
+                """
+            ).fetchall()
+        }
+    assert {
+        "run_id", "task_type", "provider_id", "model", "status",
+        "request_hash", "request_payload", "response_payload", "token_usage",
+        "cost_usd", "cost_status", "fallback_used", "source_refs",
+        "verification", "created_at", "completed_at",
+    }.issubset(columns)
+    assert {
+        "ix_ai_research_runs_created",
+        "ix_ai_research_runs_task_created",
+        "ix_ai_research_runs_provider_created",
+    }.issubset(indexes)
