@@ -52,6 +52,9 @@ fun AiWorkspaceScreen(
     var historyLoading by remember { mutableStateOf(true) }
     var historyError by remember { mutableStateOf<String?>(null) }
     var aiBudgetStatus by remember { mutableStateOf<com.rovexquant.app.data.model.AiBudgetStatus?>(null) }
+    var selectedResearchRun by remember { mutableStateOf<com.rovexquant.app.data.model.AiResearchRunDetail?>(null) }
+    var selectedRunLoading by remember { mutableStateOf(false) }
+    var selectedRunError by remember { mutableStateOf<String?>(null) }
     var selectedTaskType by rememberSaveable { mutableStateOf("research") }
     var automaticTaskRouting by rememberSaveable { mutableStateOf(false) }
     var credentialInput by remember { mutableStateOf("") }
@@ -507,6 +510,46 @@ fun AiWorkspaceScreen(
                             val cost = run.costUsd?.let { "Estimated USD " + String.format(Locale.US, "%.6f", it) }
                                 ?: "Cost unavailable · ${run.costStatus}"
                             Text(cost, color = Gold, fontSize = 9.sp)
+                            TextButton(
+                                enabled = !selectedRunLoading,
+                                onClick = {
+                                    selectedRunLoading = true
+                                    selectedRunError = null
+                                    selectedResearchRun = null
+                                    scope.launch {
+                                        try {
+                                            selectedResearchRun = repository.fetchAiResearchRun(session, run.runId)
+                                        } catch (cancelled: CancellationException) {
+                                            throw cancelled
+                                        } catch (failure: Exception) {
+                                            selectedRunError = failure.message ?: "Archived research detail is unavailable."
+                                        } finally {
+                                            selectedRunLoading = false
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.testTag("ai.research.run.open.${run.runId}")
+                            ) { Text(if (selectedRunLoading) "Loading details…" else "Open run details") }
+                        }
+                    }
+                    selectedRunError?.let { Text("Run detail unavailable: $it", color = Gold, fontSize = 9.sp) }
+                    if (selectedRunLoading) CircularProgressIndicator()
+                    selectedResearchRun?.let { detail ->
+                        Column(
+                            Modifier.fillMaxWidth().padding(top = 8.dp)
+                                .testTag("ai.research.run.detail"),
+                            verticalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Eyebrow("Archived run detail · ${detail.status}")
+                            Text("Request", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            Text(detail.requestPayloadJson.take(6000), color = MaterialTheme.colorScheme.onBackground, fontSize = 9.sp, lineHeight = 13.sp)
+                            Text("Response", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            Text(detail.responsePayloadJson.take(12000), color = MaterialTheme.colorScheme.onBackground, fontSize = 9.sp, lineHeight = 13.sp)
+                            Text("Source references", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            Text(detail.sourceRefsJson.take(6000), color = Cyan, fontSize = 9.sp, lineHeight = 13.sp)
+                            Text("Verification", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            Text(detail.verificationJson.take(6000), color = Gold, fontSize = 9.sp, lineHeight = 13.sp)
+                            Text("Request hash · ${detail.requestHash}", color = Muted, fontSize = 8.sp)
                         }
                     }
                 }
