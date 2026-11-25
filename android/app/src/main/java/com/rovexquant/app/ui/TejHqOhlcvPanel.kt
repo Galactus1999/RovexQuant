@@ -91,8 +91,8 @@ fun TejHqOhlcvPanel(
         }
     }
 
-    LaunchedEffect(context, repository) {
-        if (repository != null && context.fileList().contains(OhlcvCsvResearch.STORAGE_FILE_NAME)) {
+    LaunchedEffect(context, repository, autoSync) {
+        if (repository != null && autoSync) {
             try {
                 val updated = TejHqOhlcvSyncManager.refreshIfDue(context, repository)
                 if (updated != null) {

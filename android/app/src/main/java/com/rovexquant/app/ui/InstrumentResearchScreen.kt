@@ -36,6 +36,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
+import kotlin.math.sqrt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -585,6 +586,32 @@ private fun InstrumentOverviewPanel(
         ?: if (latest != null && previous != null && previous.close > 0.0) {
             (latest.close / previous.close - 1.0) * 100.0
         } else null
+    // Index history does not include quote-provider 52-week fields. Derive these
+    // statistics from validated daily OHLC bars; never substitute intraday bars.
+    val yearStart = latest?.timestamp?.minusDays(365)
+    val yearBars = if (interval.isIntraday || yearStart == null) emptyList() else
+        bars.filter { !it.timestamp.isBefore(yearStart) }
+    val yearHigh = quote?.yearHigh ?: yearBars.maxOfOrNull { it.high }
+    val yearLow = quote?.yearLow ?: yearBars.minOfOrNull { it.low }
+    val rangePosition = if (latest != null && yearHigh != null && yearLow != null && yearHigh > yearLow) {
+        ((latest.close - yearLow) / (yearHigh - yearLow) * 100.0).coerceIn(0.0, 100.0)
+    } else null
+    val dailyReturns = yearBars.zipWithNext { before, after -> after.close / before.close - 1.0 }
+    val annualisedVolatility = dailyReturns.takeIf { it.size >= 20 }?.let { returns ->
+        val mean = returns.average()
+        val sampleVariance = returns.sumOf { (it - mean) * (it - mean) } / (returns.size - 1)
+        sqrt(sampleVariance * 252.0) * 100.0
+    }
+    var rollingPeak = 0.0
+    var maximumDrawdown = 0.0
+    yearBars.forEach { bar ->
+        rollingPeak = maxOf(rollingPeak, bar.close)
+        if (rollingPeak > 0.0) maximumDrawdown = minOf(maximumDrawdown, (bar.close / rollingPeak - 1.0) * 100.0)
+    }
+    val oneYearMaximumDrawdown = maximumDrawdown.takeIf { yearBars.size >= 2 }
+    val averageDailyRange = yearBars.zipWithNext { before, current ->
+        if (before.close > 0.0) (current.high - current.low) / before.close * 100.0 else Double.NaN
+    }.filter { it.isFinite() }.takeIf { it.size >= 20 }?.average()
     val periodHigh = visibleBars.maxOfOrNull { it.high }
     val periodLow = visibleBars.minOfOrNull { it.low }
     fun periodReturn(days: Long): Double? {
@@ -628,8 +655,20 @@ private fun InstrumentOverviewPanel(
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OverviewMetric("52-week high", price(quote?.yearHigh), Modifier.weight(1f))
-            OverviewMetric("52-week low", price(quote?.yearLow), Modifier.weight(1f))
+            OverviewMetric("52-week high", price(yearHigh), Modifier.weight(1f))
+            OverviewMetric("52-week low", price(yearLow), Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OverviewMetric(
+                "52-week range position",
+                rangePosition?.let { String.format(Locale.US, "%.1f%%", it) } ?: "—",
+                Modifier.weight(1f)
+            )
+            OverviewMetric("Annualised volatility", percent(annualisedVolatility), Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OverviewMetric("1Y max drawdown", percent(oneYearMaximumDrawdown), Modifier.weight(1f))
+            OverviewMetric("Average daily range", percent(averageDailyRange), Modifier.weight(1f))
         }
         if (quote == null && !quoteLoading) {
             Text(

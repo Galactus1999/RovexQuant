@@ -4,9 +4,14 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.rovexquant.app.data.local.InstrumentMasterStore
+import com.rovexquant.app.data.local.TejHqOhlcvStore
+import com.rovexquant.app.domain.InstrumentCatalog
+import com.rovexquant.app.domain.OhlcvCsvResearch
+import java.io.File
 import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.MarketIndexInstrument
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -14,6 +19,31 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class InstrumentMasterStoreTest {
+    @Test fun clearingManualCsvImportPreservesTypedInstrumentHistory() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val instrument = InstrumentCatalog.resolve("CSVTEST")
+        val bars = OhlcvCsvResearch.parse(
+            "timestamp,open,high,low,close,volume\\n" +
+                "2025-01-01T15:30:00+05:30,100,102,99,101,1000"
+        )
+        val importedFile = File(context.filesDir, OhlcvCsvResearch.STORAGE_FILE_NAME)
+        val typedFile = File(context.filesDir, TejHqOhlcvStore.cacheFileName(instrument))
+        TejHqOhlcvStore.clearResearchDataset(context)
+        typedFile.delete()
+        try {
+            TejHqOhlcvStore.save(context, bars)
+            TejHqOhlcvStore.save(context, instrument, bars)
+
+            TejHqOhlcvStore.clearResearchDataset(context)
+
+            assertFalse(importedFile.exists())
+            assertEquals(bars, TejHqOhlcvStore.load(context, instrument))
+        } finally {
+            importedFile.delete()
+            typedFile.delete()
+        }
+    }
+
     @Test fun persistsAndRestoresCompanyNamesAndIndexAliasesOnDevice() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val equities = listOf(

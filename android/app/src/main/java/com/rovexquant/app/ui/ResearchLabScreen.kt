@@ -31,11 +31,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
-import java.io.File
 import java.io.InputStream
-import java.nio.file.AtomicMoveNotSupportedException
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import java.util.Locale
 
 private const val MAX_CSV_BYTES = 20 * 1024 * 1024
@@ -112,15 +108,8 @@ fun ResearchLabScreen(
                     val csv = context.contentResolver.openInputStream(uri)?.use { it.readUtf8Limited() }
                         ?: throw IllegalArgumentException("Could not open the selected file")
                     val bars = OhlcvCsvResearch.parse(csv)
-                    TejHqOhlcvStore.clear(context)
-                    val temporary = File(context.filesDir, OhlcvCsvResearch.STORAGE_FILE_NAME + ".tmp")
-                    val destination = File(context.filesDir, OhlcvCsvResearch.STORAGE_FILE_NAME)
-                    temporary.writeText(csv, Charsets.UTF_8)
-                    try {
-                        Files.move(temporary.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
-                    } catch (_: AtomicMoveNotSupportedException) {
-                        Files.move(temporary.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
-                    }
+                    // Keep manual research imports isolated from every typed instrument cache.
+                    TejHqOhlcvStore.save(context, bars)
                     OhlcvCsvResearch.summarize(bars)
                 }
                 summary = loaded
@@ -265,7 +254,7 @@ fun ResearchLabScreen(
                 }
                 if (summary != null) {
                     TextButton(onClick = {
-                        TejHqOhlcvStore.clear(context)
+                        TejHqOhlcvStore.clearResearchDataset(context)
                         summary = null
                         datasetName = "No dataset loaded"
                         error = null
