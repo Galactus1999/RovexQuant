@@ -258,9 +258,15 @@ class QuantDashboardRegressionTest {
         }
 
         openInstrumentChart("NIFTY 50")
+        // Assert the actual current limitation copy. Scroll the owning vertical
+        // container to the text; performScrollTo on a nested leaf was not reliable
+        // when the overview panel was only partially composed in the viewport.
+        composeRule.onNodeWithTag("instrument.research.screen")
+            .performScrollToNode(hasText("Not available from the validated OHLC provider.", substring = true))
         composeRule.onNodeWithText(
-            "Not available from validated OHLC provider; requires separately verified point-in-time index constituent/breadth feed."
-        ).performScrollTo().assertIsDisplayed()
+            "Not available from the validated OHLC provider.",
+            substring = true
+        ).assertIsDisplayed()
         composeRule.onNodeWithText("← Back to Pulse").performClick()
         openInstrumentChart("NIFTY BANK")
     }
@@ -453,8 +459,18 @@ class QuantDashboardRegressionTest {
             composeRule.onAllNodesWithTag("ai.dalalos.arguments")
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithTag("ai.dalalos.arguments")
-            .performScrollTo().assertIsDisplayed().performTextClearance()
+        // The argument editor is conditionally added inside the DalalOS
+        // LazyColumn item after tool selection. Scroll the owning LazyColumn to
+        // that descendant, then wait for viewport visibility (node existence
+        // alone does not prove it can receive input).
+        composeRule.onNodeWithTag("ai.workspace.list")
+            .performScrollToNode(hasTestTag("ai.dalalos.arguments"))
+        composeRule.waitUntil(5_000) {
+            runCatching {
+                composeRule.onNodeWithTag("ai.dalalos.arguments").assertIsDisplayed()
+            }.isSuccess
+        }
+        composeRule.onNodeWithTag("ai.dalalos.arguments").performTextClearance()
         composeRule.onNodeWithTag("ai.dalalos.arguments").performTextInput("{\"query\":\"RELIANCE\"}")
         composeRule.onNodeWithTag("ai.dalalos.run").performClick()
         composeRule.waitUntil(10_000) {
