@@ -26,6 +26,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -373,6 +374,7 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("ai.dalalos.terms").assertIsOn()
         composeRule.onNodeWithTag("ai.dalalos.save").assertIsEnabled()
         composeRule.onNodeWithTag("ai.dalalos.save").performClick()
+        assertTrue(composeRule.activity.fakeRepository.dalalOsConfigured)
         // Save is below the key field; return to the status row before asserting it.
         composeRule.onNodeWithTag("ai.workspace.list")
             .performScrollToNode(hasTestTag("ai.dalalos.panel"))
