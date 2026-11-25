@@ -50,6 +50,12 @@ class AIChatRequest(BaseModel):
     max_tokens: int = Field(default=1200, ge=1, le=4096)
     temperature: float = Field(default=0.2, ge=0, le=2)
 
+    @model_validator(mode="after")
+    def validate_provider_model_pair(self):
+        if (self.provider_id is None) != (self.model is None):
+            raise ValueError("provider_id and model must be supplied together, or both omitted for server routing")
+        return self
+
 
 class AIProviderCredentialInput(BaseModel):
     api_key: SecretStr
@@ -71,6 +77,10 @@ class AIStrategyBriefRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_date_range(self):
+        if (self.provider_id is None) != (self.model is None):
+            raise ValueError("provider_id and model must be supplied together, or both omitted for server routing")
+        if self.automatic_task_routing and self.provider_id is not None:
+            raise ValueError("automatic_task_routing cannot be combined with a manual provider/model")
         if self.from_date > self.to_date:
             raise ValueError("from_date must be on or before to_date")
         if (self.to_date - self.from_date).days > 6200:
