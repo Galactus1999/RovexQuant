@@ -127,7 +127,7 @@ object InstrumentCatalog {
         val canonical = symbol.trim().uppercase(Locale.ROOT).replace(Regex("\\s+"), " ")
         require(canonical.isNotEmpty()) { "Enter an instrument symbol." }
         if (interval.isIntraday) {
-            require(market == "NSE") { "Upstox V3 intraday candles are currently supported for NSE only." }
+            require(market == "NSE") { "Upstox V3 candles are currently supported for NSE only." }
         }
 
         if (market == "NSE" && canonical in broadMarketIndices) {
@@ -145,7 +145,7 @@ object InstrumentCatalog {
                 exchange = market,
                 canonicalSymbol = canonical,
                 instrumentType = InstrumentType.SECTOR_INDEX,
-                provider = if (interval.isIntraday) OhlcvProvider.UPSTOX_V3_INTRADAY else OhlcvProvider.NSE_INDICES_PORTAL,
+                provider = if (interval.isIntraday) OhlcvProvider.UPSTOX_V3_INTRADAY else OhlcvProvider.UPSTOX_V3_HISTORICAL,
                 providerSymbol = indexProviderAliases[canonical] ?: canonical,
                 interval = interval
             )

@@ -58,8 +58,8 @@ object ChartSeriesMapper {
                 "Intraday volume availability must match the verified instrument type."
             }
         } else if (instrument.instrumentType != InstrumentType.EQUITY) {
-            require(instrument.provider == OhlcvProvider.NSE_INDICES_PORTAL && !series.volumeAvailable) {
-                "Daily index charts require the NSE index provider and must not display traded volume."
+            require(instrument.provider == OhlcvProvider.UPSTOX_V3_HISTORICAL && !series.volumeAvailable) {
+                "Daily index charts require official Upstox V3 history and must not display traded volume."
             }
         } else {
             require(instrument.provider == OhlcvProvider.TEJHQ_EOD && series.volumeAvailable) {

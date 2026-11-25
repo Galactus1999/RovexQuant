@@ -190,7 +190,7 @@ fun InstrumentResearchScreen(
                         volumeAvailable = selected.instrumentType == com.rovexquant.app.domain.InstrumentType.EQUITY,
                         adjustmentStatus = when (selected.provider) {
                             com.rovexquant.app.domain.OhlcvProvider.TEJHQ_EOD -> "Raw end-of-day bhavcopy prices; corporate-action adjustment not applied"
-                            com.rovexquant.app.domain.OhlcvProvider.NSE_INDICES_PORTAL -> "Price Return Index OHLC; dividends are not included"
+                            com.rovexquant.app.domain.OhlcvProvider.UPSTOX_V3_HISTORICAL -> "NSE index daily OHLC; total-return treatment is not assumed"
                             com.rovexquant.app.domain.OhlcvProvider.UPSTOX_V3_INTRADAY -> "Raw intraday OHLCV; corporate-action adjustment not applied"
                         }
                     )
@@ -690,13 +690,22 @@ private fun InstrumentOverviewPanel(
             OverviewMetric("Selected-range low", price(periodLow), Modifier.weight(1f))
         }
         Text("PRICE PERFORMANCE", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        val sinceStartReturn = bars.firstOrNull()?.let { first ->
+            bars.lastOrNull()?.let { last ->
+                if (first.close > 0.0) (last.close / first.close - 1.0) * 100.0 else null
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OverviewMetric("1 week", percent(periodReturn(7)), Modifier.weight(1f))
             OverviewMetric("1 month", percent(periodReturn(30)), Modifier.weight(1f))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OverviewMetric("3 months", percent(periodReturn(90)), Modifier.weight(1f))
             OverviewMetric("6 months", percent(periodReturn(180)), Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OverviewMetric("1 year", percent(periodReturn(365)), Modifier.weight(1f))
+            OverviewMetric("Since first bar", percent(sinceStartReturn), Modifier.weight(1f))
         }
         if (isIndex) {
             Text("INDEX COMPOSITION & BREADTH", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
