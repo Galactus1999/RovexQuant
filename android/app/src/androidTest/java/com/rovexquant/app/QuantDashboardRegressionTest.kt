@@ -274,6 +274,10 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithText("Open AI data recovery").performClick()
         composeRule.onNodeWithText("Quant Intelligence.").assertIsDisplayed()
 
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("ai.research.run.fixture-research").fetchSemanticsNodes().isNotEmpty() &&
+                composeRule.onAllNodesWithTag("ai.research.budget.daily").fetchSemanticsNodes().isNotEmpty()
+        }
         composeRule.onNodeWithTag("ai.workspace.list")
             .performScrollToNode(hasTestTag("ai.research.run.fixture-research"))
         composeRule.onNodeWithTag("ai.research.run.fixture-research").assertIsDisplayed()
