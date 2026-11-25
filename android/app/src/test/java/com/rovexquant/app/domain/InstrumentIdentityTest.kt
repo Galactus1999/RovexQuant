@@ -15,13 +15,14 @@ class InstrumentIdentityTest {
     @Test fun niftyBankRoutesToSectorIndexProvider() {
         val identity = InstrumentCatalog.resolve("NIFTY BANK")
         assertEquals(InstrumentType.SECTOR_INDEX, identity.instrumentType)
-        assertEquals(OhlcvProvider.NSE_INDICES_PORTAL, identity.provider)
+        assertEquals(OhlcvProvider.UPSTOX_V3_HISTORICAL, identity.provider)
     }
 
-    @Test fun sectorIndexRoutesToNseIndicesProvider() {
+    @Test fun sectorIndexRoutesToUpstoxHistoricalProvider() {
         val identity = InstrumentCatalog.resolve("NIFTY IT")
         assertEquals(InstrumentType.SECTOR_INDEX, identity.instrumentType)
-        assertEquals(OhlcvProvider.NSE_INDICES_PORTAL, identity.provider)
+        assertEquals(OhlcvProvider.UPSTOX_V3_HISTORICAL, identity.provider)
+        assertEquals(true, InstrumentCatalog.isRegisteredIndex(identity))
     }
 
     @Test fun dashboardOilAndGasAliasMapsToOfficialIndexName() {
@@ -78,6 +79,7 @@ class InstrumentIdentityTest {
         assertEquals("minutes", minute.interval.apiUnit)
         assertEquals(1, minute.interval.apiInterval)
         assertEquals(OhlcvProvider.UPSTOX_V3_INTRADAY, fourHourIndex.provider)
+        assertEquals(true, InstrumentCatalog.isRegisteredIndex(fourHourIndex))
         assertEquals("hours", fourHourIndex.interval.apiUnit)
         assertEquals(4, fourHourIndex.interval.apiInterval)
         assertEquals(false, minute.cacheIdentity == daily.cacheIdentity)
