@@ -13,9 +13,11 @@ from pydantic import BaseModel, Field, SecretStr, model_validator
 from rovexquant.ai.gateway import (
     GatewayError, authorize_gateway, complete_chat, configured_providers, configured_task_routes,
 )
+from rovexquant.ai.claim_verifier import verify_research_claims
 from rovexquant.market_data.eod_store import EodStoreError
 from rovexquant.ai.research_archive import (
     get_ai_research_run, get_ai_token_budget_status, list_ai_research_runs,
+    persist_ai_research_run,
 )
 from rovexquant.ai.providers import SUPPORTED
 from rovexquant.market_data import tejhq_service
