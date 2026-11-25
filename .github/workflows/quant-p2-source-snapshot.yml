@@ -1,0 +1,33 @@
+name: Quant P2 Source Snapshot
+
+on:
+  push:
+    branches: [feat/p2-indicator-integration]
+
+permissions:
+  contents: read
+
+jobs:
+  source-snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - name: Package tracked source
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="RovexQuant-p2-${GITHUB_SHA}.zip"
+          git archive --format=zip --prefix="RovexQuant-${GITHUB_SHA}/" "${GITHUB_SHA}" > "${archive}"
+          sha256sum "${archive}" | tee "${archive}.sha256"
+          test -s "${archive}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RovexQuant-p2-source-${{ github.sha }}
+          path: |
+            RovexQuant-p2-${{ github.sha }}.zip
+            RovexQuant-p2-${{ github.sha }}.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
