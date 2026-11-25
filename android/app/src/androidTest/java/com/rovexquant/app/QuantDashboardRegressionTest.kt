@@ -249,12 +249,12 @@ class QuantDashboardRegressionTest {
             composeRule.onNodeWithTag("instrument.research.screen")
                 .performScrollToNode(hasTestTag("instrument.chart.indicator.controls"))
             composeRule.onNodeWithTag("instrument.chart.indicator.controls").assertIsDisplayed()
-            composeRule.onNodeWithTag("instrument.overview.panel").performScrollTo()
-            composeRule.onNodeWithText("Last price").assertIsDisplayed()
-            composeRule.onNodeWithText("52-week high").assertIsDisplayed()
-            composeRule.onNodeWithText("Annualised volatility").assertIsDisplayed()
-            composeRule.onNodeWithText("PRICE PERFORMANCE").assertIsDisplayed()
-            composeRule.onNodeWithText("INDEX COMPOSITION & BREADTH").assertIsDisplayed()
+            composeRule.onNodeWithText("Last price").performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithText("52-week high").performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithText("Annualised volatility").performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithText("PRICE PERFORMANCE").performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithText("INDEX COMPOSITION & BREADTH")
+                .performScrollTo().assertIsDisplayed()
         }
 
         openInstrumentChart("NIFTY 50")
@@ -340,6 +340,10 @@ class QuantDashboardRegressionTest {
             .assertTextContains("Deterministic archived research detail.", substring = true)
         composeRule.onNodeWithTag("ai.research.run.detail.request")
             .assertTextContains("Fixture research prompt", substring = true)
+        // The provider selector is earlier in the LazyColumn than research history.
+        // Scroll back to it before asserting viewport visibility.
+        composeRule.onNodeWithTag("ai.workspace.list")
+            .performScrollToNode(hasText("Groq", substring = true))
         composeRule.onNodeWithText("Groq", substring = true).assertIsDisplayed()
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.model"))
         composeRule.onNodeWithTag("ai.model").performTextInput("test-model")
@@ -430,6 +434,14 @@ class QuantDashboardRegressionTest {
         }
 
         composeRule.onNodeWithTag("ai.dalalos.enable.get_company_exposures").performClick()
+        composeRule.waitForIdle()
+        // The selectable tool row is rendered only after the checkbox state is
+        // committed. Verify that state transition before looking for its scroller.
+        composeRule.onNodeWithTag("ai.dalalos.enable.get_company_exposures").assertIsOn()
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag("ai.dalalos.tools.readonly")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
         composeRule.onNodeWithTag("ai.dalalos.tools.readonly")
             .performScrollToNode(hasTestTag("ai.dalalos.tool.get_company_exposures"))
         composeRule.onNodeWithTag("ai.dalalos.tool.get_company_exposures").performClick()
