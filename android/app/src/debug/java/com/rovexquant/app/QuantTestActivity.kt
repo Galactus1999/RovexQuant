@@ -9,6 +9,7 @@ import com.rovexquant.app.data.model.AiDailyBar
 import com.rovexquant.app.data.model.AiProvider
 import com.rovexquant.app.data.model.AiResearchRun
 import com.rovexquant.app.data.model.AiBudgetStatus
+import com.rovexquant.app.data.model.AiResearchRunDetail
 import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.EodMarketSnapshot
@@ -160,6 +161,25 @@ class FakeQuantRepository(
         monthlyUsedTokens = 200,
         monthlyLimitTokens = 100_000,
         monthlyRemainingTokens = 99_800
+    )
+
+    override suspend fun fetchAiResearchRun(session: QuantSession, runId: String) = AiResearchRunDetail(
+        runId = runId,
+        taskType = "research",
+        providerId = "groq",
+        model = "server-research-model",
+        status = "SUCCEEDED",
+        requestHash = "fixture-hash",
+        requestPayloadJson = """{"messages":[{"role":"user","content":"Fixture research prompt"}]}""",
+        responsePayloadJson = """{"content":"Deterministic archived research detail."}""",
+        tokenUsageJson = """{"prompt_tokens":120,"completion_tokens":80,"total_tokens":200}""",
+        costUsd = null,
+        costStatus = "UNKNOWN_MODEL_PRICING",
+        fallbackUsed = false,
+        sourceRefsJson = """[{"provider":"fixture","url":"https://fixture.example"}]""",
+        verificationJson = """{"status":"NOT_CONFIGURED"}""",
+        createdAt = "2026-11-24T10:00:00Z",
+        completedAt = "2026-11-24T10:00:01Z"
     )
 
     override suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) = Unit
