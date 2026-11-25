@@ -91,3 +91,9 @@ def test_refresh_preserves_partial_provider_warnings(monkeypatch):
     rbi = next(item for item in result["providers"] if item["provider"] == "RBIH_DBIE_MIRROR")
     assert rbi["status"] == "SUCCEEDED"
     assert rbi["warnings"] == ["whole_price_index_rn: Provider returned HTTP 404"]
+
+
+def test_macro_refresh_exit_code_fails_on_any_provider_failure_or_zero_success():
+    assert macro_ingestion.macro_refresh_exit_code({"succeeded": 2, "failed": 0}) == 0
+    assert macro_ingestion.macro_refresh_exit_code({"succeeded": 2, "failed": 1}) == 1
+    assert macro_ingestion.macro_refresh_exit_code({"succeeded": 0, "failed": 0}) == 1

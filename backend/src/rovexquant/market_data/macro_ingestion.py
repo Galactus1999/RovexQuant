@@ -74,3 +74,10 @@ async def refresh_macro_sources() -> dict[str, Any]:
         "failed": sum(item.get("status") == "FAILED" for item in providers),
         "skipped": sum(item.get("status") == "SKIPPED" for item in providers),
     }
+
+
+def macro_refresh_exit_code(result: dict[str, Any]) -> int:
+    """Fail scheduled refreshes when any enabled provider fails or nothing persists."""
+    if int(result.get("failed", 0)) > 0 or int(result.get("succeeded", 0)) == 0:
+        return 1
+    return 0

@@ -201,3 +201,16 @@ def test_rbi_dbie_mirror_reports_provider_error_when_all_series_fail(monkeypatch
         assert "HTTP 503" in str(error)
     else:
         raise AssertionError("all failed RBI mirror series must remain a provider failure")
+
+
+def test_rbi_dbie_mirror_is_disabled_by_default(monkeypatch):
+    monkeypatch.delenv("RBIH_DBIE_ENABLE", raising=False)
+
+    async def unexpected_request(*args, **kwargs):
+        raise AssertionError("disabled prototype mirror must not be contacted")
+
+    monkeypatch.setattr(macro_data, "_get_json", unexpected_request)
+    result = asyncio.run(macro_data.fetch_rbi_dbie_mirror())
+    assert result["configured"] is False
+    assert result["series"] == []
+    assert "experimental prototype" in result["reason"]
