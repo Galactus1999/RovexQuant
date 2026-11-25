@@ -529,3 +529,81 @@ def test_call_tool_blocks_allowlisted_name_with_negative_server_hint():
     with pytest.raises(NseMcpError, match="not marked read-only"):
         asyncio.run(run())
     assert not any(body["method"] == "tools/call" for body, _ in seen)
+
+
+def test_dalalos_catalog_uses_imported_capability_allowlist():
+    catalog = safe_tool_catalog([
+        {"name": "get_company_exposures", "inputSchema": {"type": "object"}},
+        {"name": "get_filing_extract", "inputSchema": {"type": "object"}},
+        {"name": "add_to_watchlist", "inputSchema": {"type": "object"}},
+        {"name": "unknown_tool", "inputSchema": {"type": "object"}},
+    ], "dalalos")
+    by_name = {item["name"]: item for item in catalog}
+    assert by_name["get_company_exposures"]["read_only"] is True
+    assert by_name["get_filing_extract"]["read_only"] is False
+    assert by_name["get_filing_extract"]["requires_confirmation"] is True
+    assert "add_to_watchlist" not in by_name
+    assert "unknown_tool" not in by_name
+
+
+def test_dalalos_client_sends_bearer_key_and_calls_allowlisted_read_only_tool():
+    seen = []
+    transport = httpx.MockTransport(_handler_for({
+        "tools": [{
+            "name": "get_company_exposures",
+            "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}}},
+        }],
+        "call": {"content": [{"type": "text", "text": "source-linked exposure facts"}]},
+    }, seen))
+
+    async def run():
+        async with NseMcpClient("dalalos", api_key="d" * 32, transport=transport) as client:
+            return await client.call_tool("get_company_exposures", {"query": "RELIANCE"})
+
+    result = asyncio.run(run())
+    assert result["tool"] == "get_company_exposures"
+    assert all(headers.get("authorization") == "Bearer " + ("d" * 32) for _, headers in seen)
+
+
+def test_dalalos_quota_processing_tool_requires_explicit_confirmation():
+    seen = []
+    transport = httpx.MockTransport(_handler_for({
+        "tools": [{
+            "name": "get_filing_extract",
+            "inputSchema": {"type": "object", "properties": {
+                "query": {"type": "string"}, "news_id": {"type": "string"}
+            }},
+        }],
+        "call": {"content": [{"type": "text", "text": "filing facts with page references"}]},
+    }, seen))
+
+    async def run():
+        async with NseMcpClient("dalalos", api_key="d" * 32, transport=transport) as client:
+            with pytest.raises(NseMcpError, match="explicit confirmation"):
+                await client.call_tool("get_filing_extract", {"query": "RELIANCE", "news_id": "n1"})
+            return await client.call_tool(
+                "get_filing_extract",
+                {"query": "RELIANCE", "news_id": "n1"},
+                confirm_non_read_only=True,
+            )
+
+    assert asyncio.run(run())["tool"] == "get_filing_extract"
+
+
+def test_dalalos_watchlist_mutation_is_blocked_even_with_confirmation():
+    seen = []
+    transport = httpx.MockTransport(_handler_for({
+        "tools": [{
+            "name": "add_to_watchlist",
+            "inputSchema": {"type": "object", "properties": {"symbol": {"type": "string"}}},
+        }],
+    }, seen))
+
+    async def run():
+        async with NseMcpClient("dalalos", api_key="d" * 32, transport=transport) as client:
+            await client.call_tool(
+                "add_to_watchlist", {"symbol": "RELIANCE"}, confirm_non_read_only=True
+            )
+
+    with pytest.raises(NseMcpError, match="watchlist write tools are disabled"):
+        asyncio.run(run())
