@@ -239,8 +239,7 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithText("More").performClick()
         composeRule.onNodeWithText("Portfolio").performClick()
         composeRule.onNodeWithText("Portfolio & risk.").assertIsDisplayed()
-        composeRule.onNodeWithTag("portfolio.screen")
-            .performScrollToNode(hasTestTag("portfolio.entry"))
+        composeRule.onNodeWithTag("portfolio.entry").performScrollTo()
         composeRule.onNodeWithTag("portfolio.entry").assertIsDisplayed()
     }
 
