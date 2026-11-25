@@ -240,7 +240,11 @@ fun DalalOsResearchPanel(
                 }
                 if (enabledReadOnly.isNotEmpty()) {
                     Text("READ-ONLY TOOLS", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                            .testTag("ai.dalalos.tools.readonly"),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
                         enabledReadOnly.forEach { tool ->
                             FilterChip(
                                 selected = selectedTool?.name == tool.name,
