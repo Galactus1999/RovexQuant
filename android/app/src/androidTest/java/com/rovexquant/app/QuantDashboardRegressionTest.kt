@@ -100,10 +100,14 @@ class QuantDashboardRegressionTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("instrument.research.screen").assertIsDisplayed()
         composeRule.onNodeWithText("NIFTY BANK").assertIsDisplayed()
-        composeRule.onNodeWithTag("instrument.overview.panel").performScrollTo().assertIsDisplayed()
+        val researchScreen = composeRule.onNodeWithTag("instrument.research.screen")
+        researchScreen.performScrollToNode(hasText("52-week high"))
         composeRule.onNodeWithText("52-week high").assertIsDisplayed()
+        researchScreen.performScrollToNode(hasText("52-week low"))
         composeRule.onNodeWithText("52-week low").assertIsDisplayed()
+        researchScreen.performScrollToNode(hasText("VALUATION & FUNDAMENTALS"))
         composeRule.onNodeWithText("VALUATION & FUNDAMENTALS").assertIsDisplayed()
+        researchScreen.performScrollToNode(hasText("RECENT NEWS & DEVELOPMENTS"))
         composeRule.onNodeWithText("RECENT NEWS & DEVELOPMENTS").assertIsDisplayed()
         composeRule.waitUntil(15_000) {
             composeRule.onAllNodesWithTag("instrument.chart.candles")
@@ -274,21 +278,25 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("scanner.list").performScrollToNode(hasText("Open AI data recovery"))
         composeRule.onNodeWithText("Open AI data recovery").performClick()
         composeRule.onNodeWithText("Quant Intelligence.").assertIsDisplayed()
+        val fixture = composeRule.activity.fakeRepository
+        composeRule.waitUntil(10_000) { fixture.aiProviderFetchCount > 0 }
         composeRule.onNodeWithText("Model settings").performClick()
-        composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithText("Groq", substring = true).fetchSemanticsNodes().isNotEmpty()
-        }
-        composeRule.onNodeWithText("Groq", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.workspace.list")
+            .performScrollToNode(hasTestTag("ai.provider.groq"))
+        composeRule.onNodeWithTag("ai.provider.groq").assertIsDisplayed()
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.model"))
         composeRule.onNodeWithTag("ai.model").performTextInput("test-model")
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.chat.input"))
         composeRule.onNodeWithTag("ai.chat.input").performTextInput("Explain the RSI indicator.")
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.chat.send"))
         composeRule.onNodeWithTag("ai.chat.send").assertIsDisplayed()
+        val chatCallsBefore = fixture.aiChatRequestCount
         composeRule.onNodeWithTag("ai.chat.send").performClick()
-        composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithText("Deterministic AI fixture response.").fetchSemanticsNodes().isNotEmpty()
-        }
+        composeRule.waitUntil(10_000) { fixture.aiChatRequestCount > chatCallsBefore }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("ai.workspace.list")
+            .performScrollToNode(hasText("Deterministic AI fixture response."))
+        composeRule.onNodeWithText("Deterministic AI fixture response.").assertIsDisplayed()
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.recovery.symbol.find"))
         composeRule.onNodeWithTag("ai.recovery.symbol.find").performClick()
         composeRule.onNodeWithTag("instrument.global.search.input").performTextInput("Reliance Industries")
@@ -300,7 +308,10 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("ai.recovery.symbol")
             .assertTextEquals("NSE/BSE trading symbol", "RELIANCE")
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.recovery.run"))
+        val briefCallsBefore = fixture.eodBriefRequestCount
         composeRule.onNodeWithTag("ai.recovery.run").performClick()
+        composeRule.waitUntil(10_000) { fixture.eodBriefRequestCount > briefCallsBefore }
+        composeRule.waitForIdle()
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(
             hasText("Deterministic EOD strategy fixture response.")
         )
@@ -314,13 +325,16 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("intelligence.screen")
             .performScrollToNode(hasText("No research run yet"))
         composeRule.onNodeWithText("No research run yet").assertIsDisplayed()
-        composeRule.onNodeWithText("Refresh intelligence").performClick()
-        composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithTag("intelligence.feed.ready")
-                .fetchSemanticsNodes().isNotEmpty()
-        }
+        val fixture = composeRule.activity.fakeRepository
+        composeRule.onNodeWithTag("intelligence.screen")
+            .performScrollToNode(hasTestTag("intelligence.refresh"))
+        val feedCallsBefore = fixture.intelligenceFetchCount
+        composeRule.onNodeWithTag("intelligence.refresh").performClick()
+        composeRule.waitUntil(10_000) { fixture.intelligenceFetchCount > feedCallsBefore }
+        composeRule.waitForIdle()
         composeRule.onNodeWithTag("intelligence.screen")
             .performScrollToNode(hasTestTag("intelligence.feed.ready"))
+        composeRule.onNodeWithTag("intelligence.feed.ready").assertIsDisplayed()
         listOf(
             "AVIATION",
             "Fuel costs may pressure operating margins.",

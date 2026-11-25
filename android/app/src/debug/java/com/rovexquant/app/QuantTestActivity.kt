@@ -74,6 +74,14 @@ class FakeQuantRepository(
     private val restoreAuthenticatedSession: Boolean
 ) : QuantDataRepository {
     var rejectLogin = false
+    @Volatile var aiProviderFetchCount = 0
+        private set
+    @Volatile var aiChatRequestCount = 0
+        private set
+    @Volatile var eodBriefRequestCount = 0
+        private set
+    @Volatile var intelligenceFetchCount = 0
+        private set
     private val testSession = QuantSession("https://quant.test", "test-session-token")
 
     override suspend fun loadSavedConnection() =
@@ -113,8 +121,11 @@ class FakeQuantRepository(
         }
     }
 
-    override suspend fun fetchAiProviders(session: QuantSession) =
-        listOf(AiProvider("groq", true, listOf("default")))
+    override suspend fun fetchAiProviders(session: QuantSession): List<AiProvider> {
+        val result = listOf(AiProvider("groq", true, listOf("default")))
+        aiProviderFetchCount++
+        return result
+    }
 
     override suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) = Unit
     override suspend fun deleteAiProviderCredential(session: QuantSession, providerId: String) = Unit
@@ -164,7 +175,8 @@ class FakeQuantRepository(
 
     override suspend fun fetchIntelligenceEvents(
         session: QuantSession, query: String, timespan: String
-    ) = IntelligenceFeed(
+    ): IntelligenceFeed {
+        val result = IntelligenceFeed(
         source = "GDELT_DOC_API",
         retrievedAt = "2026-11-22T10:00:00Z",
         query = query,
@@ -188,7 +200,10 @@ class FakeQuantRepository(
             impactStatus = "HYPOTHESIS_REQUIRES_COMPANY_LEVEL_VERIFICATION"
         )),
         limitations = listOf("Global news discovery is not primary-source verification.")
-    )
+        )
+        intelligenceFetchCount++
+        return result
+    }
 
     override suspend fun fetchInstrumentOhlcv(
         instrument: InstrumentIdentity,
@@ -337,7 +352,11 @@ class FakeQuantRepository(
         messages: List<AiChatMessage>,
         credentialId: String?,
         fallbackProviders: List<String>
-    ) = AiCompletion(providerId, credentialId, model, "Deterministic AI fixture response.", false)
+    ): AiCompletion {
+        val result = AiCompletion(providerId, credentialId, model, "Deterministic AI fixture response.", false)
+        aiChatRequestCount++
+        return result
+    }
 
     override suspend fun requestAiStrategyBrief(
         session: QuantSession,
@@ -350,7 +369,8 @@ class FakeQuantRepository(
         strategyContext: String,
         credentialId: String?,
         fallbackProviders: List<String>
-    ) = AiStrategyBrief(
+    ): AiStrategyBrief {
+        val result = AiStrategyBrief(
         provider = "tejhq_eod",
         dataMode = "END_OF_DAY",
         exchange = exchange,
@@ -376,7 +396,10 @@ class FakeQuantRepository(
         ai = AiCompletion(providerId, credentialId, model, "Deterministic EOD strategy fixture response.", false),
         dataRights = "Private personal research only.",
         limitations = listOf("EOD daily bars only.")
-    )
+        )
+        eodBriefRequestCount++
+        return result
+    }
 
     override suspend fun callNseMcpTool(
         session: QuantSession,

@@ -216,7 +216,8 @@ fun AiWorkspaceScreen(
                                             provider.providerId.replaceFirstChar { it.uppercase() } +
                                                 if (provider.configured) " ✓" else " · setup"
                                         )
-                                    }
+                                    },
+                                    modifier = Modifier.testTag("ai.provider." + provider.providerId)
                                 )
                             }
                         }
