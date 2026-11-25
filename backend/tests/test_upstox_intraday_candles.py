@@ -105,7 +105,7 @@ def test_upstox_v3_fetches_daily_index_history_and_current_session(monkeypatch):
     requested = []
 
     async def handler(request):
-        requested.append(request.url.path)
+        requested.append(request.url.raw_path.decode("ascii"))
         if "/intraday/" in request.url.path:
             return httpx.Response(200, json={"data": {"candles": [[
                 f"{today.isoformat()}T00:00:00+05:30", 50050, 50200, 49950, 50100, 0
