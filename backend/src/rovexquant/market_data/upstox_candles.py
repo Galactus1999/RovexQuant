@@ -54,30 +54,34 @@ async def resolve_nse_instrument_key(symbol: str) -> str:
     if not normalized or len(normalized) > 80:
         raise UpstoxCandleError("A valid NSE company symbol or index name is required.", 422)
 
+    def canonical_label(value: str) -> str:
+        normalized_label = str(value or "").upper().replace("&", " AND ")
+        normalized_label = re.sub(r"[^A-Z0-9]+", " ", normalized_label)
+        normalized_label = " ".join(normalized_label.split())
+        if normalized_label.endswith(" INDEX"):
+            normalized_label = normalized_label[:-6].strip()
+        return normalized_label
+
     def matching(records: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
-        normalized_query = " ".join(query.upper().split())
-        candidates = [normalized_query]
-        if normalized_query.endswith(" INDEX"):
-            normalized_without_suffix = normalized_query[:-6].strip()
-            candidates.append(normalized_without_suffix)
-            if " AND " in normalized_without_suffix:
-                candidates.append(normalized_without_suffix.replace(" AND ", " & "))
-        if " AND " in normalized_query:
-            candidates.append(normalized_query.replace(" AND ", " & "))
-        if normalized_query == "NIFTY FINANCIAL SERVICES":
-            candidates.append("NIFTY FIN SERVICE")
+        normalized_query = canonical_label(query)
+        aliases = {
+            "BANKNIFTY": ("NIFTY BANK",),
+            "NIFTY FINANCIAL SERVICES": ("NIFTY FIN SERVICE",),
+            "NIFTY TELECOMMUNICATIONS": ("NIFTY TELECOM",),
+            "NIFTY TELECOM": ("NIFTY TELECOMMUNICATIONS",),
+        }
+        candidates = [normalized_query, *aliases.get(normalized_query, ())]
         for candidate in candidates:
             matches = [
                 record for record in records
                 if candidate in {
-                    " ".join(str(record.get("name", "")).upper().split()),
-                    " ".join(str(record.get("trading_symbol", "")).upper().split()),
+                    canonical_label(record.get("name", "")),
+                    canonical_label(record.get("trading_symbol", "")),
                 }
             ]
             if matches:
                 return matches
         return []
-
     index_master_error: InstrumentMasterError | None = None
     if normalized.startswith("NIFTY") or normalized.startswith("BANKNIFTY"):
         index_query = "NIFTY BANK" if normalized == "BANKNIFTY" else normalized

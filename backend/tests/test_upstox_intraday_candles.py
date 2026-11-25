@@ -194,3 +194,26 @@ def test_intraday_candle_route_requires_app_session_and_passes_query_symbol(monk
     response = client.get(url, headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     assert response.json()["provider"] == "UPSTOX_V3"
+
+
+
+def test_upstox_v3_resolves_healthcare_index_without_master_suffix(monkeypatch):
+    monkeypatch.setattr(upstox_candles, "get_nse_index_instruments", lambda: asyncio.sleep(0, result=[{
+        "instrument_key": "NSE_INDEX|Nifty Healthcare Index",
+        "name": "Nifty Healthcare Index",
+        "trading_symbol": "NIFTY HEALTHCARE INDEX",
+    }]))
+    assert asyncio.run(upstox_candles.resolve_nse_instrument_key(
+        "NIFTY HEALTHCARE"
+    )) == "NSE_INDEX|Nifty Healthcare Index"
+
+
+def test_upstox_v3_resolves_punctuated_financial_services_ex_bank_name(monkeypatch):
+    monkeypatch.setattr(upstox_candles, "get_nse_index_instruments", lambda: asyncio.sleep(0, result=[{
+        "instrument_key": "NSE_INDEX|Nifty Financial Services Ex-Bank",
+        "name": "Nifty Financial Services Ex-Bank Index",
+        "trading_symbol": "NIFTY FINANCIAL SERVICES EX-BANK",
+    }]))
+    assert asyncio.run(upstox_candles.resolve_nse_instrument_key(
+        "NIFTY FINANCIAL SERVICES EX BANK"
+    )) == "NSE_INDEX|Nifty Financial Services Ex-Bank"

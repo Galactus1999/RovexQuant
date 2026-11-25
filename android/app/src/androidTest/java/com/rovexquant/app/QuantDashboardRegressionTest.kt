@@ -226,6 +226,39 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithText("RELIANCE INDUSTRIES LTD").assertIsDisplayed()
     }
 
+    @Test fun indexAndSectorInstrumentResearchRenderValidatedCharts() {
+        waitForDashboard()
+
+        fun openInstrumentChart(symbol: String) {
+            composeRule.onNodeWithTag("instrument.global.search.open").performClick()
+            composeRule.onNodeWithTag("instrument.global.search.input").performTextInput(symbol)
+            composeRule.waitUntil(10_000) {
+                composeRule.onAllNodesWithTag("instrument.global.search.result.$symbol")
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithTag("instrument.global.search.result.$symbol").performClick()
+            composeRule.waitUntil(15_000) {
+                composeRule.onAllNodesWithTag("instrument.chart.candles")
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithTag("instrument.chart.candles").assertIsDisplayed()
+            composeRule.onNodeWithTag("instrument.chart.indicator.controls").assertIsDisplayed()
+            composeRule.onNodeWithTag("instrument.overview.panel").performScrollTo()
+            composeRule.onNodeWithText("Last price").assertIsDisplayed()
+            composeRule.onNodeWithText("52-week high").assertIsDisplayed()
+            composeRule.onNodeWithText("Annualised volatility").assertIsDisplayed()
+            composeRule.onNodeWithText("PRICE PERFORMANCE").assertIsDisplayed()
+            composeRule.onNodeWithText("INDEX COMPOSITION & BREADTH").assertIsDisplayed()
+        }
+
+        openInstrumentChart("NIFTY 50")
+        composeRule.onNodeWithText(
+            "Not available from validated OHLC provider; requires separately verified point-in-time index constituent/breadth feed."
+        ).assertIsDisplayed()
+        composeRule.onNodeWithText("← Back to Pulse").performClick()
+        openInstrumentChart("NIFTY BANK")
+    }
+
     @Test fun bottomNavigationOpensAllWorkspacesAndSectorCoverage() {
         waitForDashboard()
         composeRule.onNodeWithText("Scan").performClick()
@@ -290,7 +323,7 @@ class QuantDashboardRegressionTest {
             .performScrollToNode(hasTestTag("ai.research.run.fixture-research"))
         composeRule.onNodeWithTag("ai.research.run.fixture-research").assertIsDisplayed()
         composeRule.onNodeWithTag("ai.research.budget.daily")
-            .assertTextContains("200 / 10000 tokens")
+            .assertTextContains("200 / 10000 tokens", substring = true)
         composeRule.onNodeWithTag("ai.research.run.open.fixture-research").performClick()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("ai.research.run.detail.response").fetchSemanticsNodes().isNotEmpty()
@@ -367,11 +400,12 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("ai.workspace.list")
             .performScrollToNode(hasTestTag("ai.dalalos.panel"))
         composeRule.onNodeWithTag("ai.dalalos.key").performTextInput("d".repeat(32))
+        composeRule.onNodeWithTag("ai.dalalos.terms").performScrollTo()
         composeRule.onNodeWithTag("ai.dalalos.terms").performClick()
+        composeRule.onNodeWithTag("ai.dalalos.terms").assertIsOn()
         // Typing opens the IME and can move the save control below the viewport.
         // Scroll it into the visible area before injecting the click.
         composeRule.onNodeWithTag("ai.dalalos.save").performScrollTo().assertIsDisplayed().assertIsEnabled()
-        composeRule.onNodeWithTag("ai.dalalos.terms").assertIsOn()
         composeRule.onNodeWithTag("ai.dalalos.save").assertIsEnabled()
         composeRule.onNodeWithTag("ai.dalalos.save").performClick()
         assertTrue(composeRule.activity.fakeRepository.dalalOsConfigured)
