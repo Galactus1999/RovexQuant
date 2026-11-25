@@ -171,6 +171,8 @@ def test_amfi_uses_official_portal_feed_and_follows_redirects(monkeypatch):
 
 
 def test_rbi_dbie_mirror_keeps_successful_series_when_another_series_fails(monkeypatch):
+    monkeypatch.setenv("RBIH_DBIE_ENABLE", "true")
+
     async def fake_get_json(url, params):
         if "fr_exg_resv_rn" in url:
             return {
@@ -191,6 +193,8 @@ def test_rbi_dbie_mirror_keeps_successful_series_when_another_series_fails(monke
 
 
 def test_rbi_dbie_mirror_reports_provider_error_when_all_series_fail(monkeypatch):
+    monkeypatch.setenv("RBIH_DBIE_ENABLE", "true")
+
     async def fake_get_json(url, params):
         raise macro_data.MacroProviderError("Provider returned HTTP 503")
 
