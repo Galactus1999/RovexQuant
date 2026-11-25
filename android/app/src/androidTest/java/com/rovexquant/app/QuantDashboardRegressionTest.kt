@@ -273,6 +273,12 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("scanner.list").performScrollToNode(hasText("Open AI data recovery"))
         composeRule.onNodeWithText("Open AI data recovery").performClick()
         composeRule.onNodeWithText("Quant Intelligence.").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("ai.workspace.list")
+            .performScrollToNode(hasTestTag("ai.research.run.fixture-research"))
+        composeRule.onNodeWithTag("ai.research.run.fixture-research").assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.research.budget.daily")
+            .assertTextContains("200 / 10000 tokens")
         composeRule.onNodeWithText("Groq", substring = true).assertIsDisplayed()
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.model"))
         composeRule.onNodeWithTag("ai.model").performTextInput("test-model")
