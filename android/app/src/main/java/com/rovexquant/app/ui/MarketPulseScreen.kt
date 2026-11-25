@@ -81,7 +81,7 @@ fun MarketPulseScreen(
     var equityFilter by remember { mutableStateOf("ALL") }
     var isRefreshing by remember { mutableStateOf(false) }
     var showEodMovers by remember { mutableStateOf(false) }
-    var showSectorCube by remember { mutableStateOf(false) }
+    var showSectorHeatmap by remember { mutableStateOf(false) }
     var showAllEquities by remember { mutableStateOf(false) }
     var freshnessClock by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
@@ -148,6 +148,7 @@ fun MarketPulseScreen(
                 benchmark = sector.benchmark,
                 changePercent = quote?.changePercent?.takeIf { fresh },
                 lastPrice = quote?.lastPrice?.takeIf { fresh },
+                receivedAt = quote?.receivedAt,
                 isFresh = fresh
             )
         }
@@ -169,13 +170,13 @@ fun MarketPulseScreen(
         },
         modifier = Modifier.fillMaxSize()
     ) {
-        if (showSectorCube) {
+        if (showSectorHeatmap) {
             SectorHeatmapDialog(
                 sectors = sectorTiles,
                 liveCount = liveSectorCount,
-                onDismiss = { showSectorCube = false },
+                onDismiss = { showSectorHeatmap = false },
                 onSelectSector = { sector ->
-                    showSectorCube = false
+                    showSectorHeatmap = false
                     onOpenInstrument(sector.benchmark, sector.benchmark)
                 }
             )
@@ -315,15 +316,15 @@ fun MarketPulseScreen(
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Explore all sector benchmarks in one rotatable cube. Each block uses its latest verified market move.",
+                    "Explore sector-index price moves in a heatmap. Each tile shows the latest fresh index quote, not constituent breadth or contribution.",
                     color = Muted,
                     fontSize = 10.sp,
                     lineHeight = 15.sp
                 )
                 TextButton(
-                    onClick = { showSectorCube = true },
-                    modifier = Modifier.fillMaxWidth().testTag("market.sector.cube.open")
-                ) { Text("Open sector cube · ${sectorTiles.size} sectors") }
+                    onClick = { showSectorHeatmap = true },
+                    modifier = Modifier.fillMaxWidth().testTag("market.sector.heatmap.open")
+                ) { Text("Open sector heatmap · ${sectorTiles.size} indices") }
             }
         }
         item {
