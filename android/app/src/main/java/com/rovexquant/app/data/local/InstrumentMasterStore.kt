@@ -33,7 +33,7 @@ object InstrumentMasterStore {
             val tradingSymbol = json.optString("trading_symbol").trim().uppercase()
             val isin = json.optString("isin").trim().uppercase()
             if (!equityKey.matches(key) || name.isBlank() || !symbol.matches(tradingSymbol) ||
-                !isin.matches(Regex("^INE[A-Z0-9]{9}$"))
+                !isin.matches(Regex("^IN[A-Z0-9]{10}$"))
             ) null else MarketEquityInstrument(key, name, tradingSymbol, isin)
         }
 
