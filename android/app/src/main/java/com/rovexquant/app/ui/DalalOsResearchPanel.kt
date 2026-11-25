@@ -128,7 +128,8 @@ fun DalalOsResearchPanel(
                 Checkbox(
                     checked = termsAccepted,
                     onCheckedChange = { termsAccepted = it },
-                    enabled = !saving && !deleting
+                    enabled = !saving && !deleting,
+                    modifier = Modifier.testTag("ai.dalalos.terms")
                 )
                 Text(
                     "I have reviewed the provider terms and will respect plan quotas, source attribution and personal-research restrictions.",
@@ -218,7 +219,8 @@ fun DalalOsResearchPanel(
                                         confirmQuotaAction = false
                                     }
                                 },
-                                enabled = !calling
+                                enabled = !calling,
+                                modifier = Modifier.testTag("ai.dalalos.enable.${tool.name}")
                             )
                             Column(Modifier.weight(1f)) {
                                 Text(tool.name, color = MaterialTheme.colorScheme.onBackground, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
