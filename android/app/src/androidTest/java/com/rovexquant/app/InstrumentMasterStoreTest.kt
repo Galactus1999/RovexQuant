@@ -23,7 +23,7 @@ class InstrumentMasterStoreTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val instrument = InstrumentCatalog.resolve("CSVTEST")
         val bars = OhlcvCsvResearch.parse(
-            "timestamp,open,high,low,close,volume\\n" +
+            "timestamp,open,high,low,close,volume\n" +
                 "2025-01-01T15:30:00+05:30,100,102,99,101,1000"
         )
         val importedFile = File(context.filesDir, OhlcvCsvResearch.STORAGE_FILE_NAME)
