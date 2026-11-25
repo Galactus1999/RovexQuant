@@ -295,6 +295,7 @@ async def app_ai_chat(request: AIChatRequest):
             temperature=request.temperature,
             credential_id=request.credential_id,
             fallback_providers=request.fallback_providers,
+            task_type=request.task_type,
         )
     except GatewayError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
