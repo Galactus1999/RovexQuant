@@ -147,7 +147,9 @@ fun DalalOsResearchPanel(
                                 repository.saveDalalOsApiKey(session, apiKey)
                                 apiKey = ""
                                 configured = true
-                                discover()
+                                catalog = null
+                                selectedTool = null
+                                result = null
                             } catch (cancelled: CancellationException) {
                                 throw cancelled
                             } catch (failure: Exception) {
