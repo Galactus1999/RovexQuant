@@ -58,6 +58,25 @@ data class AiBudgetStatus(
     val monthlyRemainingTokens: Long?
 )
 
+data class AiResearchRunDetail(
+    val runId: String,
+    val taskType: String,
+    val providerId: String,
+    val model: String,
+    val status: String,
+    val requestHash: String,
+    val requestPayloadJson: String,
+    val responsePayloadJson: String,
+    val tokenUsageJson: String,
+    val costUsd: Double?,
+    val costStatus: String,
+    val fallbackUsed: Boolean,
+    val sourceRefsJson: String,
+    val verificationJson: String,
+    val createdAt: String,
+    val completedAt: String?
+)
+
 data class AiDailyBar(
     val date: String,
     val open: Double,
