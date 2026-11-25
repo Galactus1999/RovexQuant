@@ -235,7 +235,7 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithText("Lab").performClick()
         composeRule.onNodeWithText("Research lab.").assertIsDisplayed()
         composeRule.onNodeWithTag("research.lab.list").performScrollToNode(hasText("Choose CSV folder"))
-        composeRule.onNodeWithText("Automatic CSV folder import").assertIsDisplayed()
+        composeRule.onNodeWithText("AUTOMATIC CSV FOLDER IMPORT").assertIsDisplayed()
         composeRule.onNodeWithText("Choose CSV folder").assertIsDisplayed()
         composeRule.onNodeWithTag("research.lab.list").performScrollToNode(hasText("Import OHLCV CSV"))
         composeRule.onNodeWithText("Import OHLCV CSV").assertIsDisplayed()

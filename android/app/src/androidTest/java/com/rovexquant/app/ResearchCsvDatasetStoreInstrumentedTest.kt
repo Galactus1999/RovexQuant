@@ -20,6 +20,9 @@ class ResearchCsvDatasetStoreInstrumentedTest {
     fun importedResearchDatasetDoesNotPopulateProviderCache() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val instrument = InstrumentCatalog.resolve("CSVTESTXYZ", "NSE", OhlcvInterval.DAILY)
+        ResearchCsvDatasetStore.list(context)
+            .filter { it.label == "NSE:CSVTESTXYZ" }
+            .forEach { ResearchCsvDatasetStore.delete(context, it) }
         val bars = listOf(
             bar("2026-11-23T15:30:00+05:30", 100.0),
             bar("2026-11-24T15:30:00+05:30", 102.0)
