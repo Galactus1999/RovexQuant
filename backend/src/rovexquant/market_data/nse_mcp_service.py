@@ -34,9 +34,10 @@ async def discover_tools(
     async def discover(server_name: str):
         try:
             if server_name == "dalalos":
-                client_context = NseMcpClient(
-                    server_name, api_key=get_research_connector_api_key("dalalos")
-                )
+                api_key = get_research_connector_api_key("dalalos")
+                if not api_key:
+                    return server_name, None, "DalalOS API key is not configured"
+                client_context = NseMcpClient(server_name, api_key=api_key)
             else:
                 client_context = NseMcpClient(server_name)
             async with client_context as client:
