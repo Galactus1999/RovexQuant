@@ -3,7 +3,7 @@
 Status: IN PROGRESS
 Baseline: `feat/quant-neon-postgres-vault` @ `c7ee58fd718441fede3924297a6cb776a3ab9fc3`
 Implementation branch: `feat/quant-phase1-engineering-foundations`
-Governance: PR #8 remains open, draft and unmerged. No signing configuration or production secrets may be changed.
+Governance: historical PRs #8 and #9 are closed unmerged. P1 remains IN PROGRESS; the current CI workflow enforces a Phase 1 acceptance gate, but that gate does not replace the open checklist below. No signing configuration or production secrets may be changed.
 
 This contract freezes the Phase 1 scope. Phase 2 must not begin until every applicable item below has implementation and test evidence. A technically unsupported item must be explicitly excluded with rationale; it cannot be silently marked complete.
 
@@ -61,8 +61,7 @@ For each requirement record: requirement ID, owning source path, test ID, exact 
 ## Implementation evidence (22 November 2026)
 
 Implementation branch: `feat/quant-phase1-engineering-foundations`
-Draft PR: https://github.com/Galactus1999/RovexQuant/pull/9
-PR #8 remains open, draft and unmerged.
+Historical implementation PRs: #8 and #9 are closed unmerged. Their branches are not active merge targets.
 
 Implemented source paths:
 - Security controls: `backend/src/rovexquant/security/request_controls.py`
@@ -98,9 +97,12 @@ Still open:
 - MCP response-limit test and safe error contract coverage.
 - Backup/restore and key-rotation runbook/evidence.
 - Durable job contract and explicit current-hosting exclusion.
-- Android final-head compilation and actual emulator instrumentation run.
-- Dependency lockfile and dependency/licence/secret scans.
-- Final full CI on the exact latest branch head.
+- Final Android compile, JVM tests and emulator instrumentation on the exact current feature-branch head after the latest provider-routing changes.
+- Dependency-lock persistence job is still skipped in the current workflow run; prove lockfile persistence rather than treating a skipped job as success.
+- Backup/restore and key-rotation operational evidence.
+- Structured redacted logs, provider/job metrics and secret-leak regression coverage.
+- Router/use-case ownership extraction and forbidden-dependency architecture tests.
+- Final full CI on the exact latest branch head with every required job executed, not skipped.
 
 No production Neon migration or Render deployment was performed. The disposable PostgreSQL job does not prove production Neon state. No live Upstox/Dhan/NSE credentialed connectivity or physical-device validation is claimed.
 
@@ -119,3 +121,13 @@ No production Neon migration or Render deployment was performed. The disposable 
 - Workflow run URL: https://github.com/Galactus1999/RovexQuant/actions/runs/45013572138
 
 Important limitation: this pull-request-triggered run executed the six jobs supplied by the base branch workflow. It did not execute the new emulator instrumentation job present in this branch's workflow file. AND-05 and CI-04 therefore remain open until a branch-push workflow actually runs the emulator suite and passes. The artifact above is a debug APK, not a release-signed APK.
+
+
+## Updated evidence — 25 November 2026
+
+- The current CI contains a dedicated `Quant Phase 1 Required Acceptance Gate` job.
+- On PR #33, exact commit `daf34232e9262c2b59b8915d6edf7c3079406121`, workflow run #2150 completed successfully. Security/API/architecture regression, Android compile/lint/APK integrity, backend tests, PostgreSQL migration/vault integration, secret scan, container/auth smoke, official NSE MCP connectivity and Android 15 emulator login/navigation regression all passed.
+- The Phase 1 gate passed in that run. The Android dependency-lock persistence job and production PostgreSQL migration job were skipped; they are not treated as passing evidence.
+- The P2.3 branch later introduced an enum migration away from the undocumented NSE portal adapter. Its first compile attempt exposed missing enum references in `ChartSeriesMapper.kt`, `InstrumentIdentity.kt` and `InstrumentResearchScreen.kt`; those were repaired in a later commit, and the latest P2 CI is still required to validate the exact head.
+
+P1 remains open because architecture boundaries, structured observability, safe error contract coverage, backup/restore/key rotation and dependency-lock persistence still need explicit implementation/evidence. A passing CI gate on one feature branch is necessary but not sufficient to close the full P1 contract.
