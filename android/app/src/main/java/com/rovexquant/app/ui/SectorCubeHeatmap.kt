@@ -34,7 +34,6 @@ import java.util.Locale
 
 data class SectorHeatmapTile(
     val label: String,
-    val shortLabel: String,
     val benchmark: String,
     val changePercent: Double?,
     val lastPrice: Double?,
