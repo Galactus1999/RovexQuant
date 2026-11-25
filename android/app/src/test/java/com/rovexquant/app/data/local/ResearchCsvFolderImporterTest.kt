@@ -50,6 +50,64 @@ class ResearchCsvFolderImporterTest {
         )
     }
 
+
+    @Test
+    fun parsesYahooStyleDailyCsvWithDateAndQuotedThousandsSeparators() {
+        val bars = ResearchCsvFolderImporter.parseFolderCsv(
+            "Date,Open,High,Low,Close,Adj Close,Volume\\n" +
+                "2026-11-23,\"1,234.00\",1250,1200,1240,1240,\"1,234,567\"",
+            volumeRequired = true
+        )
+        assertEquals(1, bars.size)
+        assertEquals(1234.0, bars.single().open, 0.0)
+        assertEquals(1_234_567L, bars.single().volume)
+        assertEquals("2026-11-23T00:00+05:30", bars.single().timestamp.toString())
+    }
+
+    @Test
+    fun parsesIndianDateFormatsAndTimezoneNaiveLocalDateTimes() {
+        val dateBars = ResearchCsvFolderImporter.parseFolderCsv(
+            "Date,Open,High,Low,Close,Volume\\n23/11/2026,100,102,99,101,1000",
+            volumeRequired = true
+        )
+        val timeBars = ResearchCsvFolderImporter.parseFolderCsv(
+            "DateTime,Open,High,Low,Close,Volume\\n2026-11-24T15:30:00,100,102,99,101,1000",
+            volumeRequired = true
+        )
+        assertEquals("2026-11-23T00:00+05:30", dateBars.single().timestamp.toString())
+        assertEquals("2026-11-24T15:30+05:30", timeBars.single().timestamp.toString())
+    }
+
+    @Test
+    fun allowsMissingVolumeForIndexDailyCsv() {
+        val bars = ResearchCsvFolderImporter.parseFolderCsv(
+            "Date,Open,High,Low,Close\\n2026-11-24,100,102,99,101",
+            volumeRequired = false
+        )
+        assertEquals(0L, bars.single().volume)
+    }
+
+    @Test
+    fun requiresVolumeForEquityDailyCsv() {
+        assertThrows(IllegalArgumentException::class.java) {
+            ResearchCsvFolderImporter.parseFolderCsv(
+                "Date,Open,High,Low,Close\\n2026-11-24,100,102,99,101",
+                volumeRequired = true
+            )
+        }
+    }
+
+    @Test
+    fun rejectsTwoTimestampsInSameIndianMarketSessionAcrossOffsets() {
+        val bars = listOf(
+            bar("2026-11-23T15:30:00+05:30"),
+            bar("2026-11-23T10:00:00Z")
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            ResearchCsvFolderImporter.validateDailyBars(bars)
+        }
+    }
+
     private fun bar(timestamp: String) = OhlcvBar(
         timestamp = OffsetDateTime.parse(timestamp),
         open = 100.0,
