@@ -130,12 +130,16 @@ The Android wrapper executes chart calls asynchronously in WebView. Its document
 - The history sync manager validates cached history, fetched rows and the merged result before persistence. A malformed cache is discarded for the incremental merge path so the requested history is fetched afresh. An empty incremental response preserves a valid existing cache.
 - Removed the duplicate interim candlestick renderer after selecting the validated-data renderer.
 
-### Still incomplete — do not mark P2 complete
-- The preferred TradingView Android wrapper has not been added. The native Compose renderer is an interim, dependency-free implementation pending a controlled wrapper compatibility spike.
-- SMA 20/50 are the only currently wired chart overlays. EMA, Bollinger Bands, RSI, MACD, ATR and ADX are not yet integrated into Android chart panes.
-- The Android client does not yet call the backend `/api/v1/research/indicators` endpoint through a typed repository/API contract.
-- No Android renderer interaction tests, index/equity chart emulator test, real-device performance profile, fullscreen, multi-instrument comparison or event markers have passed yet.
-- The exact latest branch head must pass a fresh complete CI run. An earlier run was cancelled after subsequent branch pushes; do not treat it as verification of the latest head.
+### P2 status before the P2.3 batch below — historical gap list
+
+The following gaps were recorded before P2.3 and must not be read as the current implementation status:
+
+- The preferred TradingView Android wrapper was not adopted; the renderer remains native Jetpack Compose. A wrapper compatibility spike and renderer decision are still open.
+- At that earlier point, only SMA overlays were wired. The P2.3 batch below subsequently added backend EMA, Bollinger, RSI, MACD, ATR and ADX contracts and panes.
+- The typed Android client now calls authenticated `POST /api/v1/research/indicators` through `QuantDataRepository`. The UI computes a deterministic local fallback immediately and labels it explicitly when the backend request fails; it does not present that fallback as backend output.
+- Remaining acceptance is still open: comprehensive renderer interaction/lifecycle tests, instrument-specific emulator coverage beyond the current regression path, real-device performance profiling, fullscreen, multi-instrument comparison, event markers, and exact-head full CI.
+
+Do not mark P2 complete until the remaining acceptance items above pass.
 
 
 ## P2.3 implementation batch — 24 November 2026
@@ -144,7 +148,7 @@ The Android wrapper executes chart calls asynchronously in WebView. Its document
 
 - Added typed `TechnicalIndicators` and `TechnicalIndicatorPeriods` contracts. All arrays preserve backend null warm-up values, must be finite when populated, and must exactly match the requested bar count.
 - Added authenticated Android transport for `POST /api/v1/research/indicators`. Requests carry aligned close/high/low arrays, are bounded to 10,000 OHLC bars, and use the existing research timeout/client and session bearer token.
-- Response parsing is isolated in a side-effect-free parser and exercised on the Android runtime. It validates payload size, required arrays, MACD arity, exact array lengths, JSON numeric types, finite values and source-window alignment. The typed model additionally rejects out-of-range RSI/ADX, negative ATR and unordered Bollinger bands. No local formula fallback is used.
+- Response parsing is isolated in a side-effect-free parser and exercised on the Android runtime. It validates payload size, required arrays, MACD arity, exact array lengths, JSON numeric types, finite values and source-window alignment. The typed model additionally rejects out-of-range RSI/ADX, negative ATR and unordered Bollinger bands. The UI uses an explicitly labelled deterministic local fallback if the backend request fails; backend results replace it when the request succeeds.
 - Added the feature-facing repository port and `QuantRepository` IO/session coordination. The UI does not call `QuantApi` directly.
 - Instrument research requests indicators for the latest maximum 10,000 bars. The returned `startIndex` and count preserve alignment with the larger chart history; older bars are explicitly outside the indicator coverage window.
 - Replaced local chart SMA calculations with backend SMA/EMA/Bollinger overlays and added RSI, MACD, ATR and ADX subpanels. Controls are wired to actual renderer data, and the chart remains available if indicator calculation fails.
