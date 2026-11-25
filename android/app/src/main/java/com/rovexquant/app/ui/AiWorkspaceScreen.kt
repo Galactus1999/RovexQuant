@@ -48,6 +48,10 @@ fun AiWorkspaceScreen(
     var providerError by remember { mutableStateOf<String?>(null) }
     var configuredTaskRoutes by remember { mutableStateOf<Map<String, AiTaskRoute>>(emptyMap()) }
     var taskRoutesError by remember { mutableStateOf<String?>(null) }
+    var researchRuns by remember { mutableStateOf(emptyList<com.rovexquant.app.data.model.AiResearchRun>()) }
+    var historyLoading by remember { mutableStateOf(true) }
+    var historyError by remember { mutableStateOf<String?>(null) }
+    var aiBudgetStatus by remember { mutableStateOf<com.rovexquant.app.data.model.AiBudgetStatus?>(null) }
     var selectedTaskType by rememberSaveable { mutableStateOf("research") }
     var automaticTaskRouting by rememberSaveable { mutableStateOf(false) }
     var credentialInput by remember { mutableStateOf("") }
@@ -105,6 +109,21 @@ fun AiWorkspaceScreen(
         } catch (failure: Exception) {
             configuredTaskRoutes = emptyMap()
             taskRoutesError = failure.message ?: "Server task routes are unavailable."
+        }
+    }
+
+    LaunchedEffect(session, repository) {
+        historyLoading = true
+        historyError = null
+        try {
+            researchRuns = repository.fetchAiResearchRuns(session)
+            aiBudgetStatus = repository.fetchAiBudgetStatus(session)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            historyError = failure.message ?: "AI research history is unavailable."
+        } finally {
+            historyLoading = false
         }
     }
 
@@ -414,6 +433,84 @@ fun AiWorkspaceScreen(
                 evidenceDraft = chatInput,
                 automaticTaskRouting = automaticTaskRouting
             )
+        }
+        item {
+            Column(
+                modifier = Modifier.fillMaxWidth().testTag("ai.research.history"),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TerminalCard {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Eyebrow("Persistent research history")
+                        TextButton(
+                            enabled = !historyLoading,
+                            onClick = {
+                                historyLoading = true
+                                historyError = null
+                                scope.launch {
+                                    try {
+                                        researchRuns = repository.fetchAiResearchRuns(session)
+                                        aiBudgetStatus = repository.fetchAiBudgetStatus(session)
+                                    } catch (cancelled: CancellationException) {
+                                        throw cancelled
+                                    } catch (failure: Exception) {
+                                        historyError = failure.message ?: "Research history refresh failed."
+                                    } finally {
+                                        historyLoading = false
+                                    }
+                                }
+                            },
+                            modifier = Modifier.testTag("ai.research.history.refresh")
+                        ) { Text(if (historyLoading) "Loading…" else "Refresh") }
+                    }
+                    Text(
+                        "Archived runs are read-only evidence of previous AI requests. Token usage and estimated cost are telemetry, not a guarantee of provider billing.",
+                        color = Muted, fontSize = 9.sp, lineHeight = 14.sp
+                    )
+                    aiBudgetStatus?.let { budget ->
+                        StatusPill(
+                            if (budget.enabled) "Token budgets enabled" else "Token budgets disabled",
+                            if (budget.enabled) Mint else Gold
+                        )
+                        val daily = budget.dailyLimitTokens?.let { "${budget.dailyUsedTokens} / $it tokens" }
+                            ?: "${budget.dailyUsedTokens} tokens · no daily cap"
+                        val monthly = budget.monthlyLimitTokens?.let { "${budget.monthlyUsedTokens} / $it tokens" }
+                            ?: "${budget.monthlyUsedTokens} tokens · no monthly cap"
+                        Text("Daily: $daily", color = Muted, fontSize = 9.sp, modifier = Modifier.testTag("ai.research.budget.daily"))
+                        Text("Monthly: $monthly", color = Muted, fontSize = 9.sp, modifier = Modifier.testTag("ai.research.budget.monthly"))
+                    }
+                    historyError?.let { Text("History unavailable: $it", color = Gold, fontSize = 9.sp, lineHeight = 14.sp) }
+                    if (historyLoading && researchRuns.isEmpty()) CircularProgressIndicator()
+                    if (!historyLoading && researchRuns.isEmpty() && historyError == null) {
+                        Text("No archived research runs yet.", color = Muted, fontSize = 10.sp)
+                    }
+                    researchRuns.take(12).forEach { run ->
+                        Spacer(Modifier.height(7.dp))
+                        Column(
+                            Modifier.fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(PanelRaised)
+                                .padding(10.dp)
+                                .testTag("ai.research.run.${run.runId}")
+                        ) {
+                            Text(
+                                run.taskType.replace('_', ' ').uppercase() + " · " + run.providerId + "/" + run.model,
+                                color = MaterialTheme.colorScheme.onBackground,
+                                fontSize = 10.sp, fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                run.createdAt.take(19).replace('T', ' ') + " · " + run.status +
+                                    " · " + run.totalTokens + " tokens" +
+                                    if (run.fallbackUsed) " · fallback used" else "",
+                                color = Muted, fontSize = 9.sp
+                            )
+                            val cost = run.costUsd?.let { "Estimated USD " + String.format(Locale.US, "%.6f", it) }
+                                ?: "Cost unavailable · ${run.costStatus}"
+                            Text(cost, color = Gold, fontSize = 9.sp)
+                        }
+                    }
+                }
+            }
         }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
