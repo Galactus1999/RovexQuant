@@ -74,7 +74,8 @@ fun AiResearchBriefingPanel(
     model: String,
     fallbackProviders: List<String>,
     canUseAi: Boolean,
-    evidenceDraft: String
+    evidenceDraft: String,
+    automaticTaskRouting: Boolean = false
 ) {
     val scope = rememberCoroutineScope()
     var loading by remember { mutableStateOf(false) }
@@ -139,13 +140,14 @@ fun AiResearchBriefingPanel(
                         try {
                             val result = repository.sendAiMessage(
                                 session = session,
-                                providerId = providerId,
-                                model = model,
+                                providerId = if (automaticTaskRouting) null else providerId,
+                                model = if (automaticTaskRouting) null else model,
                                 messages = listOf(
                                     AiChatMessage("system", systemPrompt),
                                     AiChatMessage("user", "Create the research briefing from this evidence bundle:\n\n${evidenceDraft.take(10000)}")
                                 ),
-                                fallbackProviders = fallbackProviders
+                                fallbackProviders = if (automaticTaskRouting) emptyList() else fallbackProviders,
+                                taskType = "research"
                             )
                             completion = result
                             citationAudit = auditResearchCitations(result.content, evidenceDraft)
