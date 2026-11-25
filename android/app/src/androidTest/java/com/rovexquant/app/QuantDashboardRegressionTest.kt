@@ -25,6 +25,7 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.test.espresso.Espresso.closeSoftKeyboard
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -426,6 +427,9 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("ai.dalalos.save").performScrollTo().assertIsDisplayed().assertIsEnabled()
         composeRule.onNodeWithTag("ai.dalalos.save").assertIsEnabled()
         composeRule.onNodeWithTag("ai.dalalos.save").performClick()
+        // The key field opened the soft keyboard. Dismiss it before navigating
+        // deeper into the tall connector card so it cannot cover the tool editor.
+        closeSoftKeyboard()
         assertTrue(composeRule.activity.fakeRepository.dalalOsConfigured)
         // Save is below the key field; return to the status row before asserting it.
         composeRule.onNodeWithTag("ai.workspace.list")
