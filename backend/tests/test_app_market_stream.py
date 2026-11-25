@@ -350,3 +350,104 @@ def test_market_websocket_uses_retryable_close_for_temporary_provider_failure(mo
         with pytest.raises(WebSocketDisconnect) as closed:
             websocket.receive_json()
         assert closed.value.code == 1013
+
+def _signed_test_token(header: object, payload: object, secret: bytes = b"s" * 48) -> str:
+    import base64
+    import hashlib
+    import hmac
+
+    def segment(value: object) -> str:
+        return base64.urlsafe_b64encode(
+            json.dumps(value, separators=(",", ":"), sort_keys=True).encode()
+        ).rstrip(b"=").decode()
+
+    header_part = segment(header)
+    payload_part = segment(payload)
+    signing_input = f"{header_part}.{payload_part}".encode("ascii")
+    signature = base64.urlsafe_b64encode(
+        hmac.new(secret, signing_input, hashlib.sha256).digest()
+    ).rstrip(b"=").decode()
+    return f"{header_part}.{payload_part}.{signature}"
+
+
+def test_app_session_rejects_malformed_and_non_object_claims(monkeypatch):
+    configure(monkeypatch)
+    for token in ("", "one.segment", "one.two.three.four", "a.%!.c"):
+        with pytest.raises(AppAuthError):
+            verify_app_session(token)
+
+    valid_header = {"alg": "HS256", "typ": "JWT"}
+    for payload in ([], "not-an-object", None):
+        with pytest.raises(AppAuthError):
+            verify_app_session(_signed_test_token(valid_header, payload))
+
+
+def test_app_session_rejects_wrong_header_and_boolean_timestamps(monkeypatch):
+    configure(monkeypatch)
+    now = int(time.time())
+    base_claims = {
+        "iss": "quant-api", "aud": "quant-mobile", "sub": "quant-user",
+        "iat": now, "exp": now + 600,
+    }
+    with pytest.raises(AppAuthError):
+        verify_app_session(_signed_test_token(
+            {"alg": "none", "typ": "JWT"}, base_claims
+        ))
+    for field in ("iat", "exp"):
+        claims = dict(base_claims)
+        claims[field] = True
+        with pytest.raises(AppAuthError):
+            verify_app_session(_signed_test_token(
+                {"alg": "HS256", "typ": "JWT"}, claims
+            ))
+
+
+def test_app_session_rejects_not_before_and_excessive_lifetime(monkeypatch):
+    configure(monkeypatch)
+    now = int(time.time())
+    header = {"alg": "HS256", "typ": "JWT"}
+    claims = {
+        "iss": "quant-api", "aud": "quant-mobile", "sub": "quant-user",
+        "iat": now, "exp": now + 600, "nbf": now + 120,
+    }
+    with pytest.raises(AppAuthError):
+        verify_app_session(_signed_test_token(header, claims))
+    claims["nbf"] = now
+    claims["exp"] = now + 86401
+    with pytest.raises(AppAuthError):
+        verify_app_session(_signed_test_token(header, claims))
+
+
+def test_app_session_signing_key_requires_at_least_32_utf8_bytes(monkeypatch):
+    configure(monkeypatch)
+    monkeypatch.setenv("QUANT_APP_SESSION_SIGNING_KEY", "short")
+    with pytest.raises(AppAuthError) as error:
+        issue_app_session("quant-user", "long-test-password")
+    assert error.value.status_code == 503
+
+    # The policy is byte-based, not a count of Unicode code points.
+    monkeypatch.setenv("QUANT_APP_SESSION_SIGNING_KEY", "é" * 16)
+    token, _ = issue_app_session("quant-user", "long-test-password")
+    assert verify_app_session(token)["sub"] == "quant-user"
+
+
+def test_login_rate_limit_throttles_failed_attempts_even_with_spoofed_forwarded_ips(monkeypatch):
+    from rovexquant.security.request_controls import rate_limiter
+
+    configure(monkeypatch)
+    rate_limiter.clear()
+    client = TestClient(app)
+    try:
+        responses = [
+            client.post(
+                "/api/v1/auth/session",
+                json={"username": "quant-user", "password": "incorrect-password"},
+                headers={"X-Forwarded-For": f"198.51.100.{index}"},
+            )
+            for index in range(6)
+        ]
+        assert [response.status_code for response in responses[:5]] == [401] * 5
+        assert responses[5].status_code == 429
+        assert int(responses[5].headers["Retry-After"]) >= 1
+    finally:
+        rate_limiter.clear()
