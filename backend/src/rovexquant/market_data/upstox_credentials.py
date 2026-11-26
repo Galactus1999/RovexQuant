@@ -153,6 +153,12 @@ def _connect() -> Iterator[Any]:
         columns = {row[1] for row in connection.execute("PRAGMA table_info(provider_tokens)")}
         if "expires_at" not in columns:
             connection.execute("ALTER TABLE provider_tokens ADD COLUMN expires_at INTEGER")
+        # Remove the encrypted credential left by the retired DalalOS connector.
+        # This is intentionally scoped to its legacy storage key; Upstox and AI keys remain untouched.
+        connection.execute(
+            "DELETE FROM provider_tokens WHERE provider = ?",
+            ("mcp:dalalos",),
+        )
         connection.commit()
         yield connection
         connection.commit()
