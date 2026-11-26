@@ -18,6 +18,7 @@ TEST_VAULT_KEY = base64.urlsafe_b64encode(
     hashlib.sha256(b"RovexQuant Phase 1 PostgreSQL integration test key only").digest()
 )
 LEGACY_CIPHERTEXT = Fernet(TEST_VAULT_KEY).encrypt(b"legacy-ciphertext-preservation-probe")
+DALALOS_CIPHERTEXT = Fernet(TEST_VAULT_KEY).encrypt(b"obsolete-dalalos-api-key")
 
 
 @pytest.fixture
@@ -46,6 +47,22 @@ def migrated_postgres(monkeypatch):
             "SET encrypted_token=EXCLUDED.encrypted_token, updated_at=EXCLUDED.updated_at",
             ("phase1-legacy-migration-probe", LEGACY_CIPHERTEXT, 1),
         )
+        version_table = connection.execute(
+            "SELECT to_regclass('alembic_version')"
+        ).fetchone()[0]
+        current_revision = None
+        if version_table:
+            revision_row = connection.execute(
+                "SELECT version_num FROM alembic_version"
+            ).fetchone()
+            current_revision = revision_row[0] if revision_row else None
+        if current_revision != "0009_remove_dalalos_credential":
+            connection.execute(
+                "INSERT INTO provider_tokens(provider, encrypted_token, updated_at) "
+                "VALUES (%s, %s, %s) ON CONFLICT(provider) DO UPDATE "
+                "SET encrypted_token=EXCLUDED.encrypted_token, updated_at=EXCLUDED.updated_at",
+                ("mcp:dalalos", DALALOS_CIPHERTEXT, 1),
+            )
 
     config = Config("alembic.ini")
     command.upgrade(config, "head")
@@ -70,6 +87,10 @@ def test_postgres_migration_creates_and_records_expected_schema(migrated_postgre
         revision = connection.execute(
             "SELECT version_num FROM alembic_version"
         ).fetchone()
+        retired_credential = connection.execute(
+            "SELECT provider FROM provider_tokens WHERE provider=%s",
+            ("mcp:dalalos",),
+        ).fetchone()
         columns = {
             row[0]
             for row in connection.execute(
@@ -83,6 +104,7 @@ def test_postgres_migration_creates_and_records_expected_schema(migrated_postgre
         }
 
     assert revision == (EXPECTED_SCHEMA_REVISION,)
+    assert retired_credential is None
     assert columns == {"provider", "encrypted_token", "updated_at", "expires_at"}
 
 
