@@ -85,7 +85,13 @@ fun MarketPulseScreen(
     var showAllEquities by remember { mutableStateOf(false) }
     var freshnessClock by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
-    LaunchedEffect(ticks) {
+    // Freshness only has meaning when at least one live tick exists. Do not
+    // keep a periodic state writer alive on the offline/empty dashboard: Compose
+    // tests (and other virtual-clock hosts) must be able to reach quiescence.
+    // Key on presence, not the changing tick map, so ordinary quote updates do
+    // not continually restart the timer.
+    LaunchedEffect(ticks.isNotEmpty()) {
+        if (ticks.isEmpty()) return@LaunchedEffect
         while (true) {
             freshnessClock = System.currentTimeMillis()
             delay(5_000)
