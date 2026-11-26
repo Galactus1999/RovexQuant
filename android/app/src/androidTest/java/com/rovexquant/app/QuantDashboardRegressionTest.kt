@@ -492,7 +492,8 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("ai.workspace.list")
             .performScrollToNode(hasTestTag("ai.dalalos.arguments"))
         composeRule.onNodeWithTag("ai.dalalos.arguments")
-            .performTextClearance().performTextInput("{\"query\":\"RELIANCE\"}")
+            .performTextClearance()
+            .performTextInput("{\"query\":\"RELIANCE\"}")
         composeRule.onNodeWithTag("ai.dalalos.run").assertIsEnabled().performClick()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithText("get_company_exposures")
