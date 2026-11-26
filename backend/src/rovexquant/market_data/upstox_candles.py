@@ -71,17 +71,18 @@ async def resolve_nse_instrument_key(symbol: str) -> str:
             "NIFTY TELECOM": ("NIFTY TELECOMMUNICATIONS",),
         }
         candidates = [normalized_query, *aliases.get(normalized_query, ())]
-        for candidate in candidates:
-            matches = [
-                record for record in records
-                if candidate in {
+        matches_by_key: dict[str, dict[str, Any]] = {}
+        for candidate in dict.fromkeys(candidates):
+            for record in records:
+                if candidate not in {
                     canonical_label(record.get("name", "")),
                     canonical_label(record.get("trading_symbol", "")),
-                }
-            ]
-            if matches:
-                return matches
-        return []
+                }:
+                    continue
+                key = record.get("instrument_key")
+                if isinstance(key, str) and key:
+                    matches_by_key[key] = record
+        return list(matches_by_key.values())
     index_master_error: InstrumentMasterError | None = None
     if normalized.startswith("NIFTY") or normalized.startswith("BANKNIFTY"):
         index_query = "NIFTY BANK" if normalized == "BANKNIFTY" else normalized
@@ -108,6 +109,8 @@ async def resolve_nse_instrument_key(symbol: str) -> str:
             "The verified NSE equity master is temporarily unavailable.", 503
         ) from error
 
+    if len(equity_matches) > 1:
+        raise UpstoxCandleError("Equity symbol resolves to multiple current NSE instruments.", 409)
     if equity_matches:
         key = equity_matches[0].get("instrument_key")
         if isinstance(key, str) and _KEY_PATTERN.fullmatch(key):
