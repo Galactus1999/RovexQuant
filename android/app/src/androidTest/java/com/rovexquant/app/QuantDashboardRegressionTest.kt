@@ -550,8 +550,16 @@ class QuantDashboardRegressionTest {
         waitForDashboard()
         checkpoint("dashboard-ready")
         composeRule.onNodeWithText("Scan").performClick()
-        composeRule.onNodeWithTag("scanner.list").performScrollToNode(hasText("Open AI data recovery"))
-        composeRule.onNodeWithText("Open AI data recovery").performClick()
+        checkpoint("scanner-open")
+        // StrategyScannerScreen is a LazyColumn with a fixed fallback card at
+        // item 8 (heading, dataset, horizon chips, workspace, four strategies,
+        // then the AI recovery card). Jump to that item directly rather than
+        // repeatedly scanning the list's semantics tree.
+        composeRule.onNodeWithTag("scanner.list").performScrollToIndex(8)
+        composeRule.onNodeWithTag("scanner.ai.recovery").performScrollTo()
+        checkpoint("recovery-button-visible")
+        composeRule.onNodeWithTag("scanner.ai.recovery").performClick()
+        checkpoint("recovery-button-clicked")
         composeRule.onNodeWithText("Quant Intelligence.").assertIsDisplayed()
         checkpoint("workspace-open")
 
