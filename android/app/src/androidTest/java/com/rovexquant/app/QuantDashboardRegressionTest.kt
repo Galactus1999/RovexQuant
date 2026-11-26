@@ -424,9 +424,12 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("ai.dalalos.save").performScrollTo().assertIsDisplayed().assertIsEnabled()
         composeRule.onNodeWithTag("ai.dalalos.save").assertIsEnabled()
         composeRule.onNodeWithTag("ai.dalalos.save").performClick()
-        // The key field opened the soft keyboard. Dismiss it before navigating
-        // deeper into the tall connector card so it cannot cover the tool editor.
-        closeSoftKeyboard()
+        // Keep this test on the Compose semantics path. Espresso's
+        // closeSoftKeyboard() requires the Activity root to own window focus;
+        // on the API 35 emulator the IME transition can leave that root
+        // temporarily unfocused and fail before any assertion is evaluated.
+        // The following Compose scroll actions reveal each control with the
+        // IME still open, so no cross-framework keyboard dismissal is needed.
         assertTrue(composeRule.activity.fakeRepository.dalalOsConfigured)
         // Save is below the key field; return to the status row before asserting it.
         composeRule.onNodeWithTag("ai.workspace.list")
