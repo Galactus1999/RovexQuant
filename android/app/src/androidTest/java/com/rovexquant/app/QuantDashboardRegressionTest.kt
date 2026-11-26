@@ -45,6 +45,57 @@ class QuantDashboardRegressionTest {
         }
     }
 
+    private fun openDalalOsPanel() {
+        waitForDashboard()
+        composeRule.onNodeWithText("Scan").performClick()
+        composeRule.onNodeWithTag("scanner.list")
+            .performScrollToNode(hasText("Open AI data recovery"))
+        composeRule.onNodeWithText("Open AI data recovery").performClick()
+        composeRule.onNodeWithText("Quant Intelligence.").assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.workspace.list")
+            .performScrollToNode(hasTestTag("ai.dalalos.panel"))
+    }
+
+    /** Uses only the deterministic fake repository; never a real provider credential. */
+    private fun configureDalalOsWithFakeKey() {
+        openDalalOsPanel()
+        composeRule.onNodeWithTag("ai.dalalos.key").performTextInput("d".repeat(32))
+        composeRule.onNodeWithTag("ai.dalalos.terms").performScrollTo().performClick()
+        composeRule.onNodeWithTag("ai.dalalos.terms").assertIsOn()
+        composeRule.onNodeWithTag("ai.dalalos.save")
+            .performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("KEY STORED").fetchSemanticsNodes().isNotEmpty()
+        }
+        assertTrue(composeRule.activity.fakeRepository.dalalOsConfigured)
+    }
+
+    private fun discoverDalalOsTools() {
+        composeRule.onNodeWithTag("ai.dalalos.discover").performScrollTo().performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("ai.dalalos.enable.get_company_exposures")
+                .fetchSemanticsNodes().isNotEmpty() &&
+                composeRule.onAllNodesWithTag("ai.dalalos.enable.get_filing_extract")
+                    .fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    private fun enableDalalOsTool(toolName: String) {
+        val checkbox = "ai.dalalos.enable.$toolName"
+        composeRule.onNodeWithTag(checkbox).performScrollTo().assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag(checkbox).assertIsOn()
+    }
+
+    private fun selectDalalOsReadOnlyTool(toolName: String) {
+        val chip = "ai.dalalos.tool.$toolName"
+        composeRule.onNodeWithTag("ai.workspace.list")
+            .performScrollToNode(hasTestTag("ai.dalalos.tools.readonly"))
+        composeRule.onNodeWithTag("ai.dalalos.tools.readonly")
+            .performScrollToNode(hasTestTag(chip))
+        composeRule.onNodeWithTag(chip).assertIsEnabled().performClick()
+        composeRule.onNodeWithTag(chip).assertIsSelected()
+    }
+
     private fun clickIndicator(key: String) {
         val tag = "instrument.chart.indicator.$key.toggle"
         // The controls live in a nested horizontal scroller inside the screen's
@@ -405,98 +456,63 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithText("No machine-verifiable source references returned.", substring = true).assertIsDisplayed()
     }
 
-    @Test fun dalalosConnectorStoresKeyAndRequiresPerCallQuotaConfirmation() {
-        waitForDashboard()
-        composeRule.onNodeWithText("Scan").performClick()
-        composeRule.onNodeWithTag("scanner.list").performScrollToNode(hasText("Open AI data recovery"))
-        composeRule.onNodeWithText("Open AI data recovery").performClick()
-        composeRule.onNodeWithText("Quant Intelligence.").assertIsDisplayed()
+    @Test fun dalalosWithoutKeyRemainsOptionalAndDiscoveryIsDisabled() {
+        openDalalOsPanel()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("The key is optional.", substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("ai.dalalos.discover").assertIsNotEnabled()
+        assertTrue(!composeRule.activity.fakeRepository.dalalOsConfigured)
+    }
 
-        composeRule.onNodeWithTag("ai.workspace.list")
-            .performScrollToNode(hasTestTag("ai.dalalos.panel"))
+    @Test fun dalalosFakeKeyCanBeStoredWithoutARealProviderCredential() {
+        openDalalOsPanel()
         composeRule.onNodeWithTag("ai.dalalos.key").performTextInput("d".repeat(32))
-        composeRule.onNodeWithTag("ai.dalalos.terms").performScrollTo()
-        composeRule.onNodeWithTag("ai.dalalos.terms").performClick()
+        composeRule.onNodeWithTag("ai.dalalos.terms").performScrollTo().performClick()
         composeRule.onNodeWithTag("ai.dalalos.terms").assertIsOn()
-        // Typing opens the IME and can move the save control below the viewport.
-        // Scroll it into the visible area before injecting the click.
-        composeRule.onNodeWithTag("ai.dalalos.save").performScrollTo().assertIsDisplayed().assertIsEnabled()
-        composeRule.onNodeWithTag("ai.dalalos.save").assertIsEnabled()
-        composeRule.onNodeWithTag("ai.dalalos.save").performClick()
-        // Keep this test on the Compose semantics path. Espresso's
-        // closeSoftKeyboard() requires the Activity root to own window focus;
-        // on the API 35 emulator the IME transition can leave that root
-        // temporarily unfocused and fail before any assertion is evaluated.
-        // The following Compose scroll actions reveal each control with the
-        // IME still open, so no cross-framework keyboard dismissal is needed.
-        assertTrue(composeRule.activity.fakeRepository.dalalOsConfigured)
-        // Save is below the key field; return to the status row before asserting it.
-        composeRule.onNodeWithTag("ai.workspace.list")
-            .performScrollToNode(hasTestTag("ai.dalalos.panel"))
+        composeRule.onNodeWithTag("ai.dalalos.save")
+            .performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithText("KEY STORED").fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithTag("ai.dalalos.discover").performClick()
-        composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithTag("ai.dalalos.enable.get_company_exposures")
-                .fetchSemanticsNodes().isNotEmpty()
-        }
+        assertTrue(composeRule.activity.fakeRepository.dalalOsConfigured)
+    }
 
-        // The checkbox is below the connector discovery controls; make it
-        // visible before injecting the tap so the state change is deterministic.
-        composeRule.onNodeWithTag("ai.dalalos.enable.get_company_exposures")
-            .performScrollTo().assertIsDisplayed().performClick()
-        composeRule.waitForIdle()
-        // The selectable tool row is rendered only after the checkbox state is
-        // committed. Verify that state transition before looking for its scroller.
-        composeRule.onNodeWithTag("ai.dalalos.enable.get_company_exposures").assertIsOn()
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithTag("ai.dalalos.tools.readonly")
-                .fetchSemanticsNodes().isNotEmpty()
-        }
-        // The connector lives inside an item of the workspace LazyColumn,
-        // and its tool chips have a second, horizontal scroll viewport. Reveal
-        // the owning item first; then reveal the chip inside its own row.
-        composeRule.onNodeWithTag("ai.workspace.list")
-            .performScrollToNode(hasTestTag("ai.dalalos.tools.readonly"))
-        composeRule.onNodeWithTag("ai.dalalos.tools.readonly")
-            .performScrollToNode(hasTestTag("ai.dalalos.tool.get_company_exposures"))
-        // A horizontally clipped chip can still expose a valid Compose click
-        // action after ScrollToNode; assert its enabled/selected semantics rather
-        // than requiring the entire long label to fit inside the viewport.
-        composeRule.onNodeWithTag("ai.dalalos.tool.get_company_exposures")
-            .assertIsEnabled().performClick()
-        composeRule.onNodeWithTag("ai.dalalos.tool.get_company_exposures").assertIsSelected()
+    @Test fun dalalosReadOnlyToolCanBeSelectedAndExecuted() {
+        configureDalalOsWithFakeKey()
+        discoverDalalOsTools()
+        enableDalalOsTool("get_company_exposures")
+        selectDalalOsReadOnlyTool("get_company_exposures")
+
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodesWithTag("ai.dalalos.arguments")
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        // The argument editor is conditionally added inside the DalalOS
-        // LazyColumn item after tool selection. Scroll the owning LazyColumn to
-        // that descendant, then wait for viewport visibility (node existence
-        // alone does not prove it can receive input).
         composeRule.onNodeWithTag("ai.workspace.list")
             .performScrollToNode(hasTestTag("ai.dalalos.arguments"))
-        composeRule.waitUntil(5_000) {
-            runCatching {
-                composeRule.onNodeWithTag("ai.dalalos.arguments").assertIsDisplayed()
-            }.isSuccess
-        }
-        composeRule.onNodeWithTag("ai.dalalos.arguments").performTextClearance()
-        composeRule.onNodeWithTag("ai.dalalos.arguments").performTextInput("{\"query\":\"RELIANCE\"}")
-        composeRule.onNodeWithTag("ai.dalalos.run").performClick()
+        composeRule.onNodeWithTag("ai.dalalos.arguments")
+            .performTextClearance().performTextInput("{\\"query\\":\\"RELIANCE\\"}")
+        composeRule.onNodeWithTag("ai.dalalos.run").assertIsEnabled().performClick()
         composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithText("get_company_exposures").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText("get_company_exposures")
+                .fetchSemanticsNodes().isNotEmpty()
         }
+    }
 
-        composeRule.onNodeWithTag("ai.dalalos.enable.get_filing_extract").performClick()
-        composeRule.onNodeWithTag("ai.dalalos.tool.get_filing_extract").performClick()
+    @Test fun dalalosProcessingToolRequiresPerCallQuotaConfirmation() {
+        configureDalalOsWithFakeKey()
+        discoverDalalOsTools()
+        enableDalalOsTool("get_filing_extract")
+        composeRule.onNodeWithTag("ai.dalalos.tool.get_filing_extract")
+            .performScrollTo().assertIsDisplayed().performClick()
         composeRule.onNodeWithTag("ai.dalalos.run").assertIsNotEnabled()
-        composeRule.onNodeWithTag("ai.dalalos.confirm.quota").performClick()
-        composeRule.onNodeWithTag("ai.dalalos.run").assertIsEnabled()
-        composeRule.onNodeWithTag("ai.dalalos.run").performClick()
+        composeRule.onNodeWithTag("ai.dalalos.confirm.quota")
+            .performScrollTo().assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("ai.dalalos.run").assertIsEnabled().performClick()
         composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithText("get_filing_extract").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText("get_filing_extract")
+                .fetchSemanticsNodes().isNotEmpty()
         }
     }
 
