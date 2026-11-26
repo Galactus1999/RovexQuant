@@ -174,3 +174,14 @@ These changes are preparation work only. They have not yet been proven by a new 
 After P2 was merged into the ground, the old P2 branch `feat/p2-indicator-integration` is now behind and has no unique commits against this staging branch. The P0 bounded-stream branch has only four commits / three files not already in the ground; those three files have now been ported. The other old P2 branches remain comparison-only unless a later file-level review identifies a genuinely unique correction.
 
 The AI research-history branch remains far behind and diverged (84 commits ahead of this ground but 447 behind it at the latest comparison). Its whole tree remains excluded. Since the earlier inventory, the current ground now also has Android repository/API/UI wiring for persistent AI run history and daily/monthly token-budget telemetry, plus the DalalOS research panel and the existing AI research/briefing panels. This does not mean the entire PR #27 feature set is integrated: 14 PR-only paths remain outside PR #38, including the optional official-bhavcopy adapter and permission tests, LiteLLM pricing data, build-toolchain scripts and workflow changes. Review those individually; do not merge PR #27 wholesale. PR #32 has no unique commits relative to this ground (123 commits behind) and is superseded by the P2.3 work already present.
+
+## Follow-up audit — 2026-11-26
+
+- Current authoritative main remains 80a619c91a8daf4c775c9940dbaeda1f64d1a030.
+- Current consolidation branch head at this checkpoint: a759963c5854131f3d3a3059622f0abc36c7a047.
+- GitHub compare reports the consolidation branch is 295 commits ahead and 0 behind main. This is a graph comparison, not a quality or merge-readiness verdict.
+- Source audit found that upstox_candles.resolve_nse_instrument_key aggregated index ambiguity only within the first matching alias and silently selected the first equity match. This contradicted the instrument-identity safety contract.
+- Commit 0bfdfd593782df38887517037f9575124993fc44 now aggregates matches across canonical aliases by unique instrument key and rejects ambiguous equity matches with HTTP 409; index ambiguity is also evaluated across aliases.
+- Commit a759963c5854131f3d3a3059622f0abc36c7a047 adds regression tests for ambiguous equity symbols and conflicting index aliases.
+- Validation status for these two commits: source/diff review only. No successful exact-head CI run or local test execution has been observed in this checkpoint. Do not mark the tests as passed until CI reports the exact head successful.
+- Official API contract cross-check: Upstox V3 historical and intraday candle endpoints support the implemented minutes, hours, and days units and the documented interval ranges. This confirms endpoint shape only; it does not establish live credentialed connectivity or actual market-data correctness.
