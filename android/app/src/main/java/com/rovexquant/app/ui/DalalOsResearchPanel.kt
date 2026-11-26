@@ -1,5 +1,7 @@
 package com.rovexquant.app.ui
 
+import android.os.Looper
+import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,12 +18,10 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -92,6 +92,7 @@ fun DalalOsResearchPanel(
         scope.launch {
             try {
                 val loaded = repository.fetchNseMcpTools(session, "dalalos")
+                Log.e("THREAD_AUDIT", "panel-repository-return thread=${Thread.currentThread().id}/${Thread.currentThread().name} main=${Looper.getMainLooper().isCurrentThread()}")
                 catalog = loaded.firstOrNull { it.server == "dalalos" }
                 if (catalog == null || catalog?.tools.isNullOrEmpty()) {
                     error = catalog?.failure ?: "No approved research tools were returned."
@@ -101,17 +102,12 @@ fun DalalOsResearchPanel(
             } catch (failure: Exception) {
                 error = failure.message ?: "DalalOS tool discovery failed."
             } finally {
+                Log.e("THREAD_AUDIT", "panel-loading-state-write thread=${Thread.currentThread().id}/${Thread.currentThread().name} main=${Looper.getMainLooper().isCurrentThread()}")
                 loading = false
             }
         }
     }
 
-    // LazyLayout prefetch composes this panel on AndroidPrefetchScheduler. Material3's
-    // ripple node installs a SnapshotStateObserver when attached; reusing that node
-    // across the prefetch and main UI threads can violate OwnerSnapshotObserver's
-    // single-thread layout/draw contract. Keep the workaround local to this panel:
-    // click/selection semantics remain enabled, while ripple drawing is suppressed.
-    CompositionLocalProvider(LocalRippleConfiguration provides null) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -369,5 +365,4 @@ fun DalalOsResearchPanel(
             color = Muted, fontSize = 9.sp, lineHeight = 14.sp, modifier = Modifier.padding(horizontal = 3.dp)
         )
         }
-    }
 }
