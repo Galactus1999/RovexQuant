@@ -541,30 +541,46 @@ class QuantDashboardRegressionTest {
     }
 
     @Test fun aiWorkspaceUsesConfiguredServerTaskRoute() {
+        fun checkpoint(stage: String) {
+            val runtime = Runtime.getRuntime()
+            val used = runtime.totalMemory() - runtime.freeMemory()
+            Log.i("AI_ROUTE_TEST", "$stage heapUsed=${used / (1024 * 1024)}MiB heapMax=${runtime.maxMemory() / (1024 * 1024)}MiB")
+        }
+
         waitForDashboard()
+        checkpoint("dashboard-ready")
         composeRule.onNodeWithText("Scan").performClick()
         composeRule.onNodeWithTag("scanner.list").performScrollToNode(hasText("Open AI data recovery"))
         composeRule.onNodeWithText("Open AI data recovery").performClick()
         composeRule.onNodeWithText("Quant Intelligence.").assertIsDisplayed()
+        checkpoint("workspace-open")
 
-        composeRule.onNodeWithTag("ai.workspace.list")
-            .performScrollToNode(hasTestTag("ai.task.auto"))
+        // Task routing is inside LazyColumn item 1 (the provider card). Jump to
+        // that item directly, then reveal the checkbox itself. Avoid scanning the
+        // entire workspace semantics tree across the large nested research panels.
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToIndex(1)
+        composeRule.onNodeWithTag("ai.task.auto").performScrollTo()
+        checkpoint("task-routing-visible")
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("ai.task.route").fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithTag("ai.task.auto").performClick()
+        checkpoint("task-routing-enabled")
         // The chat panel is LazyColumn item 7 (heading, provider, tools, briefing,
         // history, NSE MCP, DalalOS, chat). Jump by item index instead of
         // performScrollToNode's repeated viewport scan across large nested panels.
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToIndex(7)
         composeRule.onNodeWithTag("ai.chat.input").performScrollTo()
+        checkpoint("chat-visible")
         composeRule.onNodeWithTag("ai.chat.input").performTextInput("Review this supplied evidence using the research route.")
         composeRule.onNodeWithTag("ai.chat.send").performScrollTo()
         composeRule.onNodeWithTag("ai.chat.send").assertIsDisplayed().assertIsEnabled()
         composeRule.onNodeWithTag("ai.chat.send").performClick()
+        checkpoint("chat-sent")
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithText("Deterministic AI fixture response.").fetchSemanticsNodes().isNotEmpty()
         }
+        checkpoint("response-rendered")
     }
 
     @Test fun intelligenceCentreLoadsEventEvidenceAndSectorTransmission() {
