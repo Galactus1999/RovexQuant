@@ -2,6 +2,7 @@ package com.rovexquant.app
 
 import android.os.Looper
 import android.util.Log
+import kotlinx.coroutines.test.StandardTestDispatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
@@ -39,7 +40,9 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class QuantDashboardRegressionTest {
-    @get:Rule val composeRule = createAndroidComposeRule<QuantTestActivity>()
+    // Keep the v1 rule for Compose 1.7.6, but use its supported effectContext hook
+    // to avoid the eager UnconfinedTestDispatcher for UI coroutine continuations.
+    @get:Rule val composeRule = createAndroidComposeRule<QuantTestActivity>(StandardTestDispatcher())
 
     private fun waitForDashboard() {
         composeRule.waitUntil(10_000) {
