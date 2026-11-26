@@ -1,5 +1,7 @@
 package com.rovexquant.app
 
+import android.os.Looper
+import android.util.Log
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
@@ -77,6 +79,9 @@ class QuantDashboardRegressionTest {
                 .fetchSemanticsNodes().isNotEmpty() &&
                 composeRule.onAllNodesWithTag("ai.dalalos.enable.get_filing_extract")
                     .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.runOnIdle {
+            Log.e("THREAD_AUDIT", "compose-runOnIdle thread=${Thread.currentThread().id}/${Thread.currentThread().name} main=${Looper.getMainLooper().isCurrentThread()}")
         }
     }
 
