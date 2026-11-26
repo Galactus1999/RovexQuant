@@ -217,3 +217,39 @@ def test_upstox_v3_resolves_punctuated_financial_services_ex_bank_name(monkeypat
     assert asyncio.run(upstox_candles.resolve_nse_instrument_key(
         "NIFTY FINANCIAL SERVICES EX BANK"
     )) == "NSE_INDEX|Nifty Financial Services Ex-Bank"
+
+def test_upstox_v3_rejects_ambiguous_equity_symbol(monkeypatch):
+    monkeypatch.setattr(upstox_candles, "get_nse_equity_instruments", lambda: asyncio.sleep(0, result=[
+        {
+            "instrument_key": "NSE_EQ|INE002A01018",
+            "name": "ALPHA INDUSTRIES LIMITED",
+            "trading_symbol": "ALPHA",
+        },
+        {
+            "instrument_key": "NSE_EQ|INE003A01017",
+            "name": "ALPHA INDUSTRIES LIMITED - RECLASSIFIED",
+            "trading_symbol": "ALPHA",
+        },
+    ]))
+    with pytest.raises(upstox_candles.UpstoxCandleError, match="multiple current NSE instruments") as error:
+        asyncio.run(upstox_candles.resolve_nse_instrument_key("ALPHA"))
+    assert error.value.status_code == 409
+
+
+def test_upstox_v3_rejects_conflicting_index_alias_matches(monkeypatch):
+    monkeypatch.setattr(upstox_candles, "get_nse_index_instruments", lambda: asyncio.sleep(0, result=[
+        {
+            "instrument_key": "NSE_INDEX|Nifty Financial Services",
+            "name": "Nifty Financial Services",
+            "trading_symbol": "Nifty Financial Services",
+        },
+        {
+            "instrument_key": "NSE_INDEX|Nifty Fin Service",
+            "name": "Nifty Fin Service",
+            "trading_symbol": "Nifty Fin Service",
+        },
+    ]))
+    with pytest.raises(upstox_candles.UpstoxCandleError, match="multiple current NSE instruments") as error:
+        asyncio.run(upstox_candles.resolve_nse_instrument_key("NIFTY FINANCIAL SERVICES"))
+    assert error.value.status_code == 409
+
