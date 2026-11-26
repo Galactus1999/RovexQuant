@@ -24,6 +24,33 @@ def test_sqlite_vault_encrypts_and_round_trips_token(monkeypatch, tmp_path):
     assert token.encode() not in raw
 
 
+
+def test_sqlite_vault_purges_retired_dalalos_key_and_preserves_active_keys(monkeypatch, tmp_path):
+    configure_local_vault(monkeypatch, tmp_path)
+    upstox_token = "upstox-analytics-token-value-123456"
+    ai_key = "provider-api-key-secret-value-123456789"
+    vault.store_upstox_analytics_token(upstox_token)
+    vault.store_ai_provider_api_key("groq", ai_key)
+
+    with sqlite3.connect(tmp_path / "vault.sqlite3") as connection:
+        connection.execute(
+            "INSERT INTO provider_tokens(provider, encrypted_token, updated_at, expires_at) "
+            "VALUES (?, ?, ?, NULL)",
+            ("mcp:dalalos", b"legacy-encrypted-dalalos-key", 1),
+        )
+
+    # The next ordinary vault access runs the idempotent legacy-key cleanup.
+    assert vault.get_upstox_analytics_token() == upstox_token
+    assert vault.get_ai_provider_api_key("groq") == ai_key
+    with sqlite3.connect(tmp_path / "vault.sqlite3") as connection:
+        providers = {
+            row[0] for row in connection.execute(
+                "SELECT provider FROM provider_tokens"
+            ).fetchall()
+        }
+    assert providers == {"upstox", "ai:groq"}
+
+
 def test_sqlite_vault_replaces_existing_token(monkeypatch, tmp_path):
     configure_local_vault(monkeypatch, tmp_path)
     vault.store_upstox_analytics_token("first-token-value-123456789")
