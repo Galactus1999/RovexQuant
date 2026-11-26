@@ -92,7 +92,8 @@ class QuantDashboardRegressionTest {
             .performScrollToNode(hasTestTag("ai.dalalos.tools.readonly"))
         composeRule.onNodeWithTag("ai.dalalos.tools.readonly")
             .performScrollToNode(hasTestTag(chip))
-        composeRule.onNodeWithTag(chip).assertIsEnabled().performClick()
+        composeRule.onNodeWithTag(chip).assertIsDisplayed().assertIsEnabled().performClick()
+        composeRule.waitForIdle()
         composeRule.onNodeWithTag(chip).assertIsSelected()
     }
 
@@ -505,6 +506,8 @@ class QuantDashboardRegressionTest {
         configureDalalOsWithFakeKey()
         discoverDalalOsTools()
         enableDalalOsTool("get_filing_extract")
+        composeRule.onNodeWithTag("ai.workspace.list")
+            .performScrollToNode(hasTestTag("ai.dalalos.tools.processing"))
         composeRule.onNodeWithTag("ai.dalalos.tools.processing")
             .performScrollToNode(hasTestTag("ai.dalalos.tool.get_filing_extract"))
         composeRule.onNodeWithTag("ai.dalalos.tool.get_filing_extract")
