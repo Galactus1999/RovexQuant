@@ -74,7 +74,9 @@ class QuantDashboardRegressionTest {
     private fun configureDalalOsWithFakeKey() {
         openDalalOsPanel()
         composeRule.onNodeWithTag("ai.dalalos.key").performTextInput("d".repeat(32))
-        composeRule.onNodeWithTag("ai.dalalos.terms").performScrollTo().performClick()
+        composeRule.onNodeWithTag("ai.dalalos.terms")
+            .performScrollTo()
+            .performSemanticsAction(SemanticsActions.OnClick) { onClick -> onClick() }
         composeRule.onNodeWithTag("ai.dalalos.terms").assertIsOn()
         composeRule.onNodeWithTag("ai.dalalos.save")
             .performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
