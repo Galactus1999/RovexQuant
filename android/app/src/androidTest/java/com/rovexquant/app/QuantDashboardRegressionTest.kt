@@ -26,6 +26,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performTextClearance
@@ -552,10 +553,13 @@ class QuantDashboardRegressionTest {
             composeRule.onAllNodesWithTag("ai.task.route").fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithTag("ai.task.auto").performClick()
-        composeRule.onNodeWithTag("ai.workspace.list")
-            .performScrollToNode(hasTestTag("ai.chat.input"))
+        // The chat panel is LazyColumn item 7 (heading, provider, tools, briefing,
+        // history, NSE MCP, DalalOS, chat). Jump by item index instead of
+        // performScrollToNode's repeated viewport scan across large nested panels.
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToIndex(7)
+        composeRule.onNodeWithTag("ai.chat.input").performScrollTo()
         composeRule.onNodeWithTag("ai.chat.input").performTextInput("Review this supplied evidence using the research route.")
-        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.chat.send"))
+        composeRule.onNodeWithTag("ai.chat.send").performScrollTo()
         composeRule.onNodeWithTag("ai.chat.send").assertIsDisplayed().assertIsEnabled()
         composeRule.onNodeWithTag("ai.chat.send").performClick()
         composeRule.waitUntil(10_000) {
