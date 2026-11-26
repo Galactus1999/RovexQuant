@@ -1,5 +1,9 @@
 package com.rovexquant.app
 
+import android.os.Looper
+import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.rovexquant.app.data.local.QuantSessionStore
@@ -112,16 +116,19 @@ class FakeQuantRepository(
         MarketEquityInstrument("NSE_EQ|INE009A01021", "INFOSYS LIMITED", "INFY", "INE009A01021")
     )
 
-    override suspend fun fetchNseMcpTools(session: QuantSession, server: String): List<NseMcpCatalog> {
-        val servers = if (server == "both") listOf("bhavcopy", "cmmkt", "dalalos") else listOf(server)
-        return servers.map { serverName ->
-            val tools = if (serverName == "dalalos") listOf(
-                NseMcpTool("get_company_exposures", "Company exposure fixture.", JSONObject("""{"type":"object","properties":{"query":{"type":"string"}}}"""), true),
-                NseMcpTool("get_filing_extract", "Filing processing fixture.", JSONObject("""{"type":"object","properties":{"query":{"type":"string"},"news_id":{"type":"string"}}}"""), false, true, false)
-            ) else emptyList()
-            NseMcpCatalog(serverName, tools, if (serverName == "dalalos" && !dalalOsConfigured) "DalalOS API key is not configured." else null)
+    override suspend fun fetchNseMcpTools(session: QuantSession, server: String): List<NseMcpCatalog> =
+        withContext(Dispatchers.IO) {
+            val servers = if (server == "both") listOf("bhavcopy", "cmmkt", "dalalos") else listOf(server)
+            val catalogs = servers.map { serverName ->
+                val tools = if (serverName == "dalalos") listOf(
+                    NseMcpTool("get_company_exposures", "Company exposure fixture.", JSONObject("""{"type":"object","properties":{"query":{"type":"string"}}}"""), true),
+                    NseMcpTool("get_filing_extract", "Filing processing fixture.", JSONObject("""{"type":"object","properties":{"query":{"type":"string"},"news_id":{"type":"string"}}}"""), false, true, false)
+                ) else emptyList()
+                NseMcpCatalog(serverName, tools, if (serverName == "dalalos" && !dalalOsConfigured) "DalalOS API key is not configured." else null)
+            }
+            Log.e("THREAD_AUDIT", "fake-repository-io-complete thread=${Thread.currentThread().id}/${Thread.currentThread().name} main=${Looper.getMainLooper().isCurrentThread()}")
+            catalogs
         }
-    }
 
     override suspend fun saveDalalOsApiKey(session: QuantSession, apiKey: String) {
         require(apiKey.length in 20..4096)
