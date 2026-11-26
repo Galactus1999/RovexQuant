@@ -184,10 +184,9 @@ async def app_research_eod_status():
 
 
 class NseMcpToolCallRequest(BaseModel):
-    server: Literal["bhavcopy", "cmmkt", "dalalos"]
+    server: Literal["bhavcopy", "cmmkt"]
     tool: str = Field(min_length=1, max_length=128)
     arguments: dict[str, Any] = Field(default_factory=dict)
-    confirm_non_read_only: bool = False
 
     @model_validator(mode="after")
     def bound_arguments(self):
@@ -209,19 +208,17 @@ def app_nse_mcp_providers():
     "/api/v1/app/research/nse-mcp/tools",
     dependencies=[Depends(require_app_session)],
 )
-async def app_nse_mcp_tools(server: Literal["bhavcopy", "cmmkt", "dalalos", "both"] = "both"):
+async def app_nse_mcp_tools(server: Literal["bhavcopy", "cmmkt", "both"] = "both"):
     try:
         catalog, failures = await nse_mcp_service.discover_tools(server)
         if not catalog:
-            failure = next(iter(failures.values()), "Research MCP tool discovery failed")
-            status_code = 409 if "API key is not configured" in failure else 502
-            raise HTTPException(status_code=status_code, detail=failure)
+            raise HTTPException(status_code=502, detail="NSE MCP tool discovery failed")
         return {
-            "provider": "research_mcp_registry",
+            "provider": "official_nse_mcp",
             "catalog": catalog,
             "failures": failures,
             "received_at": datetime.now(timezone.utc),
-            "usage": "Private research; DalalOS plan quotas and source attribution apply; no raw data retention or AI training",
+            "usage": "Private educational research only; no raw data retention or AI training",
         }
     except NseMcpError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
@@ -234,25 +231,13 @@ async def app_nse_mcp_tools(server: Literal["bhavcopy", "cmmkt", "dalalos", "bot
 async def app_nse_mcp_call(request: NseMcpToolCallRequest):
     try:
         result = await nse_mcp_service.invoke_tool(
-            request.server,
-            request.tool,
-            request.arguments,
-            confirm_non_read_only=request.confirm_non_read_only,
+            request.server, request.tool, request.arguments
         )
-        mode = (
-            "SOURCE_ATTRIBUTED_RESEARCH" if request.server == "dalalos"
-            else "END_OF_DAY" if request.server == "bhavcopy"
-            else "DELAYED"
-        )
+        mode = "END_OF_DAY" if request.server == "bhavcopy" else "DELAYED"
         return {
-            "provider": "dalalos_mcp" if request.server == "dalalos" else f"nse_mcp_{request.server}",
+            "provider": f"nse_mcp_{request.server}",
             "data_mode": mode,
-            "expected_delay": (
-                "Dataset-specific; inspect as_of, cached_at and stale fields"
-                if request.server == "dalalos"
-                else None if mode == "END_OF_DAY"
-                else "approximately 1–3 minutes"
-            ),
+            "expected_delay": None if mode == "END_OF_DAY" else "approximately 1–3 minutes",
             "received_at": datetime.now(timezone.utc),
             "source_timestamp": extract_source_timestamp(result),
             "source_timestamp_note": "Only an explicitly supplied source timestamp is reported; retrieval time is not a market timestamp.",

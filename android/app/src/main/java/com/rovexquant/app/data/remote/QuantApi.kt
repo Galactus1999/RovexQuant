@@ -111,7 +111,7 @@ object QuantApi {
     }
 
     fun fetchNseMcpTools(session: QuantSession, server: String = "both"): List<NseMcpCatalog> {
-        require(server in setOf("bhavcopy", "cmmkt", "dalalos", "both")) { "Invalid research MCP server." }
+        require(server in setOf("bhavcopy", "cmmkt", "both")) { "Invalid NSE MCP server." }
         val request = Request.Builder()
             .url("${session.baseUrl}/api/v1/app/research/nse-mcp/tools?server=$server")
             .header("Authorization", "Bearer ${session.accessToken}")
@@ -127,7 +127,7 @@ object QuantApi {
             val catalog = responseJson.optJSONObject("catalog")
                 ?: throw IllegalStateException("NSE MCP returned no tool catalogue.")
             val failures = responseJson.optJSONObject("failures")
-            val requestedServers = if (server == "both") listOf("bhavcopy", "cmmkt", "dalalos") else listOf(server)
+            val requestedServers = if (server == "both") listOf("bhavcopy", "cmmkt") else listOf(server)
             val discovered = buildList {
                 for (serverName in requestedServers) {
                     val records = catalog.optJSONArray(serverName)
@@ -159,9 +159,8 @@ object QuantApi {
         server: String,
         tool: String,
         argumentsJson: String,
-        confirmNonReadOnly: Boolean = false
     ): NseMcpResult {
-        require(server in setOf("bhavcopy", "cmmkt", "dalalos")) { "Invalid research MCP server." }
+        require(server in setOf("bhavcopy", "cmmkt")) { "Invalid NSE MCP server." }
         require(argumentsJson.toByteArray(Charsets.UTF_8).size <= 32 * 1024) { "Arguments exceed 32 KB." }
         val arguments = try { JSONObject(argumentsJson) } catch (_: Exception) {
             throw IllegalArgumentException("Arguments must be a valid JSON object.")
@@ -170,7 +169,6 @@ object QuantApi {
             .put("server", server)
             .put("tool", tool)
             .put("arguments", arguments)
-            .put("confirm_non_read_only", confirmNonReadOnly)
         val request = Request.Builder()
             .url("${session.baseUrl}/api/v1/app/research/nse-mcp/call")
             .header("Authorization", "Bearer ${session.accessToken}")
@@ -1020,45 +1018,6 @@ object QuantApi {
         masterHttp.newCall(request).execute().use { response ->
             val text = response.body?.string().orEmpty()
             if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
-        }
-    }
-
-    fun saveDalalOsApiKey(session: QuantSession, apiKey: String) {
-        require(apiKey.length in 20..4096) { "DalalOS API key length is invalid." }
-        val body = JSONObject().put("api_key", apiKey)
-        val request = Request.Builder()
-            .url("${session.baseUrl}/api/v1/app/integrations/research/dalalos/api-key")
-            .header("Authorization", "Bearer ${session.accessToken}")
-            .put(body.toString().toRequestBody("application/json".toMediaType()))
-            .build()
-        masterHttp.newCall(request).execute().use { response ->
-            val text = response.body?.string().orEmpty()
-            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
-        }
-    }
-
-    fun deleteDalalOsApiKey(session: QuantSession) {
-        val request = Request.Builder()
-            .url("${session.baseUrl}/api/v1/app/integrations/research/dalalos/api-key")
-            .header("Authorization", "Bearer ${session.accessToken}")
-            .delete()
-            .build()
-        masterHttp.newCall(request).execute().use { response ->
-            val text = response.body?.string().orEmpty()
-            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
-        }
-    }
-
-    fun fetchDalalOsConfigured(session: QuantSession): Boolean {
-        val request = Request.Builder()
-            .url("${session.baseUrl}/api/v1/app/integrations/research/dalalos/status")
-            .header("Authorization", "Bearer ${session.accessToken}")
-            .get()
-            .build()
-        masterHttp.newCall(request).execute().use { response ->
-            val text = response.body?.string().orEmpty()
-            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
-            return JSONObject(text).optBoolean("configured", false)
         }
     }
 

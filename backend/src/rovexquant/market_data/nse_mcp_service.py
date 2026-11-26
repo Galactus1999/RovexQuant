@@ -9,39 +9,21 @@ from rovexquant.market_data.nse_mcp import (
     safe_tool_catalog,
     extract_source_timestamp as extract_source_timestamp,
 )
-from rovexquant.market_data.upstox_credentials import get_research_connector_api_key
 
 
 def provider_catalog() -> list[dict[str, Any]]:
-    return provider_status() + [{
-        "provider_id": "dalalos_mcp",
-        "configured": get_research_connector_api_key("dalalos") is not None,
-        "endpoint": "https://mcp.dalalos.in/mcp",
-        "mode": "SOURCE_ATTRIBUTED_RESEARCH",
-        "expected_delay": "Dataset-specific; check as_of, cached_at and stale fields",
-        "connection_status": "not_checked",
-        "authentication": "Owner-managed API key stored in the existing encrypted vault",
-        "retention": "No raw MCP response persistence by RovexQuant",
-        "usage": "Personal research; respect DalalOS plan quotas and source attribution",
-    }]
+    return provider_status()
 
 
 async def discover_tools(
-    server: Literal["bhavcopy", "cmmkt", "dalalos", "both"],
+    server: Literal["bhavcopy", "cmmkt", "both"],
 ) -> tuple[dict[str, list[dict[str, Any]]], dict[str, str]]:
-    selected = ["bhavcopy", "cmmkt", "dalalos"] if server == "both" else [server]
+    selected = ["bhavcopy", "cmmkt"] if server == "both" else [server]
 
     async def discover(server_name: str):
         try:
-            if server_name == "dalalos":
-                api_key = get_research_connector_api_key("dalalos")
-                if not api_key:
-                    return server_name, None, "DalalOS API key is not configured"
-                client_context = NseMcpClient(server_name, api_key=api_key)
-            else:
-                client_context = NseMcpClient(server_name)
-            async with client_context as client:
-                return server_name, safe_tool_catalog(await client.list_tools(), server_name), None
+            async with NseMcpClient(server_name) as client:
+                return server_name, safe_tool_catalog(await client.list_tools()), None
         except NseMcpError as error:
             return server_name, None, str(error)
 
@@ -57,21 +39,7 @@ async def discover_tools(
 
 
 async def invoke_tool(
-    server: Literal["bhavcopy", "cmmkt", "dalalos"],
-    tool: str,
-    arguments: dict[str, Any],
-    *,
-    confirm_non_read_only: bool = False,
+    server: Literal["bhavcopy", "cmmkt"], tool: str, arguments: dict[str, Any]
 ) -> dict[str, Any]:
-    if server == "dalalos":
-        client_context = NseMcpClient(
-            server, api_key=get_research_connector_api_key("dalalos")
-        )
-    else:
-        client_context = NseMcpClient(server)
-    async with client_context as client:
-        if server == "dalalos":
-            return await client.call_tool(
-                tool, arguments, confirm_non_read_only=confirm_non_read_only
-            )
+    async with NseMcpClient(server) as client:
         return await client.call_tool(tool, arguments)

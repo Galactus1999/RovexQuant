@@ -47,9 +47,6 @@ interface QuantDataRepository {
     suspend fun saveCachedIndexInstruments(instruments: List<MarketIndexInstrument>) = Unit
     suspend fun saveCachedEquityInstruments(instruments: List<MarketEquityInstrument>) = Unit
     suspend fun fetchNseMcpTools(session: QuantSession, server: String): List<NseMcpCatalog>
-    suspend fun saveDalalOsApiKey(session: QuantSession, apiKey: String)
-    suspend fun deleteDalalOsApiKey(session: QuantSession)
-    suspend fun fetchDalalOsConfigured(session: QuantSession): Boolean
     suspend fun fetchAiProviders(session: QuantSession): List<AiProvider>
     suspend fun fetchAiTaskRoutes(session: QuantSession): Map<String, AiTaskRoute>
     suspend fun fetchAiResearchRuns(session: QuantSession, limit: Int = 20): List<AiResearchRun>
@@ -116,7 +113,6 @@ interface QuantDataRepository {
         server: String,
         tool: String,
         argumentsJson: String,
-        confirmNonReadOnly: Boolean = false
     ): NseMcpResult
     fun createMarketStream(
         session: QuantSession,

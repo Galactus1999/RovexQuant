@@ -571,16 +571,6 @@ fun AiWorkspaceScreen(
             }
         }
         item {
-            DalalOsResearchPanel(
-                session = session,
-                repository = repository,
-                onAttachToAi = { context ->
-                    chatInput = (context + "\n\n" + chatInput).take(10000)
-                    chatError = null
-                }
-            )
-        }
-        item {
             TerminalCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Eyebrow("AI conversation")
