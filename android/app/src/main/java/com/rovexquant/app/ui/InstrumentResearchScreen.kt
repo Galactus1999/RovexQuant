@@ -719,7 +719,8 @@ private fun InstrumentOverviewPanel(
                 Text(
                     "Not available from the validated OHLC provider. These fields require an independently verified, point-in-time index constituent feed and are not inferred from index candles.",
                     color = Muted,
-                    fontSize = 10.sp
+                    fontSize = 10.sp,
+                    modifier = Modifier.testTag("instrument.overview.index.breadth.limitation")
                 )
             }
         } else {
