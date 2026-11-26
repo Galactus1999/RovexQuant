@@ -39,6 +39,8 @@ import java.time.Instant
 import java.time.LocalDate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import android.os.Looper
+import android.util.Log
 import kotlinx.coroutines.withContext
 
 /** Coordinates remote and local data sources; presentation code never calls transport directly. */
@@ -81,8 +83,11 @@ class QuantRepository(context: Context) : QuantDataRepository {
     override suspend fun saveCachedEquityInstruments(instruments: List<MarketEquityInstrument>) =
         withContext(Dispatchers.IO) { InstrumentMasterStore.saveEquities(appContext, instruments) }
 
-    override suspend fun fetchNseMcpTools(session: QuantSession, server: String): List<NseMcpCatalog> =
-        withContext(Dispatchers.IO) { QuantApi.fetchNseMcpTools(session, server) }
+    override suspend fun fetchNseMcpTools(session: QuantSession, server: String): List<NseMcpCatalog> {
+        val catalogs = withContext(Dispatchers.IO) { QuantApi.fetchNseMcpTools(session, server) }
+        Log.e("THREAD_AUDIT", "repository-return thread=${Thread.currentThread().id}/${Thread.currentThread().name} main=${Looper.getMainLooper().isCurrentThread()}")
+        return catalogs
+    }
 
     override suspend fun saveDalalOsApiKey(session: QuantSession, apiKey: String) =
         withContext(Dispatchers.IO) { QuantApi.saveDalalOsApiKey(session, apiKey) }
