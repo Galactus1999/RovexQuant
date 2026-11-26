@@ -263,7 +263,7 @@ fun DalalOsResearchPanel(
                 }
                 if (enabledProcessing.isNotEmpty()) {
                     Text("PROCESSING / QUOTA TOOLS · PER-CALL CONFIRMATION", color = Gold, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag("ai.dalalos.tools.processing"), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         enabledProcessing.forEach { tool ->
                             FilterChip(
                                 selected = selectedTool?.name == tool.name,
