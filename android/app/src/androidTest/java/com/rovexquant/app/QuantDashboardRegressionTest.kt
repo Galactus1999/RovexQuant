@@ -2,8 +2,6 @@ package com.rovexquant.app
 
 import android.os.Looper
 import android.util.Log
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.test.StandardTestDispatcher
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
@@ -41,12 +39,15 @@ import org.junit.runner.RunWith
  * Workspace tests start from a deterministic authenticated fixture. They do not
  * exercise the login flow; authentication has its own test host and test class.
  */
-@OptIn(ExperimentalCoroutinesApi::class, ExperimentalTestApi::class)
+@OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
 class QuantDashboardRegressionTest {
-    // Keep the v1 rule for Compose 1.7.6, but use its supported effectContext hook
-    // to avoid the eager UnconfinedTestDispatcher for UI coroutine continuations.
-    @get:Rule val composeRule = createAndroidComposeRule<QuantTestActivity>(StandardTestDispatcher())
+    // Compose 1.7.6's v1 Android rule intentionally uses UnconfinedTestDispatcher.
+    // Do not inject StandardTestDispatcher here: composition effects such as
+    // repeatOnLifecycle must add/remove LifecycleRegistry observers on Android's
+    // main thread. The injected dispatcher resumes lifecycle cleanup on the test
+    // worker and throws "removeObserver must be called on the main thread".
+    @get:Rule val composeRule = createAndroidComposeRule<QuantTestActivity>()
 
     private fun waitForDashboard() {
         composeRule.waitUntil(10_000) {
