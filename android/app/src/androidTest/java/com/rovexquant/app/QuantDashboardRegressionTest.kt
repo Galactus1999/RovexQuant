@@ -259,15 +259,12 @@ class QuantDashboardRegressionTest {
         }
 
         openInstrumentChart("NIFTY 50")
-        // Assert the actual current limitation copy. Scroll the owning vertical
-        // container to the text; performScrollTo on a nested leaf was not reliable
-        // when the overview panel was only partially composed in the viewport.
-        composeRule.onNodeWithTag("instrument.research.screen")
-            .performScrollToNode(hasText("Not available from the validated OHLC provider.", substring = true))
-        composeRule.onNodeWithText(
-            "Not available from the validated OHLC provider.",
-            substring = true
-        ).assertIsDisplayed()
+        // This disclaimer is rendered inside the index-only breadth card.
+        // Scroll the actual leaf node so Compose resolves its nearest vertical
+        // scroll parent and computes visibility from the leaf's measured bounds.
+        composeRule.onNodeWithTag("instrument.overview.index.breadth.limitation")
+            .performScrollTo()
+            .assertIsDisplayed()
         composeRule.onNodeWithText("← Back to Pulse").performClick()
         openInstrumentChart("NIFTY BANK")
     }
@@ -455,6 +452,11 @@ class QuantDashboardRegressionTest {
             composeRule.onAllNodesWithTag("ai.dalalos.tools.readonly")
                 .fetchSemanticsNodes().isNotEmpty()
         }
+        // The connector lives inside an item of the workspace LazyColumn,
+        // and its tool chips have a second, horizontal scroll viewport. Reveal
+        // the owning item first; then reveal the chip inside its own row.
+        composeRule.onNodeWithTag("ai.workspace.list")
+            .performScrollToNode(hasTestTag("ai.dalalos.tools.readonly"))
         composeRule.onNodeWithTag("ai.dalalos.tools.readonly")
             .performScrollToNode(hasTestTag("ai.dalalos.tool.get_company_exposures"))
         composeRule.onNodeWithTag("ai.dalalos.tool.get_company_exposures")
