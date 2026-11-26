@@ -461,8 +461,12 @@ class QuantDashboardRegressionTest {
             .performScrollToNode(hasTestTag("ai.dalalos.tools.readonly"))
         composeRule.onNodeWithTag("ai.dalalos.tools.readonly")
             .performScrollToNode(hasTestTag("ai.dalalos.tool.get_company_exposures"))
+        // A horizontally clipped chip can still expose a valid Compose click
+        // action after ScrollToNode; assert its enabled/selected semantics rather
+        // than requiring the entire long label to fit inside the viewport.
         composeRule.onNodeWithTag("ai.dalalos.tool.get_company_exposures")
-            .assertIsDisplayed().performClick()
+            .assertIsEnabled().performClick()
+        composeRule.onNodeWithTag("ai.dalalos.tool.get_company_exposures").assertIsSelected()
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodesWithTag("ai.dalalos.arguments")
                 .fetchSemanticsNodes().isNotEmpty()
