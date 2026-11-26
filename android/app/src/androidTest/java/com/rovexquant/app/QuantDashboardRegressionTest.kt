@@ -42,11 +42,13 @@ import org.junit.runner.RunWith
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
 class QuantDashboardRegressionTest {
-    // Compose 1.7.6's v1 Android rule intentionally uses UnconfinedTestDispatcher.
-    // Do not inject StandardTestDispatcher here: composition effects such as
-    // repeatOnLifecycle must add/remove LifecycleRegistry observers on Android's
-    // main thread. The injected dispatcher resumes lifecycle cleanup on the test
-    // worker and throws "removeObserver must be called on the main thread".
+    // Compose 1.7.6's v1 Android test environment creates its internal TestScope
+    // from this rule's effect dispatcher, then drains that scope with runTest during
+    // teardown. A supplied StandardTestDispatcher queues repeatOnLifecycle cleanup
+    // until that drain; it is then resumed on the instrumentation thread, where
+    // LifecycleRegistry.removeObserver is forbidden. Keep the v1 default
+    // UnconfinedTestDispatcher so cleanup resumes inline on the main-thread
+    // lifecycle transition.
     @get:Rule val composeRule = createAndroidComposeRule<QuantTestActivity>()
 
     private fun waitForDashboard() {
@@ -58,12 +60,14 @@ class QuantDashboardRegressionTest {
     private fun openDalalOsPanel() {
         waitForDashboard()
         composeRule.onNodeWithText("Scan").performClick()
-        composeRule.onNodeWithTag("scanner.list")
-            .performScrollToNode(hasText("Open AI data recovery"))
-        composeRule.onNodeWithText("Open AI data recovery").performClick()
+        // The recovery card is fixed at scanner item 8. Jump directly instead
+        // of repeatedly scanning the lazy semantics tree.
+        composeRule.onNodeWithTag("scanner.list").performScrollToIndex(8)
+        composeRule.onNodeWithTag("scanner.ai.recovery").performScrollTo().performClick()
         composeRule.onNodeWithText("Quant Intelligence.").assertIsDisplayed()
-        composeRule.onNodeWithTag("ai.workspace.list")
-            .performScrollToNode(hasTestTag("ai.dalalos.panel"))
+        // DalalOS is fixed at AI workspace item 6 (the chat panel is item 7).
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToIndex(6)
+        composeRule.onNodeWithTag("ai.dalalos.panel").performScrollTo()
     }
 
     /** Uses only the deterministic fake repository; never a real provider credential. */
