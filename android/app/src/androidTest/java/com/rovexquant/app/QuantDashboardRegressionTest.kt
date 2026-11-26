@@ -88,7 +88,7 @@ class QuantDashboardRegressionTest {
 
     private fun selectDalalOsReadOnlyTool(toolName: String) {
         val chip = "ai.dalalos.tool.$toolName"
-        composeRule.onNodeWithTag("ai.workspace.list")
+        composeRule.onNodeWithTag("ai.dalalos.panel")
             .performScrollToNode(hasTestTag("ai.dalalos.tools.readonly"))
         composeRule.onNodeWithTag("ai.dalalos.tools.readonly")
             .performScrollToNode(hasTestTag(chip))
@@ -490,11 +490,15 @@ class QuantDashboardRegressionTest {
             composeRule.onAllNodesWithTag("ai.dalalos.arguments")
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithTag("ai.workspace.list")
+        composeRule.onNodeWithTag("ai.dalalos.panel")
             .performScrollToNode(hasTestTag("ai.dalalos.arguments"))
         val argumentsNode = composeRule.onNodeWithTag("ai.dalalos.arguments")
         argumentsNode.performTextClearance()
         argumentsNode.performTextInput("""{"query":"RELIANCE"}""")
+        composeRule.onNodeWithTag("ai.dalalos.panel")
+            .performScrollToNode(hasTestTag("ai.dalalos.run"))
+        composeRule.onNodeWithTag("ai.dalalos.panel")
+            .performScrollToNode(hasTestTag("ai.dalalos.run"))
         composeRule.onNodeWithTag("ai.dalalos.run").assertIsEnabled().performClick()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithText("get_company_exposures")
@@ -506,14 +510,14 @@ class QuantDashboardRegressionTest {
         configureDalalOsWithFakeKey()
         discoverDalalOsTools()
         enableDalalOsTool("get_filing_extract")
-        composeRule.onNodeWithTag("ai.workspace.list")
+        composeRule.onNodeWithTag("ai.dalalos.panel")
             .performScrollToNode(hasTestTag("ai.dalalos.tools.processing"))
         composeRule.onNodeWithTag("ai.dalalos.tools.processing")
             .performScrollToNode(hasTestTag("ai.dalalos.tool.get_filing_extract"))
         composeRule.onNodeWithTag("ai.dalalos.tool.get_filing_extract")
             .assertIsDisplayed().assertIsEnabled().performClick()
         composeRule.onNodeWithTag("ai.dalalos.run").assertIsNotEnabled()
-        composeRule.onNodeWithTag("ai.workspace.list")
+        composeRule.onNodeWithTag("ai.dalalos.panel")
             .performScrollToNode(hasTestTag("ai.dalalos.confirm.quota"))
         composeRule.onNodeWithTag("ai.dalalos.confirm.quota")
             .assertIsDisplayed().performClick()
