@@ -29,6 +29,7 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -93,6 +94,35 @@ class QuantDashboardRegressionTest {
                 activity.fakeRepository.marketIngestionRequestCount > initialIngestionRequests
         }
         composeRule.onAllNodesWithTag("quant.diagnostic.drawer").assertCountEquals(0)
+    }
+
+    @Test fun visualStrategyPlaygroundCallsEodResearchAndPeekOpensCopilot() {
+        waitForDashboard()
+        val activity = composeRule.activity
+        val initialStrategyRequests = activity.fakeRepository.strategyBriefRequestCount
+        val initialChatRequests = activity.fakeRepository.aiChatRequestCount
+
+        composeRule.onNodeWithTag("market.pulse.list")
+            .performScrollToNode(hasTestTag("strategy.run"))
+        composeRule.onNodeWithText("Ready to analyze Swing · Donchian breakout · RSI < 30 on RELIANCE")
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("strategy.run").performClick()
+        composeRule.waitUntil(10_000) {
+            activity.fakeRepository.strategyBriefRequestCount > initialStrategyRequests &&
+                composeRule.onAllNodesWithTag("strategy.metric.rsi.14").fetchSemanticsNodes().isNotEmpty()
+        }
+        assertTrue(activity.fakeRepository.lastStrategySymbol == "RELIANCE")
+        assertTrue(activity.fakeRepository.lastStrategyContext?.contains("User-selected planned risk budget") == true)
+
+        composeRule.onNodeWithTag("strategy.metric.rsi.14").performTouchInput { longClick() }
+        composeRule.onNodeWithTag("strategy.metric.peek").assertIsDisplayed()
+        composeRule.onNodeWithTag("strategy.metric.ask.copilot").performClick()
+        composeRule.onNodeWithTag("copilot.input").assertIsDisplayed()
+        composeRule.onNodeWithTag("copilot.send").performClick()
+        composeRule.waitUntil(10_000) {
+            activity.fakeRepository.aiChatRequestCount > initialChatRequests &&
+                composeRule.onAllNodesWithText("Deterministic AI fixture response.").fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     @Test fun appStartsWithQuantMarketPulseAndHonestOfflineState() {
