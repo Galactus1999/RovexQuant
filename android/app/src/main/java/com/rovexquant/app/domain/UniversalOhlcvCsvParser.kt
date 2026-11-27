@@ -78,7 +78,7 @@ object UniversalOhlcvCsvParser {
         val allowedSeries = equitySeries[market] ?: throw IllegalArgumentException("Exchange must be NSE or BSE")
         val table = readTable(content)
         val columns = columns(table.headers)
-        val symbolIndex = columns.first("tickersymbol", "symbol", "tradingsymbol")
+        val symbolIndex = columns.first("tckrsymb", "tickersymbol", "symbol", "tradingsymbol")
         val seriesIndex = columns.first("sctysrs", "series", "securityseries")
         if (symbolIndex < 0 || seriesIndex < 0) return null
 
