@@ -5,7 +5,6 @@ import com.rovexquant.app.data.model.MarketHistoryTarget
 import com.rovexquant.app.data.repository.QuantDataRepository
 import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.domain.InstrumentCatalog
-import com.rovexquant.app.domain.InstrumentIdentity
 import com.rovexquant.app.domain.InstrumentType
 import com.rovexquant.app.domain.OhlcvBar
 import com.rovexquant.app.domain.OhlcvInterval
