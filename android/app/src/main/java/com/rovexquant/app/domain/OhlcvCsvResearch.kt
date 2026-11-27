@@ -12,7 +12,7 @@ data class OhlcvResearchSummary(
 
 object OhlcvCsvResearch {
     const val STORAGE_FILE_NAME = "quant_local_research.csv"
-    /** Strict offline CSV import. Timestamps must be ISO-8601 with an explicit UTC offset. */
+    /** Format-tolerant OHLCV import with deterministic daily/intraday analysis. */
     fun parse(content: String, maxRows: Int = 100_000): List<OhlcvBar> =
         UniversalOhlcvCsvParser.parse(content, maxRows = maxRows, volumeRequired = true)
 
@@ -24,7 +24,7 @@ object OhlcvCsvResearch {
         return byInstant.values.toList()
     }
 
-    /** Serialize validated bars into the same strict local CSV format used by the scanner. */
+    /** Serialize validated bars into a canonical comma-separated OHLCV export. */
     fun toCsv(bars: List<OhlcvBar>): String {
         require(bars.isNotEmpty()) { "No OHLCV bars to save" }
         val ordered = bars.sortedBy { it.timestamp }
@@ -90,23 +90,5 @@ object OhlcvCsvResearch {
         }
     }
 
-    private fun parseRecord(line: String): List<String> {
-        val fields = ArrayList<String>()
-        val field = StringBuilder()
-        var quoted = false
-        var index = 0
-        while (index < line.length) {
-            val char = line[index]
-            when {
-                char == '"' && quoted && index + 1 < line.length && line[index + 1] == '"' -> { field.append('"'); index++ }
-                char == '"' -> quoted = !quoted
-                char == ',' && !quoted -> { fields += field.toString(); field.setLength(0) }
-                else -> field.append(char)
-            }
-            index++
-        }
-        require(!quoted) { "CSV contains an unterminated quoted field" }
-        fields += field.toString()
-        return fields
-    }
+
 }
