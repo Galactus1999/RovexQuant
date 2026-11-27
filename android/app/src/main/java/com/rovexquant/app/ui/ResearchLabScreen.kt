@@ -114,13 +114,27 @@ fun ResearchLabScreen(
                 val loaded = withContext(Dispatchers.IO) {
                     val csv = context.contentResolver.openInputStream(uri)?.use { it.readUtf8Limited() }
                         ?: throw IllegalArgumentException("Could not open the selected file")
-                    val bars = OhlcvCsvResearch.parse(csv)
-                    // Keep manual research imports isolated from every typed instrument cache.
-                    TejHqOhlcvStore.save(context, bars)
-                    OhlcvCsvResearch.summarize(bars)
+                    val sourceName = uri.lastPathSegment?.substringAfterLast('/') ?: "Imported CSV"
+                    val exchangeDatasets = ResearchCsvFolderImporter.importExchangeBhavcopy(
+                        context, sourceName, csv
+                    )
+                    if (exchangeDatasets != null) {
+                        val first = exchangeDatasets.firstOrNull()
+                            ?: throw IllegalArgumentException("Exchange Bhavcopy contained no importable instruments.")
+                        val bars = ResearchCsvDatasetStore.load(context, first)
+                            ?: throw IllegalStateException("Imported exchange dataset could not be reopened.")
+                        OhlcvCsvResearch.summarize(bars) to
+                            ("Exchange Bhavcopy · " + exchangeDatasets.size + " instruments imported")
+                    } else {
+                        val bars = OhlcvCsvResearch.parse(csv)
+                        // Keep manual research imports isolated from every typed instrument cache.
+                        TejHqOhlcvStore.save(context, bars)
+                        OhlcvCsvResearch.summarize(bars) to sourceName
+                    }
                 }
-                summary = loaded
-                datasetName = uri.lastPathSegment?.substringAfterLast('/') ?: "Imported CSV"
+                summary = loaded.first
+                datasetName = loaded.second
+                csvFolderDatasets = ResearchCsvDatasetStore.list(context)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
@@ -381,7 +395,7 @@ fun ResearchLabScreen(
                 Spacer(Modifier.height(7.dp))
                 Text(datasetName, color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(5.dp))
-                Text("CSV columns required: timestamp, open, high, low, close, volume. Timestamps must include an ISO-8601 timezone offset. Maximum file size: 20 MB.", color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
+                Text("Supports common broker OHLCV exports and NSE/BSE UDiFF multi-security Bhavcopy CSVs. Delimiters, common header aliases, quoted values and Indian date formats are detected automatically. Exchange Bhavcopy rows are split into separate instrument datasets. Maximum file size: 20 MB.", color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
                 Spacer(Modifier.height(12.dp))
                 Button(onClick = { picker.launch(arrayOf("text/*", "text/csv", "application/csv", "application/vnd.ms-excel", "*/*")) }, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
                     Text(if (loading) "Importing…" else "Import OHLCV CSV")
