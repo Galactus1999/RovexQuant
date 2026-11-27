@@ -368,9 +368,15 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("settings.database.refresh").assertIsDisplayed()
         composeRule.onNodeWithTag("settings.screen").performScrollToNode(hasTestTag("settings.upstox.token"))
         composeRule.onNodeWithTag("settings.upstox.token").assertIsDisplayed()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("settings.ai.provider.key").fetchSemanticsNodes().isNotEmpty()
+        }
         composeRule.onNodeWithTag("settings.screen").performScrollToNode(hasTestTag("settings.ai.provider.key"))
         composeRule.onNodeWithTag("settings.ai.provider.key").assertIsDisplayed()
-        composeRule.onNodeWithTag("settings.ai.provider.test").assertIsDisplayed()
+        composeRule.onNodeWithTag("settings.ai.provider.test").assertIsEnabled().performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("Connection verified", substring = true).fetchSemanticsNodes().isNotEmpty()
+        }
         composeRule.onNodeWithTag("settings.screen").performScrollToNode(hasText("Close"))
         composeRule.onNodeWithText("Close").performClick()
         composeRule.onNodeWithText("Market Pulse").assertIsDisplayed()
