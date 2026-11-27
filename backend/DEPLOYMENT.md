@@ -160,14 +160,37 @@ The historical backfill / official reconciliation workflow is operator-initiated
 The permission flags are exchange-specific. A permission for NSE does not authorize BSE retrieval. The workflow and backend both enforce this default-deny check. Without permission, use TejHQ for automatic EOD collection and the official NSE MCP only for on-demand informational queries. An operator-supplied official-file reconciliation path is not yet implemented; do not report official reconciliation as complete until a report exists.
 
 
-## AI task routing and token budgets
+## AI provider discovery and token budgets
 
-AI task routing is configured server-side with `QUANT_AI_TASK_ROUTES`, a single-line JSON object. Each task key must be one of `chat`, `research`, `macro_analysis`, `filing_extraction`, `claim_verification`, or `summarization`. Each value must be an object containing:
+Configure one or more provider credentials on the backend using the corresponding
+server-side environment variable (`OPENAI_API_KEY`, `GEMINI_API_KEY`,
+`DEEPSEEK_API_KEY`, `GROQ_API_KEY`, or `OPENROUTER_API_KEY`), or add an owner-managed
+key through the app's encrypted provider vault. The Android app never receives
+provider credentials.
 
-- `provider_id`: a provider ID present in the backend's supported-provider registry
-- `model`: the exact model ID accepted by that provider
-- `fallback_providers`: optional list of at most three supported provider IDs
+The app exposes an independent ON/OFF switch for each supported provider. These
+switches are persisted on-device and sent as the enabled-provider allow-list with
+each AI request. The backend ignores disabled providers, checks that an enabled
+provider has a usable credential, and discovers a compatible chat model through
+that provider's model catalogue. No model ID or `QUANT_AI_TASK_ROUTES` entry is
+required. When the selected provider is temporarily unavailable, the gateway
+tries the next enabled, configured provider. Authentication failures and
+malformed requests are not silently hidden by cross-provider fallback.
 
-Do not use the older `"provider:model"` string form; the current gateway requires structured route objects. Configure `claim_verification` to a different provider/model from `research`; otherwise the verifier reports `NOT_INDEPENDENT` and does not claim independent verification.
+Provider model catalogues change over time. The gateway therefore discovers
+available model IDs at request time instead of pinning model names in app
+configuration. A provider may still be marked configured when its credential
+exists but its model catalogue is unavailable; in that case it is skipped and
+the next enabled provider is considered. Independent claim verification requires
+a second enabled provider/model; if none is available, the verifier reports
+`NOT_INDEPENDENT` rather than claiming an independent review.
 
-Set `QUANT_AI_DAILY_TOKEN_BUDGET` and `QUANT_AI_MONTHLY_TOKEN_BUDGET` to positive integer ceilings to enable atomic pre-call reservations. A value of `0` disables that ceiling. When a budget is enabled, a failed reservation prevents the model call. EOD data recovery remains available even when AI commentary is blocked by a budget or provider failure.
+Legacy `QUANT_AI_TASK_ROUTES` configuration is no longer required for mobile
+chat, research briefs, or claim verification. Existing route entries are ignored
+by automatic mobile selection and may be retired after deployment validation.
+
+Set `QUANT_AI_DAILY_TOKEN_BUDGET` and `QUANT_AI_MONTHLY_TOKEN_BUDGET` to positive
+integer ceilings to enable atomic pre-call reservations. A value of `0` disables
+that ceiling. When a budget is enabled, a failed reservation prevents the model
+call. EOD data recovery remains available even when AI commentary is blocked by
+a budget or provider failure.

@@ -18,6 +18,7 @@ class FakeResponse:
 
 class FakeAsyncClient:
     responses = []
+    catalogue_responses = []
     requests = []
 
     def __init__(self, *args, **kwargs):
@@ -33,6 +34,10 @@ class FakeAsyncClient:
         self.requests.append({"url": url, "headers": headers, "json": json})
         return self.responses.pop(0)
 
+    async def get(self, url, headers):
+        self.requests.append({"method": "GET", "url": url, "headers": headers})
+        return self.catalogue_responses.pop(0)
+
 
 @pytest.fixture
 def client(monkeypatch):
@@ -41,6 +46,7 @@ def client(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "deepseek-secret")
     monkeypatch.setattr(gateway.httpx, "AsyncClient", FakeAsyncClient)
     FakeAsyncClient.responses = []
+    FakeAsyncClient.catalogue_responses = []
     FakeAsyncClient.requests = []
     return TestClient(app)
 
@@ -80,7 +86,10 @@ def test_chat_completion_uses_server_credential_and_returns_normalized_result(cl
 
 def test_provider_fallback_on_rate_limit_does_not_rotate_same_provider_keys(client, monkeypatch):
     monkeypatch.setenv("GROQ_API_KEYS_JSON", json.dumps({"primary": "groq-one", "secondary": "groq-two"}))
-    monkeypatch.setenv("DEEPSEEK_FALLBACK_MODEL", "deepseek-flash")
+    monkeypatch.delenv("DEEPSEEK_FALLBACK_MODEL", raising=False)
+    FakeAsyncClient.catalogue_responses = [
+        FakeResponse(200, {"data": [{"id": "deepseek-chat-current"}]})
+    ]
     FakeAsyncClient.responses = [
         FakeResponse(429, {"error": "rate limited"}),
         FakeResponse(200, {"choices": [{"message": {"content": "Fallback response"}}]}),
@@ -93,7 +102,7 @@ def test_provider_fallback_on_rate_limit_does_not_rotate_same_provider_keys(clie
     assert response.status_code == 200
     assert response.json()["provider_id"] == "deepseek"
     assert response.json()["fallback_used"] is True
-    assert [item["headers"]["Authorization"] for item in FakeAsyncClient.requests] == [
+    assert [item["headers"]["Authorization"] for item in FakeAsyncClient.requests if item.get("method") != "GET"] == [
         "Bearer groq-one", "Bearer deepseek-secret"
     ]
 
@@ -168,3 +177,142 @@ def test_task_route_rejects_unsupported_provider_and_task(monkeypatch):
         gateway.configured_task_routes()
     with pytest.raises(gateway.GatewayError, match="Unsupported AI task type"):
         gateway.resolve_task_route("execute_trade", "groq", "model", [])
+
+
+
+def test_auto_route_discovers_chat_model_without_task_routes(client, monkeypatch):
+    monkeypatch.delenv("QUANT_AI_TASK_ROUTES", raising=False)
+    monkeypatch.delenv("GROQ_DEFAULT_MODEL", raising=False)
+    FakeAsyncClient.catalogue_responses = [
+        FakeResponse(200, {"data": [
+            {"id": "text-embedding-latest"},
+            {"id": "chat-model-current", "supported_parameters": ["messages", "temperature"]},
+        ]})
+    ]
+    provider, model, fallbacks = __import__(
+        "asyncio"
+    ).run(gateway.resolve_auto_route(["groq"]))
+    assert provider == "groq"
+    assert model == "chat-model-current"
+    assert fallbacks == []
+    assert FakeAsyncClient.requests[0]["url"].endswith("/models")
+
+
+def test_auto_route_respects_disabled_provider_selection(client, monkeypatch):
+    monkeypatch.delenv("QUANT_AI_TASK_ROUTES", raising=False)
+    with pytest.raises(gateway.GatewayError, match="All AI providers are disabled"):
+        __import__("asyncio").run(gateway.resolve_auto_route([]))
+
+
+def test_auto_route_skips_unconfigured_and_uses_next_enabled_provider(client, monkeypatch):
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.delenv("GROQ_API_KEYS_JSON", raising=False)
+    monkeypatch.delenv("GROQ_DEFAULT_MODEL", raising=False)
+    monkeypatch.delenv("DEEPSEEK_DEFAULT_MODEL", raising=False)
+    FakeAsyncClient.catalogue_responses = [
+        FakeResponse(200, {"data": [{"id": "deepseek-chat-current"}]})
+    ]
+    provider, model, fallbacks = __import__(
+        "asyncio"
+    ).run(gateway.resolve_auto_route(["groq", "deepseek"]))
+    assert provider == "deepseek"
+    assert model == "deepseek-chat-current"
+    assert fallbacks == []
+
+
+
+def test_chat_automatically_discovers_model_when_no_task_routes_exist(client, monkeypatch):
+    monkeypatch.delenv("QUANT_AI_TASK_ROUTES", raising=False)
+    monkeypatch.delenv("GROQ_DEFAULT_MODEL", raising=False)
+    FakeAsyncClient.catalogue_responses = [
+        FakeResponse(200, {"data": [{"id": "embedding-only"}, {"id": "groq-chat-current"}]})
+    ]
+    FakeAsyncClient.responses = [
+        FakeResponse(200, {"choices": [{"message": {"content": "Automatic response"}}]})
+    ]
+    import asyncio
+
+    result = asyncio.run(gateway.complete_chat(
+        provider_id=None,
+        model=None,
+        enabled_provider_ids=["groq"],
+        messages=[{"role": "user", "content": "Test automatic selection."}],
+    ))
+    assert result["provider_id"] == "groq"
+    assert result["model"] == "groq-chat-current"
+    assert result["content"] == "Automatic response"
+    assert any(request.get("url", "").endswith("/models") for request in FakeAsyncClient.requests)
+    assert any(request.get("url", "").endswith("/chat/completions") for request in FakeAsyncClient.requests)
+
+
+
+def test_gemini_model_catalogue_prefix_is_normalized(client, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "gemini-secret")
+    monkeypatch.delenv("GEMINI_DEFAULT_MODEL", raising=False)
+    FakeAsyncClient.catalogue_responses = [
+        FakeResponse(200, {"data": [{"id": "models/gemini-chat-current"}]})
+    ]
+    import asyncio
+
+    model = asyncio.run(gateway.discover_provider_model("gemini"))
+    assert model == "gemini-chat-current"
+
+
+
+def test_automatic_selection_falls_back_to_next_enabled_provider_on_rate_limit(client, monkeypatch):
+    monkeypatch.delenv("QUANT_AI_TASK_ROUTES", raising=False)
+    monkeypatch.delenv("GROQ_DEFAULT_MODEL", raising=False)
+    monkeypatch.delenv("DEEPSEEK_DEFAULT_MODEL", raising=False)
+    FakeAsyncClient.catalogue_responses = [
+        FakeResponse(200, {"data": [{"id": "groq-chat-current"}]}),
+        FakeResponse(200, {"data": [{"id": "deepseek-chat-current"}]}),
+    ]
+    FakeAsyncClient.responses = [
+        FakeResponse(429, {"error": "rate limited"}),
+        FakeResponse(200, {"choices": [{"message": {"content": "Fallback response"}}]}),
+    ]
+    import asyncio
+
+    result = asyncio.run(gateway.complete_chat(
+        provider_id=None,
+        model=None,
+        enabled_provider_ids=["groq", "deepseek"],
+        messages=[{"role": "user", "content": "Test automatic failover."}],
+    ))
+    assert result["provider_id"] == "deepseek"
+    assert result["model"] == "deepseek-chat-current"
+    assert result["fallback_used"] is True
+    assert result["content"] == "Fallback response"
+
+
+
+def test_openrouter_discovery_filters_for_chat_completions_endpoint(client, monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-secret")
+    FakeAsyncClient.catalogue_responses = [
+        FakeResponse(200, {"data": [
+            {
+                "id": "provider/text-chat-model",
+                "architecture": {
+                    "modality": "text->text",
+                    "input_modalities": ["text"],
+                    "output_modalities": ["text"],
+                },
+            },
+            {
+                "id": "provider/opaque-model-b",
+                "architecture": {
+                    "modality": "text->embedding",
+                    "input_modalities": ["text"],
+                    "output_modalities": ["embeddings"],
+                },
+            },
+        ]})
+    ]
+    import asyncio
+
+    model = asyncio.run(gateway.discover_provider_model("openrouter"))
+    assert model == "provider/text-chat-model"
+    assert FakeAsyncClient.requests[0]["url"] == (
+        "https://openrouter.ai/api/v1/models"
+        "?endpoints=%2Fapi%2Fv1%2Fchat%2Fcompletions&input_modalities=text"
+    )

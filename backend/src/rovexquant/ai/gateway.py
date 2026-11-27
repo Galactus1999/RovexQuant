@@ -126,8 +126,6 @@ def configured_providers() -> list[dict[str, Any]]:
             "provider_id": provider_id,
             "configured": bool(credentials),
             "credential_ids": [item.credential_id for item in credentials],
-            "default_model": os.getenv(f"{provider_id.upper()}_DEFAULT_MODEL", "").strip() or None,
-            "fallback_model_configured": bool(os.getenv(f"{provider_id.upper()}_FALLBACK_MODEL", "").strip()),
             "api_base": config.base_url,
         })
     return result
@@ -149,6 +147,116 @@ def _select_credential(provider_id: str, requested_id: str | None) -> Credential
         next((item for item in credentials if item.credential_id == "app"), None)
         or next((item for item in credentials if item.credential_id == "default"), credentials[0])
     )
+
+
+async def discover_provider_model(provider_id: str) -> str | None:
+    """Discover a usable chat model from the provider catalogue; never require a caller model ID."""
+    if provider_id not in SUPPORTED:
+        raise GatewayError("Unsupported AI provider", 400)
+    credentials = _credentials_for(provider_id)
+    if not credentials:
+        return None
+    credential = _select_credential(provider_id, None)
+    config = SUPPORTED[provider_id]
+    catalogue_url = f"{config.base_url}/models"
+    if provider_id == "openrouter":
+        # OpenRouter supports endpoint-aware catalogue filtering. Restrict the
+        # discovery result to models that actually serve Chat Completions rather
+        # than relying on text input alone (which does not prove endpoint support).
+        catalogue_url += "?endpoints=%2Fapi%2Fv1%2Fchat%2Fcompletions&input_modalities=text"
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=5.0)) as client:
+            response = await client.get(
+                catalogue_url,
+                headers=_provider_headers(provider_id, credential.api_key),
+            )
+    except (httpx.TimeoutException, httpx.RequestError):
+        return None
+    if response.status_code in (401, 403):
+        raise GatewayError(f"{provider_id} rejected its configured credential during model discovery", 502)
+    if response.status_code == 429 or response.status_code >= 500:
+        return None
+    if response.status_code >= 400:
+        return None
+    try:
+        payload = response.json()
+    except (ValueError, TypeError):
+        return None
+    rows = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(rows, list):
+        return None
+    excluded = (
+        "embed", "embedding", "whisper", "moderation", "rerank", "tts",
+        "transcri", "speech", "audio", "image", "vision", "video", "realtime",
+    )
+    candidates: list[str] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        model_id = row.get("id")
+        if not isinstance(model_id, str) or not model_id.strip() or len(model_id) > 180:
+            continue
+        if row.get("active") is False or row.get("shutdown_date"):
+            continue
+        # Gemini's OpenAI-compatible model catalogue may prefix IDs with "models/".
+        if provider_id == "gemini" and model_id.startswith("models/"):
+            model_id = model_id.split("/", 1)[1]
+        normalized = model_id.lower()
+        if len(model_id) > 160 or any(term in normalized for term in excluded):
+            continue
+        # Provider metadata, when supplied, can explicitly identify non-chat models.
+        architecture = row.get("architecture")
+        architecture = architecture if isinstance(architecture, dict) else {}
+        modality = architecture.get("modality")
+        if isinstance(modality, str):
+            output_mode = modality.split("->", 1)[-1].lower()
+            if "text" not in output_mode:
+                continue
+        input_modalities = row.get("input_modalities")
+        if not isinstance(input_modalities, list):
+            input_modalities = architecture.get("input_modalities")
+        if isinstance(input_modalities, list) and input_modalities and "text" not in input_modalities:
+            continue
+        output_modalities = row.get("output_modalities")
+        if not isinstance(output_modalities, list):
+            output_modalities = architecture.get("output_modalities")
+        if isinstance(output_modalities, list) and output_modalities and "text" not in output_modalities:
+            continue
+        supported = row.get("supported_parameters")
+        if isinstance(supported, list) and supported and not any(
+            item in {"messages", "chat", "tools", "response_format"} for item in supported
+        ):
+            continue
+        candidates.append(model_id.strip())
+    # Preserve provider catalogue order: providers may rank their current/recommended
+    # models first. The selected ID is never exposed as a user-editable setting.
+    return candidates[0] if candidates else None
+
+
+async def resolve_auto_route(
+    enabled_provider_ids: list[str] | None = None,
+) -> tuple[str, str, list[str]]:
+    """Choose the first enabled, credentialed provider with a discoverable chat model."""
+    enabled = list(SUPPORTED) if enabled_provider_ids is None else enabled_provider_ids
+    if not isinstance(enabled, list) or len(enabled) > len(SUPPORTED):
+        raise GatewayError("Invalid enabled AI provider selection", 422)
+    if any(not isinstance(item, str) or item not in SUPPORTED for item in enabled):
+        raise GatewayError("Enabled AI provider selection contains an unsupported provider", 422)
+    enabled = list(dict.fromkeys(enabled))
+    if not enabled:
+        raise GatewayError("All AI providers are disabled. Enable at least one configured provider.", 503)
+    for index, provider in enumerate(enabled):
+        if not _credentials_for(provider):
+            continue
+        model = await discover_provider_model(provider)
+        if model:
+            # Fallbacks are resolved lazily only if the primary provider is unavailable.
+            fallbacks = [
+                candidate for candidate in enabled[index + 1:]
+                if _credentials_for(candidate)
+            ][:3]
+            return provider, model, fallbacks
+    raise GatewayError("No enabled AI provider has a usable credential and discoverable chat model", 503)
 
 
 def _provider_headers(provider_id: str, api_key: str) -> dict[str, str]:
@@ -173,10 +281,15 @@ async def complete_chat(
     credential_id: str | None = None,
     fallback_providers: list[str] | None = None,
     task_type: str = "chat",
+    enabled_provider_ids: list[str] | None = None,
 ) -> dict[str, Any]:
-    provider_id, model, fallback_providers = resolve_task_route(
-        task_type, provider_id, model, fallback_providers
-    )
+    if provider_id is None and model is None:
+        provider_id, model, auto_fallbacks = await resolve_auto_route(enabled_provider_ids)
+        fallback_providers = auto_fallbacks
+    else:
+        provider_id, model, fallback_providers = resolve_task_route(
+            task_type, provider_id, model, fallback_providers
+        )
     if provider_id not in SUPPORTED:
         raise GatewayError("Unsupported AI provider", 400)
     if not model.strip() or len(model) > 160:
@@ -208,10 +321,9 @@ async def complete_chat(
             selected_id = credential_id if index == 0 else None
             credential = _select_credential(candidate, selected_id)
             config = SUPPORTED[candidate]
-            fallback_model = os.getenv(f"{candidate.upper()}_FALLBACK_MODEL", "").strip()
-            selected_model = model if index == 0 else fallback_model
+            selected_model = model if index == 0 else await discover_provider_model(candidate)
             if not selected_model:
-                last_error = GatewayError(f"No fallback model configured for {candidate}", 503)
+                last_error = GatewayError(f"No discoverable chat model is available for {candidate}", 503)
                 continue
             payload = {
                 "model": selected_model,
@@ -232,6 +344,25 @@ async def complete_chat(
                 continue
             if response.status_code in (401, 403):
                 raise GatewayError(f"{candidate} rejected its configured credential", 502)
+            if response.status_code in (400, 404, 422):
+                try:
+                    error_payload = response.json()
+                except (ValueError, TypeError):
+                    error_payload = {}
+                error_text = json.dumps(error_payload, ensure_ascii=False).lower()
+                model_unavailable = "model" in error_text and any(
+                    marker in error_text for marker in (
+                        "not found", "does not exist", "not available",
+                        "not supported", "model_not_found", "unsupported model",
+                    )
+                )
+                if model_unavailable:
+                    last_error = GatewayError(
+                        f"{candidate} no longer accepts the discovered model; trying the next enabled provider",
+                        503,
+                    )
+                    continue
+                raise GatewayError(f"{candidate} rejected the request (HTTP {response.status_code})", 502)
             if response.status_code >= 400:
                 raise GatewayError(f"{candidate} rejected the request (HTTP {response.status_code})", 502)
             data = response.json()

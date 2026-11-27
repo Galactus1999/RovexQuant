@@ -5,7 +5,7 @@ import json
 import re
 from typing import Any
 
-from rovexquant.ai.gateway import GatewayError, complete_chat, resolve_task_route
+from rovexquant.ai.gateway import GatewayError, complete_chat, discover_provider_model, resolve_auto_route
 from rovexquant.ai.research_archive import (
     ai_token_budgets_enabled,
     estimate_reserved_tokens,
@@ -92,6 +92,7 @@ async def verify_research_claims(
     allowed_source_refs: list[str],
     research_provider: str,
     research_model: str,
+    enabled_provider_ids: list[str] | None = None,
     max_tokens: int = 1200,
 ) -> dict[str, Any]:
     """Run a distinct specialist model and deterministically validate its citations."""
@@ -104,24 +105,34 @@ async def verify_research_claims(
             "claims": [],
         }
     try:
-        verifier_provider, verifier_model, _ = resolve_task_route(
-            "claim_verification", None, None, None
+        primary_provider, primary_model, fallback_providers = await resolve_auto_route(
+            enabled_provider_ids
         )
+        if (primary_provider, primary_model) != (research_provider, research_model):
+            verifier_provider, verifier_model = primary_provider, primary_model
+        else:
+            verifier_provider = ""
+            verifier_model = ""
+            for candidate in fallback_providers:
+                candidate_model = await discover_provider_model(candidate)
+                if candidate_model and (candidate, candidate_model) != (research_provider, research_model):
+                    verifier_provider, verifier_model = candidate, candidate_model
+                    break
+            if not verifier_provider:
+                return {
+                    "status": "NOT_INDEPENDENT",
+                    "method": "SECOND_MODEL_WITH_EXACT_QUOTE_VALIDATION",
+                    "summary": "No second enabled provider/model is available; the research model cannot independently verify itself.",
+                    "claims": [],
+                    "verifier_provider": research_provider,
+                    "verifier_model": research_model,
+                }
     except GatewayError as error:
         return {
             "status": "VERIFICATION_PENDING",
             "method": "SECOND_MODEL_WITH_EXACT_QUOTE_VALIDATION",
-            "summary": f"Independent verifier route is not configured: {error}",
+            "summary": f"Independent verifier is unavailable: {error}",
             "claims": [],
-        }
-    if (verifier_provider, verifier_model) == (research_provider, research_model):
-        return {
-            "status": "NOT_INDEPENDENT",
-            "method": "SECOND_MODEL_WITH_EXACT_QUOTE_VALIDATION",
-            "summary": "Verifier route resolves to the same provider and model as the research model.",
-            "claims": [],
-            "verifier_provider": verifier_provider,
-            "verifier_model": verifier_model,
         }
 
     system_prompt = (

@@ -8,7 +8,7 @@ class ProviderConfig:
     api_keys_json_env: str
 
 # These providers expose OpenAI-compatible chat-completions interfaces.
-# Model IDs are deliberately supplied by the caller because provider catalogues change.
+# The gateway discovers model IDs from live provider catalogues; callers need not pin them.
 SUPPORTED = {
     "deepseek": ProviderConfig(
         "deepseek", "https://api.deepseek.com", "DEEPSEEK_API_KEY", "DEEPSEEK_API_KEYS_JSON"

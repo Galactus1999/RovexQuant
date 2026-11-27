@@ -25,7 +25,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.AiStrategyBrief
-import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.data.repository.QuantDataRepository
 import kotlinx.coroutines.CancellationException
@@ -46,8 +45,6 @@ fun AiWorkspaceScreen(
     var providersLoading by remember { mutableStateOf(true) }
     var providers by remember { mutableStateOf(emptyList<com.rovexquant.app.data.model.AiProvider>()) }
     var providerError by remember { mutableStateOf<String?>(null) }
-    var configuredTaskRoutes by remember { mutableStateOf<Map<String, AiTaskRoute>>(emptyMap()) }
-    var taskRoutesError by remember { mutableStateOf<String?>(null) }
     var researchRuns by remember { mutableStateOf(emptyList<com.rovexquant.app.data.model.AiResearchRun>()) }
     var historyLoading by remember { mutableStateOf(true) }
     var historyError by remember { mutableStateOf<String?>(null) }
@@ -85,15 +82,6 @@ fun AiWorkspaceScreen(
         } finally {
             providersLoading = false
         }
-        try {
-            configuredTaskRoutes = repository.fetchAiTaskRoutes(session)
-            taskRoutesError = null
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (failure: Exception) {
-            configuredTaskRoutes = emptyMap()
-            taskRoutesError = failure.message ?: "Server task routes are unavailable."
-        }
     }
 
     LaunchedEffect(session, repository) {
@@ -112,7 +100,7 @@ fun AiWorkspaceScreen(
     }
 
     val configuredProviders = providers.filter { it.configured }
-    val canUseResearch = "research" in configuredTaskRoutes
+    val canUseResearch = configuredProviders.any { repository.isAiProviderEnabled(it.providerId) }
 
     fun recoverEodData() {
         if (briefLoading) return
@@ -165,16 +153,12 @@ fun AiWorkspaceScreen(
                     )
                 }
                 Text(
-                    "${configuredProviders.size} configured provider(s) · credentials and model setup are managed in Settings.",
+                    "${configuredProviders.size} configured provider(s) · switches and encrypted credentials are managed in Settings; model selection is automatic.",
                     color = MaterialTheme.colorScheme.onBackground,
                     fontSize = 11.sp,
                     lineHeight = 16.sp
                 )
-                configuredTaskRoutes["research"]?.let { route ->
-                    Text("Research route · ${route.providerId}/${route.model}", color = Mint, fontSize = 10.sp)
-                }
                 providerError?.let { Text(it, color = Gold, fontSize = 10.sp) }
-                taskRoutesError?.let { Text(it, color = Gold, fontSize = 10.sp) }
                 Button(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth().testTag("ai.open.settings")) {
                     Text("Manage providers in Settings")
                 }
@@ -257,7 +241,7 @@ fun AiWorkspaceScreen(
                                 .testTag("ai.research.run.${run.runId}")
                         ) {
                             Text(
-                                run.taskType.replace('_', ' ').uppercase() + " · " + run.providerId + "/" + run.model,
+                                run.taskType.replace('_', ' ').uppercase() + " · " + run.providerId,
                                 color = MaterialTheme.colorScheme.onBackground,
                                 fontSize = 10.sp, fontWeight = FontWeight.SemiBold
                             )
@@ -431,7 +415,7 @@ fun AiWorkspaceScreen(
                 TerminalCard {
                     val aiResult = report.ai
                     if (aiResult != null) {
-                        Eyebrow("AI strategy review · ${aiResult.providerId} / ${aiResult.model}")
+                        Eyebrow("AI strategy review · ${aiResult.providerId}")
                         Spacer(Modifier.height(7.dp))
                         Text(aiResult.content, color = MaterialTheme.colorScheme.onBackground, fontSize = 12.sp, lineHeight = 19.sp)
                         if (aiResult.fallbackUsed) {
