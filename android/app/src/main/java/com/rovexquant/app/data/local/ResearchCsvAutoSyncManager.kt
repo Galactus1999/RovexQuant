@@ -1,13 +1,14 @@
 package com.rovexquant.app.data.local
 
 import android.content.Context
+import com.rovexquant.app.data.model.MarketHistoryTarget
 import com.rovexquant.app.data.repository.QuantDataRepository
+import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.domain.InstrumentCatalog
 import com.rovexquant.app.domain.InstrumentIdentity
 import com.rovexquant.app.domain.InstrumentType
 import com.rovexquant.app.domain.OhlcvBar
 import com.rovexquant.app.domain.OhlcvInterval
-import com.rovexquant.app.domain.OhlcvProvider
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.TreeMap
@@ -51,20 +52,21 @@ private data class DatasetSyncResult(
 )
 
 /**
- * Refreshes only user-imported, instrument-mapped daily datasets. Provider bars
- * are merged by Indian trading date (not exact timestamp), preserving one daily
- * candle when a CSV uses 15:30 and the provider uses midnight timestamps.
+ * Refreshes imported daily datasets from the persistent EOD Data Hub in exchange
+ * batches. NSE indices use the Upstox historical endpoint because the EOD equity
+ * store intentionally does not fabricate index bars.
  */
 object ResearchCsvAutoSyncManager {
     private val marketZone = ZoneId.of("Asia/Kolkata")
     private val syncMutex = Mutex()
     private const val AUTO_SYNC_INTERVAL_MILLIS = 12L * 60L * 60L * 1000L
-    private const val MAX_DATASETS_PER_PASS = 25
-    private const val MAX_CONCURRENT_REQUESTS = 3
+    private const val MAX_DATASETS_PER_PASS = 2_000
+    private const val MAX_CONCURRENT_INDEX_REQUESTS = 3
 
     suspend fun sync(
         context: Context,
         repository: QuantDataRepository,
+        session: QuantSession,
         force: Boolean = false
     ): ResearchCsvAutoSyncReport {
         if (!syncMutex.tryLock()) {
@@ -83,13 +85,31 @@ object ResearchCsvAutoSyncManager {
                     now - it.lastSyncedAtMillis >= AUTO_SYNC_INTERVAL_MILLIS
             }.sortedBy { it.lastSyncedAtMillis }
             val batch = due.take(MAX_DATASETS_PER_PASS)
-            val semaphore = Semaphore(MAX_CONCURRENT_REQUESTS)
-            val results = coroutineScope {
-                batch.map { metadata ->
+            val results = mutableListOf<DatasetSyncResult>()
+
+            val equityGroups = batch.filter { it.instrumentType == InstrumentType.EQUITY }
+                .groupBy { it.exchange }
+            for ((exchange, group) in equityGroups) {
+                try {
+                    results += syncEquityBatch(appContext, repository, session, exchange, group)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    results += group.map {
+                        DatasetSyncResult(false, it.label + ": " +
+                            (failure.message ?: failure.javaClass.simpleName))
+                    }
+                }
+            }
+
+            val indexDatasets = batch.filter { it.instrumentType != InstrumentType.EQUITY }
+            val semaphore = Semaphore(MAX_CONCURRENT_INDEX_REQUESTS)
+            results += coroutineScope {
+                indexDatasets.map { metadata ->
                     async {
                         semaphore.withPermit {
                             try {
-                                syncOne(appContext, repository, metadata)
+                                syncIndexDataset(appContext, repository, metadata)
                             } catch (cancelled: CancellationException) {
                                 throw cancelled
                             } catch (failure: Exception) {
@@ -103,15 +123,14 @@ object ResearchCsvAutoSyncManager {
                     }
                 }.awaitAll()
             }
+
             val errors = results.mapNotNull { it.error }.take(8)
-            val updated = results.count { it.error == null && it.updated }
-            val unchanged = results.count { it.error == null && !it.updated }
             return ResearchCsvAutoSyncReport(
                 totalDatasets = datasets.size,
                 dueDatasets = due.size,
                 processedDatasets = results.size,
-                updatedDatasets = updated,
-                unchangedDatasets = unchanged,
+                updatedDatasets = results.count { it.error == null && it.updated },
+                unchangedDatasets = results.count { it.error == null && !it.updated },
                 failedDatasets = results.count { it.error != null },
                 deferredDatasets = (due.size - batch.size).coerceAtLeast(0),
                 errors = errors
@@ -121,7 +140,67 @@ object ResearchCsvAutoSyncManager {
         }
     }
 
-    private suspend fun syncOne(
+    private suspend fun syncEquityBatch(
+        context: Context,
+        repository: QuantDataRepository,
+        session: QuantSession,
+        exchange: String,
+        datasets: List<ResearchCsvDatasetMetadata>
+    ): List<DatasetSyncResult> {
+        val toDate = LocalDate.now(marketZone)
+        val prepared = mutableListOf<Pair<ResearchCsvDatasetMetadata, List<OhlcvBar>>>()
+        val results = mutableListOf<DatasetSyncResult>()
+        for (metadata in datasets) {
+            try {
+                val existing = withContext(Dispatchers.IO) {
+                    ResearchCsvDatasetStore.load(context, metadata)
+                } ?: throw IllegalStateException("Imported CSV file is missing.")
+                require(existing.isNotEmpty()) { "Imported CSV contains no bars." }
+                prepared += metadata to existing
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                results += DatasetSyncResult(
+                    false, metadata.label + ": " + (failure.message ?: failure.javaClass.simpleName)
+                )
+            }
+        }
+        if (prepared.isEmpty()) return results
+
+        val targets = prepared.map { (metadata, existing) ->
+            val latestDate = existing.maxOf { marketDate(it) }
+            val fromDate = maxOf(latestDate.minusDays(7), toDate.minusDays(14))
+            MarketHistoryTarget(metadata.canonicalSymbol, fromDate)
+        }
+        val response = repository.fetchMarketHistoryBulk(
+            session, exchange, targets, toDate
+        )
+        require(response.barsBySymbol.isNotEmpty()) {
+            "The persistent EOD Data Hub has no matching history yet. Wait for a successful scheduled EOD collection."
+        }
+
+        prepared.forEach { (metadata, existing) ->
+            try {
+                val incoming = response.barsBySymbol[metadata.canonicalSymbol].orEmpty()
+                val provider = response.providersBySymbol[metadata.canonicalSymbol] ?: "EOD Data Hub"
+                if (incoming.isEmpty()) {
+                    markIfUnchanged(context, metadata, provider)
+                    results += DatasetSyncResult(updated = false)
+                } else {
+                    results += persistMerged(context, metadata, existing, incoming, provider)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                results += DatasetSyncResult(
+                    false, metadata.label + ": " + (failure.message ?: failure.javaClass.simpleName)
+                )
+            }
+        }
+        return results
+    }
+
+    private suspend fun syncIndexDataset(
         context: Context,
         repository: QuantDataRepository,
         metadata: ResearchCsvDatasetMetadata
@@ -130,72 +209,82 @@ object ResearchCsvAutoSyncManager {
             ResearchCsvDatasetStore.load(context, metadata)
         } ?: throw IllegalStateException("Imported CSV file is missing.")
         require(existing.isNotEmpty()) { "Imported CSV contains no bars." }
-        val instrument = resolveInstrument(metadata)
+        val instrument = InstrumentCatalog.resolve(
+            metadata.canonicalSymbol, metadata.exchange, OhlcvInterval.DAILY
+        )
+        require(instrument.instrumentType == metadata.instrumentType) {
+            "Imported instrument identity no longer matches the current instrument registry."
+        }
         val latestDate = existing.maxOf { marketDate(it) }
-        val from = latestDate.minusDays(7)
-        val to = LocalDate.now(marketZone)
-        if (from.isAfter(to)) {
-            withContext(Dispatchers.IO) {
-                ResearchCsvDatasetStore.markSynced(context, metadata, instrument.provider.sourceLabel)
-            }
+        val toDate = LocalDate.now(marketZone)
+        val fromDate = maxOf(latestDate.minusDays(7), toDate.minusDays(14))
+        if (fromDate.isAfter(toDate)) {
+            markIfUnchanged(context, metadata, instrument.provider.sourceLabel)
             return DatasetSyncResult(updated = false)
         }
+        val incoming = repository.fetchInstrumentOhlcv(instrument, fromDate, toDate).bars
+        if (incoming.isEmpty()) {
+            markIfUnchanged(context, metadata, instrument.provider.sourceLabel)
+            return DatasetSyncResult(updated = false)
+        }
+        return persistMerged(
+            context, metadata, existing, incoming, instrument.provider.sourceLabel
+        )
+    }
 
-        val fetched = repository.fetchInstrumentOhlcv(instrument, from, to).bars
-        if (fetched.isEmpty()) {
-            withContext(Dispatchers.IO) {
-                ResearchCsvDatasetStore.markSynced(context, metadata, instrument.provider.sourceLabel)
-            }
-            return DatasetSyncResult(updated = false)
-        }
-        val merged = mergeDaily(existing, fetched)
+    private suspend fun persistMerged(
+        context: Context,
+        metadata: ResearchCsvDatasetMetadata,
+        existing: List<OhlcvBar>,
+        incoming: List<OhlcvBar>,
+        provider: String
+    ): DatasetSyncResult {
+        val merged = mergeDaily(existing, incoming)
         val changed = merged != existing.sortedBy { marketDate(it) }
-
-        // Do not overwrite a newer CSV import that completed while the network request was running.
-        val current = withContext(Dispatchers.IO) { ResearchCsvDatasetStore.list(context) }
-            .firstOrNull { sameDataset(it, metadata) }
-        if (current == null || current.updatedAtMillis != metadata.updatedAtMillis) {
+        if (!isStillCurrent(context, metadata)) {
             return DatasetSyncResult(updated = false)
         }
         withContext(Dispatchers.IO) {
             if (changed) {
                 ResearchCsvDatasetStore.save(
                     context = context,
-                    instrument = instrument,
+                    instrument = InstrumentCatalog.resolve(
+                        metadata.canonicalSymbol, metadata.exchange, OhlcvInterval.DAILY
+                    ),
                     bars = merged,
                     sourceFileName = metadata.sourceFileName,
-                    lastSyncProvider = instrument.provider.sourceLabel,
+                    lastSyncProvider = provider,
                     lastSyncedAtMillis = System.currentTimeMillis()
                 )
             } else {
-                ResearchCsvDatasetStore.markSynced(
-                    context, metadata, instrument.provider.sourceLabel
-                )
+                ResearchCsvDatasetStore.markSynced(context, metadata, provider)
             }
         }
         return DatasetSyncResult(updated = changed)
     }
 
-    private fun resolveInstrument(metadata: ResearchCsvDatasetMetadata): InstrumentIdentity {
-        if (metadata.exchange == "NSE" && metadata.instrumentType == InstrumentType.EQUITY) {
-            // Upstox is the primary NSE equity historical provider; TejHQ remains the
-            // BSE equity fallback because this integration's BSE candle route is unsupported.
-            return InstrumentIdentity(
-                exchange = metadata.exchange,
-                canonicalSymbol = metadata.canonicalSymbol,
-                instrumentType = metadata.instrumentType,
-                provider = OhlcvProvider.UPSTOX_V3_HISTORICAL,
-                providerSymbol = metadata.canonicalSymbol,
-                interval = OhlcvInterval.DAILY
-            )
+    private suspend fun markIfUnchanged(
+        context: Context,
+        metadata: ResearchCsvDatasetMetadata,
+        provider: String
+    ) {
+        if (isStillCurrent(context, metadata)) {
+            withContext(Dispatchers.IO) {
+                ResearchCsvDatasetStore.markSynced(context, metadata, provider)
+            }
         }
-        val resolved = InstrumentCatalog.resolve(
-            metadata.canonicalSymbol, metadata.exchange, OhlcvInterval.DAILY
-        )
-        require(resolved.instrumentType == metadata.instrumentType) {
-            "Imported instrument identity no longer matches the current instrument registry."
-        }
-        return resolved
+    }
+
+    private suspend fun isStillCurrent(
+        context: Context,
+        metadata: ResearchCsvDatasetMetadata
+    ): Boolean = withContext(Dispatchers.IO) {
+        ResearchCsvDatasetStore.list(context).firstOrNull {
+            it.exchange == metadata.exchange &&
+                it.canonicalSymbol == metadata.canonicalSymbol &&
+                it.instrumentType == metadata.instrumentType &&
+                it.interval == metadata.interval
+        }?.updatedAtMillis == metadata.updatedAtMillis
     }
 
     internal fun mergeDaily(existing: List<OhlcvBar>, incoming: List<OhlcvBar>): List<OhlcvBar> {
@@ -217,13 +306,4 @@ object ResearchCsvAutoSyncManager {
 
     private fun marketDate(bar: OhlcvBar): LocalDate =
         bar.timestamp.atZoneSameInstant(marketZone).toLocalDate()
-
-    private fun sameDataset(
-        first: ResearchCsvDatasetMetadata,
-        second: ResearchCsvDatasetMetadata
-    ): Boolean =
-        first.exchange == second.exchange &&
-            first.canonicalSymbol == second.canonicalSymbol &&
-            first.instrumentType == second.instrumentType &&
-            first.interval == second.interval
 }
