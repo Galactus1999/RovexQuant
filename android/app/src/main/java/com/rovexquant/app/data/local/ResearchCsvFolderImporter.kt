@@ -16,10 +16,12 @@ import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.security.MessageDigest
 import java.util.Locale
+import java.util.zip.ZipInputStream
 
 data class ResearchCsvFolderImportReport(
     val scannedFiles: Int,
@@ -122,7 +124,7 @@ object ResearchCsvFolderImporter {
                     totalBytes += bounded.bytesRead
                     require(!bounded.exceeded) { "CSV exceeds the configured per-file or folder byte limit." }
                     val bytes = bounded.bytes
-                    val csvContent = String(bytes, Charsets.UTF_8)
+                    val csvContent = decodeCsvBytes(bytes)
                     val exchange = if (displayName.startsWith("BSE_", ignoreCase = true)) "BSE" else "NSE"
                     val exchangeRows = UniversalOhlcvCsvParser.parseExchangeBhavcopy(csvContent, exchange)
                     if (exchangeRows != null) {
@@ -208,6 +210,49 @@ object ResearchCsvFolderImporter {
 
     internal fun parseFolderCsv(content: String, volumeRequired: Boolean): List<OhlcvBar> =
         UniversalOhlcvCsvParser.parse(content, maxRows = 100_000, volumeRequired = volumeRequired)
+
+    /** Decode common CSV encodings without silently treating UTF-16 as UTF-8. */
+    fun decodeCsvBytes(bytes: ByteArray): String {
+        require(bytes.size <= MAX_CSV_BYTES) { "CSV exceeds the 20 MB import limit." }
+        return when {
+            bytes.size >= 2 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xFE.toByte() ->
+                String(bytes, 2, bytes.size - 2, Charsets.UTF_16LE)
+            bytes.size >= 2 && bytes[0] == 0xFE.toByte() && bytes[1] == 0xFF.toByte() ->
+                String(bytes, 2, bytes.size - 2, Charsets.UTF_16BE)
+            else -> String(bytes, Charsets.UTF_8).removePrefix("\uFEFF")
+        }
+    }
+
+    /** Accept a raw CSV or a ZIP containing exactly one bounded CSV entry. */
+    fun decodeCsvPayload(sourceFileName: String, bytes: ByteArray): String {
+        require(bytes.size <= MAX_CSV_BYTES) { "Selected file exceeds the 20 MB import limit." }
+        val isZip = bytes.size >= 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte()
+        if (!isZip) return decodeCsvBytes(bytes)
+        var csvBytes: ByteArray? = null
+        ZipInputStream(ByteArrayInputStream(bytes)).use { archive ->
+            while (true) {
+                val entry = archive.nextEntry ?: break
+                if (!entry.isDirectory && entry.name.endsWith(".csv", ignoreCase = true)) {
+                    require(csvBytes == null) {
+                        "ZIP contains more than one CSV; import one exchange report at a time."
+                    }
+                    val bounded = archive.readBounded(MAX_CSV_BYTES)
+                    require(!bounded.exceeded) { "CSV inside ZIP exceeds the 20 MB import limit." }
+                    csvBytes = bounded.bytes
+                }
+                archive.closeEntry()
+            }
+        }
+        require(csvBytes != null) { "ZIP archive does not contain a CSV file." }
+        return decodeCsvBytes(csvBytes!!)
+    }
+
+    fun importExchangeBhavcopy(
+        context: Context,
+        sourceFileName: String,
+        bytes: ByteArray
+    ): List<ResearchCsvDatasetMetadata>? =
+        importExchangeBhavcopy(context, sourceFileName, decodeCsvPayload(sourceFileName, bytes))
 
     /** Import a multi-security NSE/BSE UDiFF Bhavcopy into separate local instrument datasets. */
     fun importExchangeBhavcopy(
