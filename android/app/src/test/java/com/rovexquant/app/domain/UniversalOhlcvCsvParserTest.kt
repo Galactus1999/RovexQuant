@@ -88,6 +88,18 @@ class UniversalOhlcvCsvParserTest {
         assertEquals(setOf("RELIANCE"), grouped.keys)
     }
 
+
+    @Test
+    fun prefersNseEqSeriesWhenSameSymbolHasMultipleExchangeSeriesOnOneDate() {
+        val csv = "TradDt,TckrSymb,SctySrs,OpnPric,HghPric,LwPric,ClsPric,TtlTradgVol\\n" +
+            "2026-11-24,RELIANCE,BE,100,102,99,101,1000\\n" +
+            "2026-11-24,RELIANCE,EQ,101,103,100,102,1100"
+        val grouped = UniversalOhlcvCsvParser.parseExchangeBhavcopy(csv, "NSE")!!
+        assertEquals(1, grouped.getValue("RELIANCE").size)
+        assertEquals(102.0, grouped.getValue("RELIANCE").single().close, 0.0)
+        assertEquals(1_100L, grouped.getValue("RELIANCE").single().volume)
+    }
+
     @Test
     fun rejectsDuplicateSymbolAndSessionRowsInExchangeBhavcopy() {
         val csv = "TradDt,TckrSymb,SctySrs,OpnPric,HghPric,LwPric,ClsPric,TtlTradgVol\n" +
