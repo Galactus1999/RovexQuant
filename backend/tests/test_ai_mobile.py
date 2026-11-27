@@ -417,10 +417,8 @@ def test_mobile_chat_discovers_model_without_task_routes(mobile_client, monkeypa
     assert FakeAsyncClient.requests[-1]["json"]["model"] == "groq-chat-auto"
 
 
-def test_strategy_brief_can_use_server_owned_research_route(mobile_client, monkeypatch):
+def test_strategy_brief_uses_automatically_discovered_provider(mobile_client, monkeypatch):
     client, headers = mobile_client
-    monkeypatch.setenv(
-    )
     from rovexquant.api.routers import ai as ai_router
     bars = [
         TejHqDailyBar(
@@ -435,9 +433,14 @@ def test_strategy_brief_can_use_server_owned_research_route(mobile_client, monke
     async def fake_fetch(*args, **kwargs):
         return "tejhq_eod", bars
 
+    async def automatic_route(enabled_provider_ids=None):
+        return "groq", "groq-chat-auto", []
+
+    monkeypatch.setattr(ai_router, "resolve_auto_route", automatic_route)
+
     async def fake_complete(**kwargs):
         assert kwargs["provider_id"] == "groq"
-        assert kwargs["model"] == "server-research-model"
+        assert kwargs["model"] == "groq-chat-auto"
         assert kwargs["task_type"] == "research"
         return {
             "provider_id": "groq", "model": "groq-chat-auto",
