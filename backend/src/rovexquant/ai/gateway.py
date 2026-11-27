@@ -206,13 +206,20 @@ async def discover_provider_model(provider_id: str) -> str | None:
             continue
         # Provider metadata, when supplied, can explicitly identify non-chat models.
         architecture = row.get("architecture")
-        modality = architecture.get("modality") if isinstance(architecture, dict) else None
-        if isinstance(modality, str) and "text" not in modality.lower():
-            continue
+        architecture = architecture if isinstance(architecture, dict) else {}
+        modality = architecture.get("modality")
+        if isinstance(modality, str):
+            output_mode = modality.split("->", 1)[-1].lower()
+            if "text" not in output_mode:
+                continue
         input_modalities = row.get("input_modalities")
+        if not isinstance(input_modalities, list):
+            input_modalities = architecture.get("input_modalities")
         if isinstance(input_modalities, list) and input_modalities and "text" not in input_modalities:
             continue
         output_modalities = row.get("output_modalities")
+        if not isinstance(output_modalities, list):
+            output_modalities = architecture.get("output_modalities")
         if isinstance(output_modalities, list) and output_modalities and "text" not in output_modalities:
             continue
         supported = row.get("supported_parameters")
