@@ -837,9 +837,7 @@ object QuantApi {
                             for (idIndex in 0 until ids.length()) {
                                 ids.optString(idIndex).takeIf { it.isNotBlank() }?.let(::add)
                             }
-                        },
-                        defaultModel = item.optString("default_model").takeIf { it.isNotBlank() && it != "null" },
-                        fallbackModelConfigured = item.optBoolean("fallback_model_configured", false)
+                        }
                     ))
                 }
             }
