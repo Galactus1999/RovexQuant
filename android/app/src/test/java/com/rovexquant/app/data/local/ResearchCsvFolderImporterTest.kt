@@ -1,6 +1,9 @@
 package com.rovexquant.app.data.local
 
 import com.rovexquant.app.domain.InstrumentType
+import java.io.ByteArrayOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import com.rovexquant.app.domain.OhlcvBar
 import com.rovexquant.app.domain.OhlcvProvider
 import java.time.OffsetDateTime
@@ -105,6 +108,45 @@ class ResearchCsvFolderImporterTest {
         )
         assertThrows(IllegalArgumentException::class.java) {
             ResearchCsvFolderImporter.validateDailyBars(bars)
+        }
+    }
+
+
+    @Test
+    fun decodesUtf16LittleEndianExchangeCsv() {
+        val text = "Date,Open,High,Low,Close,Volume\\n2026-11-24,100,102,99,101,1000"
+        val payload = byteArrayOf(0xFF.toByte(), 0xFE.toByte()) + text.toByteArray(Charsets.UTF_16LE)
+        val decoded = ResearchCsvFolderImporter.decodeCsvBytes(payload)
+        val bars = ResearchCsvFolderImporter.parseFolderCsv(decoded, volumeRequired = true)
+        assertEquals(1, bars.size)
+        assertEquals(101.0, bars.single().close, 0.0)
+    }
+
+    @Test
+    fun extractsSingleCsvFromNseStyleZipArchive() {
+        val output = ByteArrayOutputStream()
+        ZipOutputStream(output).use { zip ->
+            zip.putNextEntry(ZipEntry("BhavCopy_NSE_CM.csv"))
+            zip.write("TradDt,TckrSymb,SctySrs,OpnPric,HghPric,LwPric,ClsPric,TtlTradgVol\\n2026-11-24,RELIANCE,EQ,100,102,99,101,1000".toByteArray())
+            zip.closeEntry()
+        }
+        val csv = ResearchCsvFolderImporter.decodeCsvPayload("BhavCopy_NSE_CM.zip", output.toByteArray())
+        val grouped = com.rovexquant.app.domain.UniversalOhlcvCsvParser.parseExchangeBhavcopy(csv, "NSE")!!
+        assertEquals(setOf("RELIANCE"), grouped.keys)
+    }
+
+    @Test
+    fun rejectsAmbiguousZipWithMultipleCsvFiles() {
+        val output = ByteArrayOutputStream()
+        ZipOutputStream(output).use { zip ->
+            listOf("one.csv", "two.csv").forEach { name ->
+                zip.putNextEntry(ZipEntry(name))
+                zip.write("a,b\\n1,2".toByteArray())
+                zip.closeEntry()
+            }
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            ResearchCsvFolderImporter.decodeCsvPayload("reports.zip", output.toByteArray())
         }
     }
 
