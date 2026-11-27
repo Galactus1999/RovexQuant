@@ -9,6 +9,7 @@ import com.rovexquant.app.domain.InstrumentIdentity
 import com.rovexquant.app.domain.OhlcvBar
 import com.rovexquant.app.domain.OhlcvCsvResearch
 import com.rovexquant.app.domain.OhlcvInterval
+import com.rovexquant.app.domain.UniversalOhlcvCsvParser
 import com.rovexquant.app.domain.InstrumentType
 import java.time.LocalDate
 import java.time.LocalDateTime
