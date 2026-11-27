@@ -212,6 +212,22 @@ object ResearchCsvFolderImporter {
     internal fun parseFolderCsv(content: String, volumeRequired: Boolean): List<OhlcvBar> =
         UniversalOhlcvCsvParser.parse(content, maxRows = 100_000, volumeRequired = volumeRequired)
 
+    /** Import a named single-instrument daily CSV into its typed local research dataset. */
+    fun importNamedInstrumentCsv(
+        context: Context,
+        sourceFileName: String,
+        content: String
+    ): ResearchCsvDatasetMetadata? {
+        val instrument = runCatching { resolveInstrumentFromFileName(sourceFileName) }.getOrNull()
+            ?: return null
+        val bars = parseFolderCsv(content, volumeRequired = instrument.instrumentType == InstrumentType.EQUITY)
+        validateDailyBars(bars)
+        val merged = OhlcvCsvResearch.merge(
+            ResearchCsvDatasetStore.load(context, instrument).orEmpty(), bars
+        )
+        return ResearchCsvDatasetStore.save(context, instrument, merged, sourceFileName)
+    }
+
     /** Decode common CSV encodings without silently treating UTF-16 as UTF-8. */
     fun decodeCsvBytes(bytes: ByteArray): String {
         require(bytes.size <= MAX_CSV_BYTES) { "CSV exceeds the 20 MB import limit." }
@@ -282,31 +298,6 @@ object ResearchCsvFolderImporter {
         }
     }
 
-    private fun parseCsvRecord(line: String): List<String> {
-        val fields = ArrayList<String>()
-        val field = StringBuilder()
-        var quoted = false
-        var index = 0
-        while (index < line.length) {
-            val char = line[index]
-            when {
-                char == '"' && quoted && index + 1 < line.length && line[index + 1] == '"' -> {
-                    field.append('"')
-                    index++
-                }
-                char == '"' -> quoted = !quoted
-                char == ',' && !quoted -> {
-                    fields += field.toString()
-                    field.setLength(0)
-                }
-                else -> field.append(char)
-            }
-            index++
-        }
-        require(!quoted) { "CSV contains an unterminated quoted field." }
-        fields += field.toString()
-        return fields
-    }
 
     private data class BoundedRead(val bytes: ByteArray, val bytesRead: Int, val exceeded: Boolean)
 
