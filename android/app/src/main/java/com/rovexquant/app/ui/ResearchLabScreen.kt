@@ -127,10 +127,20 @@ fun ResearchLabScreen(
                             ("Exchange Bhavcopy · " + exchangeDatasets.size + " instruments imported")
                     } else {
                         val csv = ResearchCsvFolderImporter.decodeCsvPayload(sourceName, bytes)
-                        val bars = OhlcvCsvResearch.parse(csv)
-                        // Keep manual research imports isolated from every typed instrument cache.
-                        TejHqOhlcvStore.save(context, bars)
-                        OhlcvCsvResearch.summarize(bars) to sourceName
+                        val namedDataset = ResearchCsvFolderImporter.importNamedInstrumentCsv(
+                            context, sourceName, csv
+                        )
+                        if (namedDataset != null) {
+                            val bars = ResearchCsvDatasetStore.load(context, namedDataset)
+                                ?: throw IllegalStateException("Imported instrument dataset could not be reopened.")
+                            OhlcvCsvResearch.summarize(bars) to
+                                ("CSV · " + namedDataset.label + " · " + bars.size + " bars")
+                        } else {
+                            val bars = OhlcvCsvResearch.parse(csv)
+                            // Unnamed files remain isolated until the user supplies instrument identity.
+                            TejHqOhlcvStore.save(context, bars)
+                            OhlcvCsvResearch.summarize(bars) to sourceName
+                        }
                     }
                 }
                 summary = loaded.first
