@@ -229,16 +229,25 @@ object ResearchCsvFolderImporter {
         val isZip = bytes.size >= 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte()
         if (!isZip) return decodeCsvBytes(bytes)
         var csvBytes: ByteArray? = null
+        var totalExpandedBytes = 0
+        var fileEntries = 0
         ZipInputStream(ByteArrayInputStream(bytes)).use { archive ->
             while (true) {
                 val entry = archive.nextEntry ?: break
-                if (!entry.isDirectory && entry.name.endsWith(".csv", ignoreCase = true)) {
-                    require(csvBytes == null) {
-                        "ZIP contains more than one CSV; import one exchange report at a time."
+                if (!entry.isDirectory) {
+                    fileEntries++
+                    require(fileEntries <= 20) { "ZIP contains too many entries to import safely." }
+                    val remaining = MAX_CSV_BYTES - totalExpandedBytes
+                    require(remaining > 0) { "Expanded ZIP exceeds the 20 MB import limit." }
+                    val bounded = archive.readBounded(remaining)
+                    require(!bounded.exceeded) { "Expanded ZIP exceeds the 20 MB import limit." }
+                    totalExpandedBytes += bounded.bytesRead
+                    if (entry.name.endsWith(".csv", ignoreCase = true)) {
+                        require(csvBytes == null) {
+                            "ZIP contains more than one CSV; import one exchange report at a time."
+                        }
+                        csvBytes = bounded.bytes
                     }
-                    val bounded = archive.readBounded(MAX_CSV_BYTES)
-                    require(!bounded.exceeded) { "CSV inside ZIP exceeds the 20 MB import limit." }
-                    csvBytes = bounded.bytes
                 }
                 archive.closeEntry()
             }
