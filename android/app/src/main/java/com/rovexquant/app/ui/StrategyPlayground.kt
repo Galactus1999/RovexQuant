@@ -6,7 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -424,9 +424,10 @@ fun QuantCopilotSheet(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
-            items(messages) { message ->
+            itemsIndexed(messages) { index, message ->
                 Column(
-                    Modifier.fillMaxWidth().background(PanelRaised, RoundedCornerShape(12.dp)).padding(10.dp)
+                    Modifier.fillMaxWidth().background(PanelRaised, RoundedCornerShape(12.dp))
+                        .padding(10.dp).testTag("copilot.message.$index")
                 ) {
                     Text(if (message.role == "user") "YOU" else "COPILOT", color = if (message.role == "user") Cyan else Mint, fontSize = 8.sp, fontWeight = FontWeight.Bold)
                     Text(message.content, color = MaterialTheme.colorScheme.onBackground, fontSize = 11.sp, lineHeight = 16.sp)
