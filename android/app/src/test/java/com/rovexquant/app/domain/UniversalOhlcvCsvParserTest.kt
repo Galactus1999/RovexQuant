@@ -28,9 +28,9 @@ class UniversalOhlcvCsvParserTest {
 
     @Test
     fun identifiesAdjustedCloseOnlyExportsToPreventRawPriceMerging() {
-        val adjustedOnly = "Date,Open,High,Low,Adj Close,Volume\\n" +
+        val adjustedOnly = "Date,Open,High,Low,Adj Close,Volume\n" +
             "2026-11-24,100,102,99,101,1000"
-        val rawAndAdjusted = "Date,Open,High,Low,Close,Adj Close,Volume\\n" +
+        val rawAndAdjusted = "Date,Open,High,Low,Close,Adj Close,Volume\n" +
             "2026-11-24,100,102,99,101,100,1000"
         assertEquals("ADJUSTED_CLOSE", UniversalOhlcvCsvParser.detectPriceBasis(adjustedOnly))
         assertEquals("RAW_CLOSE", UniversalOhlcvCsvParser.detectPriceBasis(rawAndAdjusted))
