@@ -100,7 +100,7 @@ fun AiWorkspaceScreen(
     }
 
     val configuredProviders = providers.filter { it.configured }
-    val canUseResearch = configuredProviders.isNotEmpty()
+    val canUseResearch = configuredProviders.any { repository.isAiProviderEnabled(it.providerId) }
 
     fun recoverEodData() {
         if (briefLoading) return
