@@ -19,6 +19,8 @@ import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.MarketTick
 import com.rovexquant.app.data.model.InstrumentQuoteSnapshot
 import com.rovexquant.app.data.model.MarketIngestionStatus
+import com.rovexquant.app.data.model.MarketHistoryTarget
+import com.rovexquant.app.data.model.MarketHistoryBulkResult
 import com.rovexquant.app.data.model.MacroResearchSummary
 import com.rovexquant.app.data.model.MarketIntegrityStatus
 import com.rovexquant.app.data.model.MarketDataHealth
@@ -161,6 +163,15 @@ class QuantRepository(context: Context) : QuantDataRepository {
         session: QuantSession, exchange: String
     ): MarketIngestionStatus = withContext(Dispatchers.IO) {
         QuantApi.fetchMarketIngestionStatus(session, exchange)
+    }
+
+    override suspend fun fetchMarketHistoryBulk(
+        session: QuantSession,
+        exchange: String,
+        targets: List<MarketHistoryTarget>,
+        toDate: LocalDate
+    ): MarketHistoryBulkResult = withContext(Dispatchers.IO) {
+        QuantApi.fetchMarketHistoryBulk(session, exchange, targets, toDate)
     }
 
     override suspend fun fetchInstrumentQuote(
