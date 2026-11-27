@@ -156,7 +156,7 @@ object ResearchCsvFolderImporter {
                         skipped++
                         continue
                     }
-                    val parsed = parseFolderCsv(String(bytes, Charsets.UTF_8), instrument.instrumentType == InstrumentType.EQUITY)
+                    val parsed = parseFolderCsv(csvContent, instrument.instrumentType == InstrumentType.EQUITY)
                     validateDailyBars(parsed)
                     val merged = OhlcvCsvResearch.merge(existing.orEmpty(), parsed)
                     ResearchCsvDatasetStore.save(context, instrument, merged, displayName)
