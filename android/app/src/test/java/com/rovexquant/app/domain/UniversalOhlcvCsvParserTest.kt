@@ -70,8 +70,8 @@ class UniversalOhlcvCsvParserTest {
 
     @Test
     fun importsNseFullBhavcopyLegacyColumnNamesAsBulkEquityRows() {
-        val csv = "SYMBOL,SERIES,DATE1,PREV_CLOSE,OPEN_PRICE,HIGH_PRICE,LOW_PRICE,LAST_PRICE,CLOSE_PRICE,AVG_PRICE,TTL_TRD_QNTY,TURNOVER_LACS,NO_OF_TRADES\\n" +
-            "RELIANCE,EQ,26-Nov-2026,100,101,105,99,104,103,102,123456,12.5,5000\\n" +
+        val csv = "SYMBOL,SERIES,DATE1,PREV_CLOSE,OPEN_PRICE,HIGH_PRICE,LOW_PRICE,LAST_PRICE,CLOSE_PRICE,AVG_PRICE,TTL_TRD_QNTY,TURNOVER_LACS,NO_OF_TRADES\n" +
+            "RELIANCE,EQ,26-Nov-2026,100,101,105,99,104,103,102,123456,12.5,5000\n" +
             "TCS,BE,26-Nov-2026,200,201,205,199,204,203,202,654321,25.0,6000"
         val grouped = UniversalOhlcvCsvParser.parseExchangeBhavcopy(csv, "NSE")!!
         assertEquals(setOf("RELIANCE", "TCS"), grouped.keys)
