@@ -12,8 +12,6 @@ data class OhlcvResearchSummary(
 
 object OhlcvCsvResearch {
     const val STORAGE_FILE_NAME = "quant_local_research.csv"
-    private val required = listOf("timestamp", "open", "high", "low", "close", "volume")
-
     /** Strict offline CSV import. Timestamps must be ISO-8601 with an explicit UTC offset. */
     fun parse(content: String, maxRows: Int = 100_000): List<OhlcvBar> =
         UniversalOhlcvCsvParser.parse(content, maxRows = maxRows, volumeRequired = true)
