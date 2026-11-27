@@ -176,7 +176,7 @@ fun ResearchLabScreen(
                         OhlcvCsvResearch.summarize(bars) to
                             ("Exchange Bhavcopy · " + exchangeDatasets.size + " instruments imported")
                     } else {
-                        val csv = ResearchCsvFolderImporter.decodeCsvPayload(sourceName, bytes)
+                        val csv = ResearchCsvFolderImporter.decodeCsvPayload(bytes)
                         val namedDataset = ResearchCsvFolderImporter.importNamedInstrumentCsv(
                             context, sourceName, csv
                         )
