@@ -151,6 +151,12 @@ object ResearchCsvAutoSyncManager {
         val prepared = mutableListOf<Pair<ResearchCsvDatasetMetadata, List<OhlcvBar>>>()
         val results = mutableListOf<DatasetSyncResult>()
         for (metadata in datasets) {
+            if (metadata.priceBasis != "RAW_CLOSE") {
+                results += DatasetSyncResult(
+                    false, metadata.label + ": adjusted-close CSV cannot be merged with raw EOD prices."
+                )
+                continue
+            }
             try {
                 val existing = withContext(Dispatchers.IO) {
                     ResearchCsvDatasetStore.load(context, metadata)
@@ -214,6 +220,9 @@ object ResearchCsvAutoSyncManager {
         repository: QuantDataRepository,
         metadata: ResearchCsvDatasetMetadata
     ): DatasetSyncResult {
+        require(metadata.priceBasis == "RAW_CLOSE") {
+            "Adjusted-close CSV cannot be merged with raw Upstox history."
+        }
         val existing = withContext(Dispatchers.IO) {
             ResearchCsvDatasetStore.load(context, metadata)
         } ?: throw IllegalStateException("Imported CSV file is missing.")
@@ -263,7 +272,8 @@ object ResearchCsvAutoSyncManager {
                     bars = merged,
                     sourceFileName = metadata.sourceFileName,
                     lastSyncProvider = provider,
-                    lastSyncedAtMillis = System.currentTimeMillis()
+                    lastSyncedAtMillis = System.currentTimeMillis(),
+                    priceBasis = metadata.priceBasis
                 )
             } else {
                 ResearchCsvDatasetStore.markSynced(context, metadata, provider)
