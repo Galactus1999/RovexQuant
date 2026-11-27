@@ -5,9 +5,11 @@ import com.rovexquant.app.data.model.EodMarketSnapshot
 import com.rovexquant.app.data.model.EodStockMove
 import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.QuantSession
+import com.rovexquant.app.data.repository.QuantDataRepository
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
@@ -15,12 +17,16 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,6 +34,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -74,7 +81,8 @@ fun MarketPulseScreen(
     eodSnapshot: EodMarketSnapshot? = null,
     eodSnapshotStatus: String = "EOD snapshot not loaded",
     onRefreshEodSnapshot: () -> Unit = {},
-    onOpenInstrument: (symbol: String, displayName: String) -> Unit = { _, _ -> }
+    onOpenInstrument: (symbol: String, displayName: String) -> Unit = { _, _ -> },
+    repository: QuantDataRepository? = null
 ) {
     val activeSession = session
     var equitySearch by remember { mutableStateOf("") }
@@ -152,6 +160,7 @@ fun MarketPulseScreen(
     val exchangeClock = latestTick?.exchangeTimestamp?.substringAfter("T")?.take(8) ?: "unavailable"
     val receiveClock = latestTick?.receivedAt?.substringAfter("T")?.take(8) ?: "unavailable"
 
+    Box(Modifier.fillMaxSize()) {
     PullToRefreshBox(
         isRefreshing = isRefreshing,
         onRefresh = {
@@ -178,16 +187,17 @@ fun MarketPulseScreen(
         }
         LazyColumn(modifier = Modifier.fillMaxSize().testTag("market.pulse.list"), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Text("Market Pulse", color = MaterialTheme.colorScheme.onBackground, fontSize = 25.sp, fontWeight = FontWeight.Bold)
-                StatusPill(
-                    when {
-                        streamStatus.startsWith("Live") -> "LIVE"
-                        streamStatus.startsWith("Connected") -> "CONNECTED"
-                        streamStatus.contains("stale", ignoreCase = true) -> "STALE"
-                        else -> "OFFLINE"
-                    },
-                    if (streamStatus.startsWith("Live")) Mint else Gold
+            Text("Market Pulse", color = MaterialTheme.colorScheme.onBackground, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+        }
+        if (activeSession != null && repository != null) {
+            item(key = "strategy.playground") {
+                StrategyPlayground(
+                    session = activeSession,
+                    repository = repository,
+                    onAskCopilot = { prompt ->
+                        copilotInitialPrompt = prompt
+                        showCopilotSheet = true
+                    }
                 )
             }
         }
@@ -389,6 +399,31 @@ fun MarketPulseScreen(
             }
         }
         
+        }
+    }
+    if (activeSession != null && repository != null) {
+        FloatingActionButton(
+            onClick = {
+                copilotInitialPrompt = ""
+                showCopilotSheet = true
+            },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+            containerColor = AiPurple,
+            contentColor = Ink
+        ) { Text("✦", fontSize = 22.sp, fontWeight = FontWeight.Bold) }
+    }
+    }
+    if (showCopilotSheet && activeSession != null && repository != null) {
+        ModalBottomSheet(
+            onDismissRequest = { showCopilotSheet = false },
+            sheetState = copilotSheetState,
+            containerColor = Panel
+        ) {
+            QuantCopilotSheet(
+                session = activeSession,
+                repository = repository,
+                initialPrompt = copilotInitialPrompt
+            )
         }
     }
 }
