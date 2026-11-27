@@ -108,7 +108,7 @@ object UniversalOhlcvCsvParser {
             val series = row[seriesIndex].trim().uppercase(Locale.ROOT)
             if (series !in allowedSeries) return@forEachIndexed
             val symbol = row[symbolIndex].trim().uppercase(Locale.ROOT)
-            require(symbol.matches(Regex("^[A-Z0-9][A-Z0-9&._-]{0,39}$"))) {
+            require(symbol.matches(Regex("^[A-Z0-9][A-Z0-9&-]{0,29}$"))) {
                 "Bhavcopy row " + rowNumber + " has an invalid trading symbol"
             }
             val timestamp = parseTimestamp(row[dateIndex], rowNumber)
