@@ -91,8 +91,8 @@ class UniversalOhlcvCsvParserTest {
 
     @Test
     fun prefersNseEqSeriesWhenSameSymbolHasMultipleExchangeSeriesOnOneDate() {
-        val csv = "TradDt,TckrSymb,SctySrs,OpnPric,HghPric,LwPric,ClsPric,TtlTradgVol\\n" +
-            "2026-11-24,RELIANCE,BE,100,102,99,101,1000\\n" +
+        val csv = "TradDt,TckrSymb,SctySrs,OpnPric,HghPric,LwPric,ClsPric,TtlTradgVol\n" +
+            "2026-11-24,RELIANCE,BE,100,102,99,101,1000\n" +
             "2026-11-24,RELIANCE,EQ,101,103,100,102,1100"
         val grouped = UniversalOhlcvCsvParser.parseExchangeBhavcopy(csv, "NSE")!!
         assertEquals(1, grouped.getValue("RELIANCE").size)
