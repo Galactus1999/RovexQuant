@@ -83,11 +83,19 @@ class FakeQuantRepository(
 ) : QuantDataRepository {
     @Volatile var strategyBriefRequestCount: Int = 0
         private set
+    @Volatile var instrumentHistoryRequestCount: Int = 0
+        private set
     @Volatile var aiChatRequestCount: Int = 0
         private set
     @Volatile var lastStrategyContext: String? = null
         private set
     @Volatile var lastStrategySymbol: String? = null
+        private set
+    @Volatile var lastInstrumentProvider: String? = null
+        private set
+    @Volatile var lastInstrumentSymbol: String? = null
+        private set
+    @Volatile var lastAiRequestPrompt: String? = null
         private set
 
     @Volatile var marketStreamStartCount: Int = 0
@@ -268,6 +276,9 @@ class FakeQuantRepository(
         from: LocalDate,
         to: LocalDate
     ): MarketOhlcvSeries {
+        instrumentHistoryRequestCount += 1
+        lastInstrumentProvider = instrument.provider.name
+        lastInstrumentSymbol = instrument.canonicalSymbol
         val bars = buildList {
             var date = if (instrument.interval.isIntraday) from else to.minusDays(160)
             var index = 0
@@ -413,6 +424,7 @@ class FakeQuantRepository(
         taskType: String
     ): AiCompletion {
         aiChatRequestCount += 1
+        lastAiRequestPrompt = messages.lastOrNull()?.content
         return AiCompletion(
         providerId ?: "groq", credentialId, model ?: "server-research-model",
         "Deterministic AI fixture response.", false, taskType
