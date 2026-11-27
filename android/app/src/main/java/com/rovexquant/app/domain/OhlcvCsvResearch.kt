@@ -15,56 +15,8 @@ object OhlcvCsvResearch {
     private val required = listOf("timestamp", "open", "high", "low", "close", "volume")
 
     /** Strict offline CSV import. Timestamps must be ISO-8601 with an explicit UTC offset. */
-    fun parse(content: String, maxRows: Int = 100_000): List<OhlcvBar> {
-        require(maxRows > 0) { "maxRows must be positive" }
-        val lines = content.lineSequence().filter { it.isNotBlank() }.iterator()
-        require(lines.hasNext()) { "CSV is empty" }
-        val headers = parseRecord(lines.next()).mapIndexed { index, header ->
-            (if (index == 0) header.removePrefix("\uFEFF") else header).trim().lowercase()
-        }
-        val indexes = required.associateWith { name ->
-            headers.indexOf(name).also { require(it >= 0) { "CSV is missing required column: $name" } }
-        }
-        val bars = ArrayList<OhlcvBar>()
-        var previous: OffsetDateTime? = null
-        var rowNumber = 1
-        while (lines.hasNext()) {
-            val line = lines.next()
-            rowNumber++
-            require(bars.size < maxRows) { "CSV exceeds the $maxRows row limit" }
-            val cells = parseRecord(line)
-            require(cells.size == headers.size) { "CSV row $rowNumber has the wrong number of columns" }
-            fun value(name: String) = cells[indexes.getValue(name)].trim()
-            val timestamp = try {
-                OffsetDateTime.parse(value("timestamp"))
-            } catch (error: Exception) {
-                throw IllegalArgumentException("CSV row $rowNumber timestamp must be ISO-8601 with a timezone offset", error)
-            }
-            require(previous?.let { timestamp.isAfter(it) } ?: true) {
-                "CSV timestamps must be strictly increasing without duplicates (row $rowNumber)"
-            }
-            fun price(name: String): Double {
-                val parsed = value(name).toDoubleOrNull()
-                require(parsed != null && parsed.isFinite() && parsed > 0.0) {
-                    "CSV row $rowNumber has invalid $name price"
-                }
-                return parsed
-            }
-            val open = price("open")
-            val high = price("high")
-            val low = price("low")
-            val close = price("close")
-            val volume = value("volume").toLongOrNull()
-            require(volume != null && volume >= 0) { "CSV row $rowNumber has invalid volume" }
-            require(high >= max(open, close) && low <= minOf(open, close) && high >= low) {
-                "CSV row $rowNumber has invalid OHLC range"
-            }
-            bars += OhlcvBar(timestamp, open, high, low, close, volume)
-            previous = timestamp
-        }
-        require(bars.isNotEmpty()) { "CSV contains no data rows" }
-        return bars
-    }
+    fun parse(content: String, maxRows: Int = 100_000): List<OhlcvBar> =
+        UniversalOhlcvCsvParser.parse(content, maxRows = maxRows, volumeRequired = true)
 
     /** Merge bars by exact instant; incoming rows replace overlaps without collapsing intraday candles. */
     fun merge(existing: List<OhlcvBar>, incoming: List<OhlcvBar>): List<OhlcvBar> {
