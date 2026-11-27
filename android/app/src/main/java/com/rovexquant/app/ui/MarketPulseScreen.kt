@@ -9,7 +9,6 @@ import com.rovexquant.app.data.repository.QuantDataRepository
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
@@ -92,6 +91,9 @@ fun MarketPulseScreen(
     var showSectorHeatmap by remember { mutableStateOf(false) }
     var showAllEquities by remember { mutableStateOf(false) }
     var freshnessClock by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var showCopilotSheet by rememberSaveable { mutableStateOf(false) }
+    var copilotInitialPrompt by rememberSaveable { mutableStateOf("") }
+    val copilotSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
 
     // Freshness only has meaning when at least one live tick exists. Do not
     // keep a periodic state writer alive on the offline/empty dashboard: Compose
