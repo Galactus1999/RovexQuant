@@ -187,7 +187,7 @@ fun MarketPulseScreen(
                 }
             )
         }
-        LazyColumn(modifier = Modifier.fillMaxSize().testTag("market.pulse.list"), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+        LazyColumn(modifier = Modifier.fillMaxSize().testTag("market.pulse.list"), contentPadding = PaddingValues(start = 18.dp, top = 12.dp, end = 18.dp, bottom = 92.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item {
             Text("Market Pulse", color = MaterialTheme.colorScheme.onBackground, fontSize = 25.sp, fontWeight = FontWeight.Bold)
         }
