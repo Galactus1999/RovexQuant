@@ -81,6 +81,15 @@ class QuantLoginTestActivity : QuantTestActivity() {
 class FakeQuantRepository(
     private val restoreAuthenticatedSession: Boolean
 ) : QuantDataRepository {
+    @Volatile var strategyBriefRequestCount: Int = 0
+        private set
+    @Volatile var aiChatRequestCount: Int = 0
+        private set
+    @Volatile var lastStrategyContext: String? = null
+        private set
+    @Volatile var lastStrategySymbol: String? = null
+        private set
+
     @Volatile var marketStreamStartCount: Int = 0
         private set
     @Volatile var marketIngestionRequestCount: Int = 0
@@ -402,10 +411,13 @@ class FakeQuantRepository(
         credentialId: String?,
         fallbackProviders: List<String>,
         taskType: String
-    ) = AiCompletion(
+    ): AiCompletion {
+        aiChatRequestCount += 1
+        return AiCompletion(
         providerId ?: "groq", credentialId, model ?: "server-research-model",
         "Deterministic AI fixture response.", false, taskType
-    )
+        )
+    }
 
     override suspend fun requestAiStrategyBrief(
         session: QuantSession,
@@ -419,7 +431,11 @@ class FakeQuantRepository(
         credentialId: String?,
         fallbackProviders: List<String>,
         automaticTaskRouting: Boolean
-    ) = AiStrategyBrief(
+    ): AiStrategyBrief {
+        strategyBriefRequestCount += 1
+        lastStrategyContext = strategyContext
+        lastStrategySymbol = symbol
+        return AiStrategyBrief(
         provider = "tejhq_eod",
         dataMode = "END_OF_DAY",
         exchange = exchange,
@@ -448,7 +464,8 @@ class FakeQuantRepository(
         ),
         dataRights = "Private personal research only.",
         limitations = listOf("EOD daily bars only.")
-    )
+        )
+    }
 
     override suspend fun callNseMcpTool(
         session: QuantSession,
