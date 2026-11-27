@@ -202,7 +202,7 @@ fun AiProviderSettingsPanel(
                             }
                         }
                     },
-                    enabled = !testing && selected?.configured == true && enabledProviders.isNotEmpty(),
+                    enabled = !testing && providers.any { it.configured && it.providerId in enabledProviders },
                     modifier = Modifier.weight(1f).testTag("settings.ai.provider.test")
                 ) {
                     if (testing) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
