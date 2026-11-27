@@ -35,6 +35,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rovexquant.app.feature.workspace.QuantWorkspaceViewModel
+import java.time.Instant
 
 private enum class TerminalSection(val label: String, val glyph: String) {
     PULSE("Pulse", "◈"),
@@ -101,12 +102,28 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
 
     Column(Modifier.fillMaxSize().background(Ink)) {
         Column(Modifier.padding(horizontal = 17.dp)) {
+            val nowMillis = System.currentTimeMillis()
+            val healthLevel = resolveSystemHealthLevel(
+                streamStatus = state.streamStatus,
+                eodSnapshotStatus = state.eodSnapshotStatus,
+                hasEodSnapshot = state.eodSnapshot != null,
+                ticks = state.ticks.values.toList(),
+                nowMillis = nowMillis
+            )
+            val latestTickAt = state.ticks.values.maxByOrNull { it.receivedAt }?.receivedAt
             TerminalHeader(
-                status = when {
-                    state.streamStatus.startsWith("Live") -> "Live data"
-                    state.streamStatus.contains("stale", ignoreCase = true) -> "Stale data"
-                    state.streamStatus.startsWith("Connected") -> "Connected"
-                    else -> "Backend"
+                status = state.streamStatus,
+                healthLevel = healthLevel,
+                diagnosticDetails = listOf(
+                    "Market stream · ${state.streamStatus}",
+                    "Latest quote · ${latestTickAt ?: "No quote received"} · ${state.ticks.size} instruments cached",
+                    "NSE EOD snapshot · ${state.eodSnapshot?.let { "${it.tradingDate} · ${it.pricedSymbols} priced symbols" } ?: state.eodSnapshotStatus}",
+                    "Database ingestion · ${state.marketIngestionStatusLabel}"
+                ),
+                onRetry = {
+                    workspace.reconnectMarketStream()
+                    workspace.refreshEodSnapshot()
+                    workspace.refreshMarketIngestionStatus()
                 },
                 onSignOut = workspace::signOut,
                 onOpenSettings = { showSettings = true }
@@ -345,5 +362,34 @@ private fun TerminalNavigation(
                 }
             }
         }
+    }
+}
+
+
+internal fun resolveSystemHealthLevel(
+    streamStatus: String,
+    eodSnapshotStatus: String,
+    hasEodSnapshot: Boolean,
+    ticks: List<com.rovexquant.app.data.model.MarketTick>,
+    nowMillis: Long
+): SystemHealthLevel {
+    val stream = streamStatus.lowercase()
+    val eod = eodSnapshotStatus.lowercase()
+    val hardFailure = listOf("failed", "error", "unavailable").any { token ->
+        stream.contains(token) || (eod.contains(token) && !hasEodSnapshot)
+    }
+    if (hardFailure) return SystemHealthLevel.ERROR
+
+    val freshValidTick = ticks.any { tick ->
+        tick.quality == "VALID" && runCatching {
+            val receivedAt = Instant.parse(tick.receivedAt).toEpochMilli()
+            receivedAt <= nowMillis + 60_000 && receivedAt >= nowMillis - 30_000
+        }.getOrDefault(false)
+    }
+    val liveStream = stream.startsWith("live")
+    return if (liveStream && freshValidTick && hasEodSnapshot) {
+        SystemHealthLevel.HEALTHY
+    } else {
+        SystemHealthLevel.DEGRADED
     }
 }
