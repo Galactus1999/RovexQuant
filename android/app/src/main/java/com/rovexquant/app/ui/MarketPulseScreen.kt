@@ -93,14 +93,8 @@ fun MarketPulseScreen(
     var freshnessClock by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var showCopilotSheet by rememberSaveable { mutableStateOf(false) }
     var copilotInitialPrompt by rememberSaveable { mutableStateOf("") }
-    val copilotSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
-
-    // Open the contextual assistant fully so its prompt and send controls are
-    // immediately reachable on compact screens, rather than hiding below a
-    // partially-expanded sheet viewport.
-    LaunchedEffect(showCopilotSheet) {
-        if (showCopilotSheet) copilotSheetState.expand()
-    }
+    // Copilot is an interactive workspace, not a peek sheet: always open it expanded.
+    val copilotSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     // Freshness only has meaning when at least one live tick exists. Do not
     // keep a periodic state writer alive on the offline/empty dashboard: Compose
@@ -425,6 +419,7 @@ fun MarketPulseScreen(
     if (showCopilotSheet && activeSession != null && repository != null) {
         ModalBottomSheet(
             onDismissRequest = { showCopilotSheet = false },
+            modifier = Modifier.fillMaxHeight(),
             sheetState = copilotSheetState,
             containerColor = Panel
         ) {
