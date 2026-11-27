@@ -147,7 +147,6 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
                     session = activeSession,
                     repository = workspace.repository,
                     onBack = { showSettings = false },
-                    onOpenAiSettings = { showSettings = false; selected = TerminalSection.AI },
                     onOpenMarketPulse = { showSettings = false; selected = TerminalSection.PULSE }
                 )
             } else if (selectedInstrument != null) {
@@ -200,7 +199,8 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
                         session = activeSession,
                         repository = workspace.repository,
                         equityInstruments = state.equities,
-                        indexKeys = state.indexKeys
+                        indexKeys = state.indexKeys,
+                        onOpenSettings = { showSettings = true }
                     )
                 }
             }
