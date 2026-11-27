@@ -241,7 +241,7 @@ fun AiWorkspaceScreen(
                                 .testTag("ai.research.run.${run.runId}")
                         ) {
                             Text(
-                                run.taskType.replace('_', ' ').uppercase() + " · " + run.providerId + "/" + run.model,
+                                run.taskType.replace('_', ' ').uppercase() + " · " + run.providerId,
                                 color = MaterialTheme.colorScheme.onBackground,
                                 fontSize = 10.sp, fontWeight = FontWeight.SemiBold
                             )
