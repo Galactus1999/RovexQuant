@@ -196,8 +196,9 @@ fun StrategyPlayground(
     var result by remember { mutableStateOf<AiStrategyBrief?>(null) }
     var peek by remember { mutableStateOf<String?>(null) }
     val today = remember { LocalDate.now(ZoneId.of("Asia/Kolkata")) }
-    val fromDate = remember { today.minusDays(365).toString() }
-    val toDate = remember { today.toString() }
+    val fromDate = remember { today.minusDays(366).toString() }
+    // Never include Upstox's evolving current-session 1d candle in a completed-bar strategy review.
+    val toDate = remember { today.minusDays(1).toString() }
 
     val generatedContext = remember(horizon, setup, filter, riskPercent) {
         buildString {
