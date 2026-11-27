@@ -44,6 +44,8 @@ import android.util.Log
 import kotlinx.coroutines.withContext
 
 /** Coordinates remote and local data sources; presentation code never calls transport directly. */
+private val AI_PROVIDER_IDS = listOf("openai", "gemini", "deepseek", "groq", "openrouter")
+
 class QuantRepository(context: Context) : QuantDataRepository {
     private val appContext = context.applicationContext
 
@@ -109,6 +111,18 @@ class QuantRepository(context: Context) : QuantDataRepository {
 
     override suspend fun deleteAiProviderCredential(session: QuantSession, providerId: String) =
         withContext(Dispatchers.IO) { QuantApi.deleteAiProviderCredential(session, providerId) }
+
+    override suspend fun setAiProviderEnabled(providerId: String, enabled: Boolean) =
+        withContext(Dispatchers.IO) {
+            require(providerId in AI_PROVIDER_IDS) { "Unsupported AI provider." }
+            appContext.getSharedPreferences("rovex_ai_provider_preferences", 0)
+                .edit().putBoolean(providerId, enabled).apply()
+        }
+
+    private fun enabledAiProviderIds(): List<String> {
+        val preferences = appContext.getSharedPreferences("rovex_ai_provider_preferences", 0)
+        return AI_PROVIDER_IDS.filter { preferences.getBoolean(it, true) }
+    }
 
     override suspend fun saveUpstoxAnalyticsToken(session: QuantSession, token: String) =
         withContext(Dispatchers.IO) { QuantApi.saveUpstoxAnalyticsToken(session, token) }
@@ -244,7 +258,7 @@ class QuantRepository(context: Context) : QuantDataRepository {
         fallbackProviders: List<String>,
         taskType: String
     ): AiCompletion = withContext(Dispatchers.IO) {
-        QuantApi.sendAiMessage(session, providerId, model, messages, credentialId, fallbackProviders, taskType)
+        QuantApi.sendAiMessage(session, providerId, model, messages, credentialId, fallbackProviders, taskType, enabledAiProviderIds())
     }
 
     override suspend fun requestAiStrategyBrief(
