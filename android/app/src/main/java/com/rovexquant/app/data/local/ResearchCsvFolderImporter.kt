@@ -121,6 +121,28 @@ object ResearchCsvFolderImporter {
                     totalBytes += bounded.bytesRead
                     require(!bounded.exceeded) { "CSV exceeds the configured per-file or folder byte limit." }
                     val bytes = bounded.bytes
+                    val csvContent = String(bytes, Charsets.UTF_8)
+                    val exchange = if (displayName.startsWith("BSE_", ignoreCase = true)) "BSE" else "NSE"
+                    val exchangeRows = UniversalOhlcvCsvParser.parseExchangeBhavcopy(csvContent, exchange)
+                    if (exchangeRows != null) {
+                        val contentHash = sha256(bytes)
+                        val ledgerIdentity = documentId + "|" + exchange + "|BHAVCOPY"
+                        val ledgerKey = FILE_HASH_PREFIX + sha256(ledgerIdentity.toByteArray(Charsets.UTF_8))
+                        if (prefs.getString(ledgerKey, null) == contentHash) {
+                            skipped++
+                            continue
+                        }
+                        exchangeRows.forEach { (symbol, bars) ->
+                            val instrument = InstrumentCatalog.resolve(symbol, exchange, OhlcvInterval.DAILY)
+                            val existing = ResearchCsvDatasetStore.load(context, instrument)
+                            val merged = OhlcvCsvResearch.merge(existing.orEmpty(), bars)
+                            ResearchCsvDatasetStore.save(context, instrument, merged, displayName)
+                            rowsImported += bars.size
+                        }
+                        prefs.edit().putString(ledgerKey, contentHash).apply()
+                        imported++
+                        continue
+                    }
                     val instrument = resolveInstrumentFromFileName(displayName)
                     val contentHash = sha256(bytes)
                     val ledgerIdentity = documentId + "|" + instrument.exchange + "|" +
@@ -183,80 +205,24 @@ object ResearchCsvFolderImporter {
     }
 
 
-    internal fun parseFolderCsv(content: String, volumeRequired: Boolean): List<OhlcvBar> {
-        val lines = content.lineSequence().filter { it.isNotBlank() }.iterator()
-        require(lines.hasNext()) { "CSV is empty." }
-        val headers = parseCsvRecord(lines.next()).mapIndexed { index, value ->
-            (if (index == 0) value.removePrefix("\uFEFF") else value)
-                .trim().lowercase(Locale.ROOT).replace(" ", "").replace("_", "")
+    internal fun parseFolderCsv(content: String, volumeRequired: Boolean): List<OhlcvBar> =
+        UniversalOhlcvCsvParser.parse(content, maxRows = 100_000, volumeRequired = volumeRequired)
+
+    /** Import a multi-security NSE/BSE UDiFF Bhavcopy into separate local instrument datasets. */
+    fun importExchangeBhavcopy(
+        context: Context,
+        sourceFileName: String,
+        content: String
+    ): List<ResearchCsvDatasetMetadata>? {
+        val exchange = if (sourceFileName.startsWith("BSE_", ignoreCase = true)) "BSE" else "NSE"
+        val grouped = UniversalOhlcvCsvParser.parseExchangeBhavcopy(content, exchange) ?: return null
+        return grouped.map { (symbol, bars) ->
+            val instrument = InstrumentCatalog.resolve(symbol, exchange, OhlcvInterval.DAILY)
+            val merged = OhlcvCsvResearch.merge(
+                ResearchCsvDatasetStore.load(context, instrument).orEmpty(), bars
+            )
+            ResearchCsvDatasetStore.save(context, instrument, merged, sourceFileName)
         }
-        fun findHeader(vararg names: String): Int {
-            val index = headers.indexOfFirst { it in names }
-            require(index >= 0) { "CSV is missing required column: " + names.first() }
-            return index
-        }
-        val dateIndex = findHeader("timestamp", "date", "datetime", "time")
-        val openIndex = findHeader("open")
-        val highIndex = findHeader("high")
-        val lowIndex = findHeader("low")
-        val closeIndex = findHeader("close", "adjclose")
-        val volumeIndex = headers.indexOfFirst { it == "volume" || it == "vol" }
-        require(!volumeRequired || volumeIndex >= 0) { "Equity CSV must contain a Volume column." }
-        val zone = ZoneId.of("Asia/Kolkata")
-        val patterns = listOf(
-            DateTimeFormatter.ISO_LOCAL_DATE,
-            DateTimeFormatter.ofPattern("dd-MM-yyyy", Locale.ENGLISH),
-            DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.ENGLISH),
-            DateTimeFormatter.ofPattern("yyyy/MM/dd", Locale.ENGLISH),
-            DateTimeFormatter.ofPattern("dd-MMM-yyyy", Locale.ENGLISH)
-        )
-        fun timestamp(raw: String, row: Int): OffsetDateTime {
-            val value = raw.trim()
-            runCatching { OffsetDateTime.parse(value) }.getOrNull()?.let { return it }
-            runCatching { LocalDateTime.parse(value, DateTimeFormatter.ISO_LOCAL_DATE_TIME) }
-                .getOrNull()?.let { return it.atZone(zone).toOffsetDateTime() }
-            patterns.forEach { pattern ->
-                val date = runCatching { LocalDate.parse(value, pattern) }.getOrNull()
-                if (date != null) return date.atStartOfDay(zone).toOffsetDateTime()
-            }
-            throw IllegalArgumentException("CSV row " + row + " has an unsupported date/time; use ISO date or a recognised daily date format.")
-        }
-        fun price(raw: String, field: String, row: Int): Double {
-            val parsed = raw.trim().replace(",", "").toDoubleOrNull()
-            require(parsed != null && parsed.isFinite() && parsed > 0.0) {
-                "CSV row " + row + " has invalid " + field + " price."
-            }
-            return parsed
-        }
-        val bars = ArrayList<OhlcvBar>()
-        var previous: OffsetDateTime? = null
-        var rowNumber = 1
-        while (lines.hasNext()) {
-            val cells = parseCsvRecord(lines.next())
-            rowNumber++
-            require(cells.size == headers.size) { "CSV row " + rowNumber + " has the wrong number of columns." }
-            fun cell(index: Int) = cells[index].trim()
-            val date = timestamp(cell(dateIndex), rowNumber)
-            require(previous?.let { date.isAfter(it) } ?: true) {
-                "CSV timestamps must be strictly increasing (row " + rowNumber + ")."
-            }
-            val open = price(cell(openIndex), "open", rowNumber)
-            val high = price(cell(highIndex), "high", rowNumber)
-            val low = price(cell(lowIndex), "low", rowNumber)
-            val close = price(cell(closeIndex), "close", rowNumber)
-            val volume = if (volumeIndex < 0 || cell(volumeIndex).isBlank()) 0L
-                else cell(volumeIndex).replace(",", "").toLongOrNull()
-                    ?: throw IllegalArgumentException("CSV row " + rowNumber + " has invalid volume.")
-            require(volume >= 0L) { "CSV row " + rowNumber + " has negative volume." }
-            require(high >= maxOf(open, close) && low <= minOf(open, close) && high >= low) {
-                "CSV row " + rowNumber + " has invalid OHLC range."
-            }
-            bars += OhlcvBar(date, open, high, low, close, volume)
-            previous = date
-            require(bars.size <= 100_000) { "CSV exceeds the 100,000-row safety limit." }
-        }
-        require(bars.isNotEmpty()) { "CSV contains no data rows." }
-        return bars
     }
 
     private fun parseCsvRecord(line: String): List<String> {
