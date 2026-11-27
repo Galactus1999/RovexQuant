@@ -417,26 +417,13 @@ def bulk_symbol_history(
                 source_rows AS (
                     SELECT DISTINCT ON (bar.symbol, bar.trading_date)
                            bar.symbol, bar.series, bar.trading_date,
-                           COALESCE(adjusted.adjustment_factor * bar.open, bar.open) AS open,
-                           COALESCE(adjusted.adjustment_factor * bar.high, bar.high) AS high,
-                           COALESCE(adjusted.adjustment_factor * bar.low, bar.low) AS low,
-                           COALESCE(adjusted.adjusted_close, bar.close) AS close,
-                           COALESCE(adjusted.adjustment_factor * bar.previous_close, bar.previous_close)
-                               AS previous_close,
+                           bar.open, bar.high, bar.low, bar.close, bar.previous_close,
                            bar.volume, bar.turnover, bar.provider, bar.quality_status,
                            bar.source_retrieved_at, bar.isin, bar.trades,
-                           CASE WHEN adjusted.adjusted_close IS NULL
-                                THEN 'RAW_CLOSE' ELSE 'CORPORATE_ACTION_ADJUSTED' END AS price_basis,
-                           adjusted.adjustment_factor
+                           'RAW_CLOSE' AS price_basis,
+                           NULL::numeric AS adjustment_factor
                     FROM market_eod_bars AS bar
                     JOIN requested AS target ON target.symbol = bar.symbol
-                    LEFT JOIN market_eod_adjusted_bars AS adjusted
-                      ON adjusted.exchange=bar.exchange
-                     AND adjusted.trading_date=bar.trading_date
-                     AND adjusted.symbol=bar.symbol
-                     AND adjusted.series=bar.series
-                     AND adjusted.isin=bar.isin
-                     AND adjusted.provider='tejhq_hf_parquet'
                     WHERE bar.exchange=%s
                       AND bar.trading_date BETWEEN target.from_date AND %s
                     ORDER BY bar.symbol, bar.trading_date,
@@ -447,7 +434,6 @@ def bulk_symbol_history(
                                  WHEN bar.exchange='BSE' AND bar.series='B' THEN 1
                                  ELSE 2
                              END,
-                             adjusted.source_retrieved_at DESC NULLS LAST,
                              bar.source_retrieved_at DESC, bar.provider
                 ),
                 ranked AS (
