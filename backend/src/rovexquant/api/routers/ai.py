@@ -281,6 +281,10 @@ async def app_ai_chat(request: AIChatRequest):
             provider_id, model, fallback_providers = resolve_task_route(
                 request.task_type, request.provider_id, request.model, request.fallback_providers
             )
+        # Validate the requested task type before reserving an archive record.
+        provider_id, model, fallback_providers = resolve_task_route(
+            request.task_type, provider_id, model, fallback_providers
+        )
         mobile_messages = [
             {
                 "role": "system",
