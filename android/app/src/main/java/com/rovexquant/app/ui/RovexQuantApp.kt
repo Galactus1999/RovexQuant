@@ -45,7 +45,7 @@ private enum class TerminalSection(val label: String, val glyph: String) {
     PORTFOLIO("Portfolio", "▤"),
     INTELLIGENCE("Intel", "✦"),
     MACRO("Macro", "◎"),
-    AI("Chat", "◉")
+    AI("AI Lab", "✦")
 }
 
 @Composable
