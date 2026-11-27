@@ -119,9 +119,12 @@ class QuantRepository(context: Context) : QuantDataRepository {
                 .edit().putBoolean(providerId, enabled).apply()
         }
 
-    private fun enabledAiProviderIds(): List<String> {
-        val preferences = appContext.getSharedPreferences("rovex_ai_provider_preferences", 0)
-        return AI_PROVIDER_IDS.filter { preferences.getBoolean(it, true) }
+    private fun enabledAiProviderIds(): List<String> = AI_PROVIDER_IDS.filter(::isAiProviderEnabled)
+
+    override fun isAiProviderEnabled(providerId: String): Boolean {
+        require(providerId in AI_PROVIDER_IDS) { "Unsupported AI provider." }
+        return appContext.getSharedPreferences("rovex_ai_provider_preferences", 0)
+            .getBoolean(providerId, true)
     }
 
     override suspend fun saveUpstoxAnalyticsToken(session: QuantSession, token: String) =
@@ -275,7 +278,8 @@ class QuantRepository(context: Context) : QuantDataRepository {
         automaticTaskRouting: Boolean
     ): AiStrategyBrief = withContext(Dispatchers.IO) {
         QuantApi.requestAiStrategyBrief(
-            session, providerId, model, symbol, exchange, fromDate, toDate, strategyContext, credentialId, fallbackProviders, automaticTaskRouting
+            session, providerId, model, symbol, exchange, fromDate, toDate, strategyContext, credentialId,
+            fallbackProviders, automaticTaskRouting, enabledAiProviderIds()
         )
     }
 
