@@ -74,6 +74,27 @@ class QuantDashboardRegressionTest {
         composeRule.waitForIdle()
     }
 
+    @Test fun statusOrbOpensDiagnosticsAndRetryReconnectsAndRefreshes() {
+        waitForDashboard()
+        val activity = composeRule.activity
+        val initialStreamStarts = activity.fakeRepository.marketStreamStartCount
+        val initialIngestionRequests = activity.fakeRepository.marketIngestionRequestCount
+
+        composeRule.onNode(
+            hasContentDescription("System status", substring = true)
+        ).performClick()
+        composeRule.onNodeWithTag("quant.diagnostic.drawer").assertIsDisplayed()
+        composeRule.onNodeWithTag("quant.diagnostic.detail.0").assertTextContains("Market stream")
+        composeRule.onNodeWithTag("quant.diagnostic.detail.2").assertTextContains("NSE EOD snapshot")
+
+        composeRule.onNodeWithTag("quant.diagnostic.retry").performClick()
+        composeRule.waitUntil(15_000) {
+            activity.fakeRepository.marketStreamStartCount > initialStreamStarts &&
+                activity.fakeRepository.marketIngestionRequestCount > initialIngestionRequests
+        }
+        composeRule.onAllNodesWithTag("quant.diagnostic.drawer").assertCountEquals(0)
+    }
+
     @Test fun appStartsWithQuantMarketPulseAndHonestOfflineState() {
         waitForDashboard()
         composeRule.waitForIdle()
