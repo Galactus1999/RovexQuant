@@ -371,6 +371,119 @@ def symbol_history(exchange: str, symbol: str, *, from_date: date, to_date: date
     } for row in rows]
 
 
+
+def bulk_symbol_history(
+    exchange: str,
+    targets: list[dict[str, Any]],
+    *,
+    to_date: date,
+    limit_per_symbol: int = 60,
+) -> list[dict[str, Any]]:
+    """Return bounded incremental history for many imported instruments in one query."""
+    market = exchange.strip().upper()
+    if market not in _SERIES:
+        raise EodStoreError("Exchange must be NSE or BSE", 422)
+    if not isinstance(targets, list) or not 1 <= len(targets) <= 2000:
+        raise EodStoreError("Bulk history requires between 1 and 2,000 instrument targets", 422)
+    if not 1 <= limit_per_symbol <= 60:
+        raise EodStoreError("Per-symbol bulk history limit must be between 1 and 60", 422)
+
+    symbols: list[str] = []
+    from_dates: list[date] = []
+    seen: set[str] = set()
+    for target in targets:
+        if not isinstance(target, dict):
+            raise EodStoreError("Invalid bulk history target", 422)
+        symbol = str(target.get("symbol") or "").strip().upper()
+        start = target.get("from_date")
+        if not _SYMBOL.fullmatch(symbol) or not isinstance(start, date):
+            raise EodStoreError("Bulk history target has an invalid symbol or start date", 422)
+        if symbol in seen:
+            raise EodStoreError("Bulk history contains duplicate symbols", 422)
+        if start > to_date or (to_date - start).days > 6200:
+            raise EodStoreError("Bulk history target date range is invalid", 422)
+        seen.add(symbol)
+        symbols.append(symbol)
+        from_dates.append(start)
+
+    try:
+        with connect() as connection:
+            rows = connection.execute(
+                """
+                WITH requested AS (
+                    SELECT symbol, from_date
+                    FROM unnest(%s::text[], %s::date[]) AS target(symbol, from_date)
+                ),
+                source_rows AS (
+                    SELECT DISTINCT ON (bar.symbol, bar.trading_date)
+                           bar.symbol, bar.series, bar.trading_date,
+                           COALESCE(adjusted.adjustment_factor * bar.open, bar.open) AS open,
+                           COALESCE(adjusted.adjustment_factor * bar.high, bar.high) AS high,
+                           COALESCE(adjusted.adjustment_factor * bar.low, bar.low) AS low,
+                           COALESCE(adjusted.adjusted_close, bar.close) AS close,
+                           COALESCE(adjusted.adjustment_factor * bar.previous_close, bar.previous_close)
+                               AS previous_close,
+                           bar.volume, bar.turnover, bar.provider, bar.quality_status,
+                           bar.source_retrieved_at, bar.isin, bar.trades,
+                           CASE WHEN adjusted.adjusted_close IS NULL
+                                THEN 'RAW_CLOSE' ELSE 'CORPORATE_ACTION_ADJUSTED' END AS price_basis,
+                           adjusted.adjustment_factor
+                    FROM market_eod_bars AS bar
+                    JOIN requested AS target ON target.symbol = bar.symbol
+                    LEFT JOIN market_eod_adjusted_bars AS adjusted
+                      ON adjusted.exchange=bar.exchange
+                     AND adjusted.trading_date=bar.trading_date
+                     AND adjusted.symbol=bar.symbol
+                     AND adjusted.series=bar.series
+                     AND adjusted.isin=bar.isin
+                     AND adjusted.provider='tejhq_hf_parquet'
+                    WHERE bar.exchange=%s
+                      AND bar.trading_date BETWEEN target.from_date AND %s
+                    ORDER BY bar.symbol, bar.trading_date,
+                             adjusted.source_retrieved_at DESC NULLS LAST,
+                             bar.source_retrieved_at DESC, bar.provider
+                ),
+                ranked AS (
+                    SELECT source_rows.*,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY symbol ORDER BY trading_date DESC
+                           ) AS row_number
+                    FROM source_rows
+                )
+                SELECT symbol, series, trading_date, open, high, low, close,
+                       previous_close, volume, turnover, provider, quality_status,
+                       source_retrieved_at, isin, trades, price_basis, adjustment_factor
+                FROM ranked
+                WHERE row_number <= %s
+                ORDER BY symbol, trading_date
+                """,
+                (symbols, from_dates, market, to_date, limit_per_symbol),
+            ).fetchall()
+    except psycopg.Error as error:
+        raise EodStoreError("Bulk market history is unavailable; verify PostgreSQL connectivity and migrations") from error
+
+    return [{
+        "symbol": row[0],
+        "series": row[1],
+        "date": row[2].isoformat(),
+        "open": float(row[3]),
+        "high": float(row[4]),
+        "low": float(row[5]),
+        "close": float(row[6]),
+        "previous_close": float(row[7]) if row[7] is not None else None,
+        "volume": int(row[8]),
+        "turnover": float(row[9]) if row[9] is not None else None,
+        "provider": row[10],
+        "quality_status": row[11],
+        "retrieved_at": row[12].isoformat(),
+        "isin": row[13],
+        "trades": int(row[14]) if row[14] is not None else None,
+        "price_basis": row[15],
+        "adjustment_factor": float(row[16]) if row[16] is not None else None,
+        "data_mode": "END_OF_DAY",
+    } for row in rows]
+
+
 def corporate_action_history(
     exchange: str, symbol: str, *, from_date: date, to_date: date, limit: int = 100
 ) -> list[dict[str, Any]]:
