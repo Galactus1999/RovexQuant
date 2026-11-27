@@ -1307,7 +1307,7 @@ object QuantApi {
         require(limitPerSymbol in 1..60) { "Bulk history limit must be between 1 and 60 bars per symbol." }
         val normalized = targets.map {
             val symbol = it.symbol.trim().uppercase(Locale.ROOT)
-            require(symbol.matches(Regex("^[A-Z0-9][A-Z0-9&._-]{0,39}$"))) {
+            require(symbol.matches(Regex("^[A-Z0-9][A-Z0-9&-]{0,29}$"))) {
                 "Invalid instrument symbol in bulk history request."
             }
             require(!it.fromDate.isAfter(toDate)) { "Bulk history start date is after the end date." }
