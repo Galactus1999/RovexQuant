@@ -77,6 +77,10 @@ class QuantDashboardRegressionTest {
     @Test fun statusOrbOpensDiagnosticsAndRetryReconnectsAndRefreshes() {
         waitForDashboard()
         val activity = composeRule.activity
+        composeRule.waitUntil(10_000) {
+            activity.fakeRepository.marketStreamStartCount > 0 &&
+                activity.fakeRepository.marketIngestionRequestCount > 0
+        }
         val initialStreamStarts = activity.fakeRepository.marketStreamStartCount
         val initialIngestionRequests = activity.fakeRepository.marketIngestionRequestCount
 
@@ -95,7 +99,7 @@ class QuantDashboardRegressionTest {
         composeRule.onAllNodesWithTag("quant.diagnostic.drawer").assertCountEquals(0)
     }
 
-    @Test fun visualStrategyPlaygroundCallsEodResearchAndPeekOpensCopilot() {
+    @Test fun visualStrategyPlaygroundUsesUpstoxHistoryAndPeekOpensCopilot() {
         waitForDashboard()
         val activity = composeRule.activity
         val initialHistoryRequests = activity.fakeRepository.instrumentHistoryRequestCount
@@ -119,11 +123,13 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("strategy.metric.peek").assertIsDisplayed()
         composeRule.onNodeWithTag("strategy.metric.ask.copilot").performClick()
         composeRule.onNodeWithTag("copilot.input").assertIsDisplayed()
+        val chatRequestsBeforeCopilotSend = activity.fakeRepository.aiChatRequestCount
         composeRule.onNodeWithTag("copilot.send").performClick()
         composeRule.waitUntil(10_000) {
-            activity.fakeRepository.aiChatRequestCount > initialChatRequests &&
-                composeRule.onAllNodesWithText("Deterministic AI fixture response.").fetchSemanticsNodes().isNotEmpty()
+            activity.fakeRepository.aiChatRequestCount > chatRequestsBeforeCopilotSend &&
+                composeRule.onAllNodesWithTag("copilot.message.1").fetchSemanticsNodes().isNotEmpty()
         }
+        composeRule.onNodeWithTag("copilot.message.1").assertTextContains("Deterministic AI fixture response.")
     }
 
     @Test fun appStartsWithQuantMarketPulseAndHonestOfflineState() {
