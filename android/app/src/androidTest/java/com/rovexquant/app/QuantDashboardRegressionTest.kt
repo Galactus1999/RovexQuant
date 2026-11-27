@@ -29,7 +29,6 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
-import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -115,7 +114,8 @@ class QuantDashboardRegressionTest {
         assertTrue(activity.fakeRepository.lastInstrumentSymbol == "RELIANCE")
         assertTrue(activity.fakeRepository.lastAiRequestPrompt?.contains("User-selected planned risk budget") == true)
 
-        composeRule.onNodeWithTag("strategy.metric.rsi.14").performTouchInput { longClick() }
+        composeRule.onNodeWithTag("strategy.metric.rsi.14")
+            .performSemanticsAction(SemanticsActions.OnLongClick) { onLongClick -> onLongClick() }
         composeRule.onNodeWithTag("strategy.metric.peek").assertIsDisplayed()
         composeRule.onNodeWithTag("strategy.metric.ask.copilot").performClick()
         composeRule.onNodeWithTag("copilot.input").assertIsDisplayed()
