@@ -90,7 +90,7 @@ object UniversalOhlcvCsvParser {
         val volumeIndex = columns.required("ttltradgvol", "ttltrdqnty", "tottrdqty", "totaltradedqty", "volume", "vol")
         require(table.rows.size <= 1_000_000) { "Bhavcopy exceeds the 1,000,000 row safety limit" }
 
-        val grouped = linkedMapOf<String, MutableList<OhlcvBar>>()
+        val grouped = linkedMapOf<String, MutableMap<LocalDate, Pair<Int, OhlcvBar>>>()
         table.rows.forEachIndexed { index, row ->
             if (row.all(String::isBlank)) return@forEachIndexed
             val rowNumber = index + 2
@@ -111,10 +111,27 @@ object UniversalOhlcvCsvParser {
             require(high >= max(open, close) && low <= minOf(open, close) && high >= low) {
                 "Bhavcopy row " + rowNumber + " has invalid OHLC range"
             }
-            grouped.getOrPut(symbol) { mutableListOf() }.add(OhlcvBar(timestamp, open, high, low, close, volume))
+            val date = timestamp.atZoneSameInstant(marketZone).toLocalDate()
+            val priority = when (market) {
+                "NSE" -> if (series == "EQ") 0 else if (series == "BE") 1 else 2
+                else -> if (series == "A") 0 else if (series == "B") 1 else 2
+            }
+            val byDate = grouped.getOrPut(symbol) { linkedMapOf() }
+            val current = byDate[date]
+            when {
+                current == null || priority < current.first ->
+                    byDate[date] = priority to OhlcvBar(timestamp, open, high, low, close, volume)
+                priority == current.first ->
+                    throw IllegalArgumentException(
+                        "Bhavcopy contains duplicate " + symbol + " rows for " + date
+                    )
+                else -> Unit
+            }
         }
         require(grouped.isNotEmpty()) { "Bhavcopy contains no supported " + market + " equity rows" }
-        return grouped.mapValues { (_, bars) -> sortAndValidate(bars) }
+        return grouped.mapValues { (_, barsByDate) ->
+            barsByDate.toSortedMap().values.map { it.second }
+        }
     }
 
     private fun sortAndValidate(bars: List<OhlcvBar>): List<OhlcvBar> {
