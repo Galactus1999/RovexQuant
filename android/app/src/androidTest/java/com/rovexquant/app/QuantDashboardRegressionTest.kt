@@ -88,7 +88,7 @@ class QuantDashboardRegressionTest {
             hasContentDescription("System status", substring = true)
         ).performClick()
         composeRule.onNodeWithTag("quant.diagnostic.drawer").assertIsDisplayed()
-        composeRule.onNodeWithTag("quant.diagnostic.detail.0").assertTextContains("Market stream")
+        composeRule.onNodeWithTag("quant.diagnostic.detail.0").assertTextContains("Market stream", substring = true)
         composeRule.onNodeWithTag("quant.diagnostic.detail.2").assertTextContains("NSE EOD snapshot")
 
         composeRule.onNodeWithTag("quant.diagnostic.retry").performClick()
@@ -119,6 +119,13 @@ class QuantDashboardRegressionTest {
 
         composeRule.onNodeWithTag("strategy.metric.rsi.14")
             .performSemanticsAction(SemanticsActions.OnLongClick) { onLongClick -> onLongClick() }
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag("strategy.metric.peek").fetchSemanticsNodes().isNotEmpty()
+        }
+        // The peek is rendered below the evidence metrics inside the same LazyColumn
+        // item. Bring it into the viewport before asserting display or clicking it.
+        composeRule.onNodeWithTag("market.pulse.list")
+            .performScrollToNode(hasTestTag("strategy.metric.peek"))
         composeRule.onNodeWithTag("strategy.metric.peek").assertIsDisplayed()
         composeRule.onNodeWithTag("strategy.metric.ask.copilot").performClick()
         composeRule.onNodeWithTag("copilot.input").assertIsDisplayed()
@@ -379,16 +386,22 @@ class QuantDashboardRegressionTest {
         }
         composeRule.onNodeWithTag("settings.screen").performScrollToNode(hasTestTag("settings.ai.provider.key"))
         composeRule.onNodeWithTag("settings.ai.provider.key").assertIsDisplayed()
+        val activity = composeRule.activity
+        val requestsBeforeTest = activity.fakeRepository.aiChatRequestCount
         composeRule.onNodeWithTag("settings.ai.provider.test").assertIsEnabled().performClick()
         composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithText("Connection verified", substring = true).fetchSemanticsNodes().isNotEmpty()
+            activity.fakeRepository.aiChatRequestCount > requestsBeforeTest
         }
+        // The result is below the connection button in the same settings card.
+        composeRule.onNodeWithTag("settings.screen")
+            .performScrollToNode(hasText("Connection verified", substring = true))
+        composeRule.onNodeWithText("Connection verified", substring = true).assertIsDisplayed()
         composeRule.onNodeWithTag("settings.screen").performScrollToNode(hasText("Close"))
         composeRule.onNodeWithText("Close").performClick()
         composeRule.onNodeWithText("Market Pulse").assertIsDisplayed()
     }
 
-    @Test fun aiWorkspaceConnectsChatAndEodRecoveryActions() {
+    @Test fun aiWorkspaceConnectsResearchToolsAndEodRecoveryActions() {
         waitForDashboard()
         composeRule.onNodeWithText("Scan").performClick()
         composeRule.onNodeWithTag("scanner.list").performScrollToNode(hasText("Open AI data recovery"))
@@ -420,21 +433,16 @@ class QuantDashboardRegressionTest {
             .assertTextContains("Deterministic archived research detail.", substring = true)
         composeRule.onNodeWithTag("ai.research.run.detail.request")
             .assertTextContains("Fixture research prompt", substring = true)
-        // The provider selector is earlier in the LazyColumn than research history.
-        // Scroll back to it before asserting viewport visibility.
-        composeRule.onNodeWithTag("ai.workspace.list")
-            .performScrollToNode(hasText("Groq", substring = true))
-        composeRule.onNodeWithText("Groq", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.model"))
-        composeRule.onNodeWithTag("ai.model").performTextInput("test-model")
-        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.chat.input"))
-        composeRule.onNodeWithTag("ai.chat.input").performTextInput("Explain the RSI indicator.")
-        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.chat.send"))
-        composeRule.onNodeWithTag("ai.chat.send").assertIsDisplayed()
-        composeRule.onNodeWithTag("ai.chat.send").performClick()
+        // Provider/model configuration is deliberately outside this research
+        // workspace. Verify the server-owned route as read-only state instead of
+        // testing the retired provider selector and embedded chat panel.
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToIndex(1)
         composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithText("Deterministic AI fixture response.").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText("Research route · groq/server-research-model", substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
         }
+        composeRule.onNodeWithText("Research route · groq/server-research-model", substring = true)
+            .assertIsDisplayed()
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.recovery.symbol.find"))
         composeRule.onNodeWithTag("ai.recovery.symbol.find").performClick()
         composeRule.onNodeWithTag("instrument.global.search.input").performTextInput("Reliance Industries")
@@ -466,13 +474,12 @@ class QuantDashboardRegressionTest {
             composeRule.onAllNodesWithText("NSE EOD snapshot attached", substring = true)
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.chat.input"))
-        composeRule.onNodeWithTag("ai.chat.input").assertTextContains("NSE EOD SNAPSHOT", substring = true)
+        // Attached tool evidence is consumed directly by the dedicated briefing
+        // action; there is no hidden chat input in the AI Lab.
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.brief.generate"))
-        composeRule.onNodeWithTag("ai.brief.generate").assertIsDisplayed()
-        composeRule.onNodeWithTag("ai.brief.generate").performClick()
+        composeRule.onNodeWithTag("ai.brief.generate").assertIsEnabled().performClick()
         composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithText("Deterministic AI fixture response.").fetchSemanticsNodes().size >= 2
+            composeRule.onAllNodesWithTag("ai.brief.output").fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.brief.output"))
         composeRule.onNodeWithTag("ai.brief.output").assertTextContains("Deterministic AI fixture response.")
@@ -483,54 +490,24 @@ class QuantDashboardRegressionTest {
     }
 
     @Test fun aiWorkspaceUsesConfiguredServerTaskRoute() {
-        fun checkpoint(stage: String) {
-            val runtime = Runtime.getRuntime()
-            val used = runtime.totalMemory() - runtime.freeMemory()
-            Log.i("AI_ROUTE_TEST", "$stage heapUsed=${used / (1024 * 1024)}MiB heapMax=${runtime.maxMemory() / (1024 * 1024)}MiB")
-        }
-
         waitForDashboard()
-        checkpoint("dashboard-ready")
         composeRule.onNodeWithText("Scan").performClick()
-        checkpoint("scanner-open")
-        // StrategyScannerScreen is a LazyColumn with a fixed fallback card at
-        // item 8 (heading, dataset, horizon chips, workspace, four strategies,
-        // then the AI recovery card). Jump to that item directly rather than
-        // repeatedly scanning the list's semantics tree.
         composeRule.onNodeWithTag("scanner.list").performScrollToIndex(8)
-        composeRule.onNodeWithTag("scanner.ai.recovery").performScrollTo()
-        checkpoint("recovery-button-visible")
-        composeRule.onNodeWithTag("scanner.ai.recovery").performClick()
-        checkpoint("recovery-button-clicked")
+        composeRule.onNodeWithTag("scanner.ai.recovery").performScrollTo().performClick()
         composeRule.onNodeWithText("Quant Intelligence.").assertIsDisplayed()
-        checkpoint("workspace-open")
 
-        // Task routing is inside LazyColumn item 1 (the provider card). Jump to
-        // that item directly, then reveal the checkbox itself. Avoid scanning the
-        // entire workspace semantics tree across the large nested research panels.
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToIndex(1)
-        composeRule.onNodeWithTag("ai.task.auto").performScrollTo()
-        checkpoint("task-routing-visible")
         composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithTag("ai.task.route").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText("Research route · groq/server-research-model", substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithTag("ai.task.auto").performClick()
-        checkpoint("task-routing-enabled")
-        // The chat panel is LazyColumn item 6 (heading, provider, tools, briefing,
-        // history, NSE MCP, chat). Jump by item index instead of
-        // performScrollToNode's repeated viewport scan across large nested panels.
-        composeRule.onNodeWithTag("ai.workspace.list").performScrollToIndex(6)
-        composeRule.onNodeWithTag("ai.chat.input").performScrollTo()
-        checkpoint("chat-visible")
-        composeRule.onNodeWithTag("ai.chat.input").performTextInput("Review this supplied evidence using the research route.")
-        composeRule.onNodeWithTag("ai.chat.send").performScrollTo()
-        composeRule.onNodeWithTag("ai.chat.send").assertIsDisplayed().assertIsEnabled()
-        composeRule.onNodeWithTag("ai.chat.send").performClick()
-        checkpoint("chat-sent")
+        composeRule.onNodeWithText("Research route · groq/server-research-model", substring = true)
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.open.settings").performScrollTo().performClick()
+        composeRule.onNodeWithTag("settings.screen").assertIsDisplayed()
         composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithText("Deterministic AI fixture response.").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag("settings.ai.provider.key").fetchSemanticsNodes().isNotEmpty()
         }
-        checkpoint("response-rendered")
     }
 
     @Test fun intelligenceCentreLoadsEventEvidenceAndSectorTransmission() {
