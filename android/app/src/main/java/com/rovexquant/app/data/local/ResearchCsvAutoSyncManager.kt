@@ -167,11 +167,20 @@ object ResearchCsvAutoSyncManager {
         }
         if (prepared.isEmpty()) return results
 
-        val targets = prepared.map { (metadata, existing) ->
+        val targets = mutableListOf<MarketHistoryTarget>()
+        val refreshable = mutableListOf<Pair<ResearchCsvDatasetMetadata, List<OhlcvBar>>>()
+        prepared.forEach { (metadata, existing) ->
             val latestDate = existing.maxOf { marketDate(it) }
-            val fromDate = maxOf(latestDate.minusDays(7), toDate.minusDays(14))
-            MarketHistoryTarget(metadata.canonicalSymbol, fromDate)
+            if (latestDate.isAfter(toDate)) {
+                markIfUnchanged(context, metadata, "EOD Data Hub")
+                results += DatasetSyncResult(updated = false)
+            } else {
+                val fromDate = maxOf(latestDate.minusDays(7), toDate.minusDays(14))
+                targets += MarketHistoryTarget(metadata.canonicalSymbol, fromDate)
+                refreshable += metadata to existing
+            }
         }
+        if (targets.isEmpty()) return results
         val response = repository.fetchMarketHistoryBulk(
             session, exchange, targets, toDate
         )
@@ -179,7 +188,7 @@ object ResearchCsvAutoSyncManager {
             "The persistent EOD Data Hub has no matching history yet. Wait for a successful scheduled EOD collection."
         }
 
-        prepared.forEach { (metadata, existing) ->
+        refreshable.forEach { (metadata, existing) ->
             try {
                 val incoming = response.barsBySymbol[metadata.canonicalSymbol].orEmpty()
                 val provider = response.providersBySymbol[metadata.canonicalSymbol] ?: "EOD Data Hub"
