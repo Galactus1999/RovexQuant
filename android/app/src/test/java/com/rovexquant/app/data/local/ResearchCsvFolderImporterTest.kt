@@ -114,7 +114,7 @@ class ResearchCsvFolderImporterTest {
 
     @Test
     fun decodesUtf16LittleEndianExchangeCsv() {
-        val text = "Date,Open,High,Low,Close,Volume\\n2026-11-24,100,102,99,101,1000"
+        val text = "Date,Open,High,Low,Close,Volume\n2026-11-24,100,102,99,101,1000"
         val payload = byteArrayOf(0xFF.toByte(), 0xFE.toByte()) + text.toByteArray(Charsets.UTF_16LE)
         val decoded = ResearchCsvFolderImporter.decodeCsvBytes(payload)
         val bars = ResearchCsvFolderImporter.parseFolderCsv(decoded, volumeRequired = true)
@@ -127,7 +127,7 @@ class ResearchCsvFolderImporterTest {
         val output = ByteArrayOutputStream()
         ZipOutputStream(output).use { zip ->
             zip.putNextEntry(ZipEntry("BhavCopy_NSE_CM.csv"))
-            zip.write("TradDt,TckrSymb,SctySrs,OpnPric,HghPric,LwPric,ClsPric,TtlTradgVol\\n2026-11-24,RELIANCE,EQ,100,102,99,101,1000".toByteArray())
+            zip.write("TradDt,TckrSymb,SctySrs,OpnPric,HghPric,LwPric,ClsPric,TtlTradgVol\n2026-11-24,RELIANCE,EQ,100,102,99,101,1000".toByteArray())
             zip.closeEntry()
         }
         val csv = ResearchCsvFolderImporter.decodeCsvPayload("BhavCopy_NSE_CM.zip", output.toByteArray())
@@ -141,7 +141,7 @@ class ResearchCsvFolderImporterTest {
         ZipOutputStream(output).use { zip ->
             listOf("one.csv", "two.csv").forEach { name ->
                 zip.putNextEntry(ZipEntry(name))
-                zip.write("a,b\\n1,2".toByteArray())
+                zip.write("a,b\n1,2".toByteArray())
                 zip.closeEntry()
             }
         }
