@@ -5,6 +5,7 @@ import com.rovexquant.app.data.model.EodMarketSnapshot
 import com.rovexquant.app.data.model.EodStockMove
 import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.QuantSession
+import com.rovexquant.app.data.repository.QuantDataRepository
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,11 +16,16 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,6 +33,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -73,18 +80,29 @@ fun MarketPulseScreen(
     eodSnapshot: EodMarketSnapshot? = null,
     eodSnapshotStatus: String = "EOD snapshot not loaded",
     onRefreshEodSnapshot: () -> Unit = {},
-    onOpenInstrument: (symbol: String, displayName: String) -> Unit = { _, _ -> }
+    onOpenInstrument: (symbol: String, displayName: String) -> Unit = { _, _ -> },
+    repository: QuantDataRepository? = null
 ) {
     val activeSession = session
     var equitySearch by remember { mutableStateOf("") }
     var equityFilter by remember { mutableStateOf("ALL") }
     var isRefreshing by remember { mutableStateOf(false) }
     var showEodMovers by remember { mutableStateOf(false) }
-    var showAllSectors by remember { mutableStateOf(false) }
+    var showSectorHeatmap by remember { mutableStateOf(false) }
     var showAllEquities by remember { mutableStateOf(false) }
     var freshnessClock by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var showCopilotSheet by rememberSaveable { mutableStateOf(false) }
+    var copilotInitialPrompt by rememberSaveable { mutableStateOf("") }
+    // Copilot is an interactive workspace, not a peek sheet: always open it expanded.
+    val copilotSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    LaunchedEffect(ticks) {
+    // Freshness only has meaning when at least one live tick exists. Do not
+    // keep a periodic state writer alive on the offline/empty dashboard: Compose
+    // tests (and other virtual-clock hosts) must be able to reach quiescence.
+    // Key on presence, not the changing tick map, so ordinary quote updates do
+    // not continually restart the timer.
+    LaunchedEffect(ticks.isNotEmpty()) {
+        if (ticks.isEmpty()) return@LaunchedEffect
         while (true) {
             freshnessClock = System.currentTimeMillis()
             delay(5_000)
@@ -127,12 +145,25 @@ fun MarketPulseScreen(
             } ?: Double.NEGATIVE_INFINITY
         }
     }
-    val liveSectorCount = rankedSectors.count { sector ->
-        indexKeys[sector.benchmark]?.let { ticks[it] }?.let { it.quality == "VALID" && isFresh(it) } == true
+    val sectorTiles = remember(rankedSectors, ticks, indexKeys, freshnessClock) {
+        rankedSectors.map { sector ->
+            val quote = indexKeys[sector.benchmark]?.let { ticks[it] }
+            val fresh = quote?.let { it.quality == "VALID" && isFresh(it) } == true
+            SectorHeatmapTile(
+                label = sector.sector,
+                benchmark = sector.benchmark,
+                changePercent = quote?.changePercent?.takeIf { fresh },
+                lastPrice = quote?.lastPrice?.takeIf { fresh },
+                receivedAt = quote?.receivedAt,
+                isFresh = fresh
+            )
+        }
     }
+    val liveSectorCount = sectorTiles.count { it.isFresh }
     val exchangeClock = latestTick?.exchangeTimestamp?.substringAfter("T")?.take(8) ?: "unavailable"
     val receiveClock = latestTick?.receivedAt?.substringAfter("T")?.take(8) ?: "unavailable"
 
+    Box(Modifier.fillMaxSize()) {
     PullToRefreshBox(
         isRefreshing = isRefreshing,
         onRefresh = {
@@ -146,18 +177,30 @@ fun MarketPulseScreen(
         },
         modifier = Modifier.fillMaxSize()
     ) {
-        LazyColumn(modifier = Modifier.fillMaxSize().testTag("market.pulse.list"), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+        if (showSectorHeatmap) {
+            SectorHeatmapDialog(
+                sectors = sectorTiles,
+                liveCount = liveSectorCount,
+                onDismiss = { showSectorHeatmap = false },
+                onSelectSector = { sector ->
+                    showSectorHeatmap = false
+                    onOpenInstrument(sector.benchmark, sector.benchmark)
+                }
+            )
+        }
+        LazyColumn(modifier = Modifier.fillMaxSize().testTag("market.pulse.list"), contentPadding = PaddingValues(start = 18.dp, top = 12.dp, end = 18.dp, bottom = 92.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Text("Market Pulse", color = MaterialTheme.colorScheme.onBackground, fontSize = 25.sp, fontWeight = FontWeight.Bold)
-                StatusPill(
-                    when {
-                        streamStatus.startsWith("Live") -> "LIVE"
-                        streamStatus.startsWith("Connected") -> "CONNECTED"
-                        streamStatus.contains("stale", ignoreCase = true) -> "STALE"
-                        else -> "OFFLINE"
-                    },
-                    if (streamStatus.startsWith("Live")) Mint else Gold
+            Text("Market Pulse", color = MaterialTheme.colorScheme.onBackground, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+        }
+        if (activeSession != null && repository != null) {
+            item(key = "strategy.playground") {
+                StrategyPlayground(
+                    session = activeSession,
+                    repository = repository,
+                    onAskCopilot = { prompt ->
+                        copilotInitialPrompt = prompt
+                        showCopilotSheet = true
+                    }
                 )
             }
         }
@@ -257,51 +300,39 @@ fun MarketPulseScreen(
             }
         }
         item {
-            Column {
-                Text("Sector performance", color = MaterialTheme.colorScheme.onBackground, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("market.sector.heading"))
-                Spacer(Modifier.height(4.dp))
-                Text("$liveSectorCount / ${coreSectorIndices.size} live", color = Muted, fontSize = 10.sp)
-            }
-        }
-        items(rankedSectors.take(if (showAllSectors) rankedSectors.size else 4), key = { it.benchmark }) { sector ->
-            val instrumentKey = indexKeys[sector.benchmark]
-            val quote = instrumentKey?.let { ticks[it] }
-            val move = quote?.changePercent?.takeIf { quote.quality == "VALID" && isFresh(quote) }
-            val sectorTint = when {
-                move == null -> Panel
-                move >= 0.0 -> Mint.copy(alpha = .10f)
-                else -> Coral.copy(alpha = .12f)
-            }
-            Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
-                    .background(sectorTint)
-                    .clickable { onOpenInstrument(sector.benchmark, sector.benchmark) }
-                    .testTag("sector.index.${sector.benchmark}")
-                    .padding(14.dp)
-            ) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            TerminalCard {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
                     Column(Modifier.weight(1f)) {
-                        Text(sector.sector, color = MaterialTheme.colorScheme.onBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(3.dp))
-                        Text(sector.benchmark, color = Muted, fontSize = 9.sp, letterSpacing = .5.sp, )
+                        Text(
+                            "Sector performance",
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontSize = 19.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.testTag("market.sector.heading")
+                        )
+                        Text(
+                            "$liveSectorCount / ${sectorTiles.size} fresh quotes · red / green cube heatmap",
+                            color = Muted,
+                            fontSize = 10.sp
+                        )
                     }
-                    StatusPill(
-                        quote?.takeIf { it.quality == "VALID" && isFresh(it) }?.changePercent
-                            ?.let { String.format(Locale.US, "%+.2f%%", it) }
-                            ?: if (instrumentKey == null) "N/A" else "—",
-                        quote?.changePercent?.let { if (it >= 0) Mint else Coral } ?: Gold
-                    )
+                    StatusPill("3D MAP", Cyan)
                 }
-                Spacer(Modifier.height(10.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    SectorMetric("INDEX", sector.benchmark)
-                    SectorMetric("LTP", quote?.lastPrice?.let { String.format(Locale.US, "%.2f", it) } ?: "—")
-                }
-            }
-        }
-        item {
-            androidx.compose.material3.TextButton(onClick = { showAllSectors = !showAllSectors }, modifier = Modifier.fillMaxWidth()) {
-                Text(if (showAllSectors) "Show fewer sectors" else "View all sector benchmarks")
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Explore sector-index price moves in a heatmap. Each tile shows the latest fresh index quote, not constituent breadth or contribution.",
+                    color = Muted,
+                    fontSize = 10.sp,
+                    lineHeight = 15.sp
+                )
+                TextButton(
+                    onClick = { showSectorHeatmap = true },
+                    modifier = Modifier.fillMaxWidth().testTag("market.sector.heatmap.open")
+                ) { Text("Open sector heatmap · ${sectorTiles.size} indices") }
             }
         }
         item {
@@ -371,6 +402,32 @@ fun MarketPulseScreen(
             }
         }
         
+        }
+    }
+    if (activeSession != null && repository != null) {
+        FloatingActionButton(
+            onClick = {
+                copilotInitialPrompt = ""
+                showCopilotSheet = true
+            },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+            containerColor = AiPurple,
+            contentColor = Ink
+        ) { Text("✦", fontSize = 22.sp, fontWeight = FontWeight.Bold) }
+    }
+    }
+    if (showCopilotSheet && activeSession != null && repository != null) {
+        ModalBottomSheet(
+            onDismissRequest = { showCopilotSheet = false },
+            modifier = Modifier.fillMaxHeight(),
+            sheetState = copilotSheetState,
+            containerColor = Panel
+        ) {
+            QuantCopilotSheet(
+                session = activeSession,
+                repository = repository,
+                initialPrompt = copilotInitialPrompt
+            )
         }
     }
 }

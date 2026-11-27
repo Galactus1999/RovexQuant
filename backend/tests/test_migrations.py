@@ -18,6 +18,7 @@ TEST_VAULT_KEY = base64.urlsafe_b64encode(
     hashlib.sha256(b"RovexQuant Phase 1 PostgreSQL integration test key only").digest()
 )
 LEGACY_CIPHERTEXT = Fernet(TEST_VAULT_KEY).encrypt(b"legacy-ciphertext-preservation-probe")
+DALALOS_CIPHERTEXT = Fernet(TEST_VAULT_KEY).encrypt(b"obsolete-dalalos-api-key")
 
 
 @pytest.fixture
@@ -46,6 +47,22 @@ def migrated_postgres(monkeypatch):
             "SET encrypted_token=EXCLUDED.encrypted_token, updated_at=EXCLUDED.updated_at",
             ("phase1-legacy-migration-probe", LEGACY_CIPHERTEXT, 1),
         )
+        version_table = connection.execute(
+            "SELECT to_regclass('alembic_version')"
+        ).fetchone()[0]
+        current_revision = None
+        if version_table:
+            revision_row = connection.execute(
+                "SELECT version_num FROM alembic_version"
+            ).fetchone()
+            current_revision = revision_row[0] if revision_row else None
+        if current_revision != "0009_remove_dalalos_credential":
+            connection.execute(
+                "INSERT INTO provider_tokens(provider, encrypted_token, updated_at) "
+                "VALUES (%s, %s, %s) ON CONFLICT(provider) DO UPDATE "
+                "SET encrypted_token=EXCLUDED.encrypted_token, updated_at=EXCLUDED.updated_at",
+                ("mcp:dalalos", DALALOS_CIPHERTEXT, 1),
+            )
 
     config = Config("alembic.ini")
     command.upgrade(config, "head")
@@ -70,6 +87,10 @@ def test_postgres_migration_creates_and_records_expected_schema(migrated_postgre
         revision = connection.execute(
             "SELECT version_num FROM alembic_version"
         ).fetchone()
+        retired_credential = connection.execute(
+            "SELECT provider FROM provider_tokens WHERE provider=%s",
+            ("mcp:dalalos",),
+        ).fetchone()
         columns = {
             row[0]
             for row in connection.execute(
@@ -83,6 +104,7 @@ def test_postgres_migration_creates_and_records_expected_schema(migrated_postgre
         }
 
     assert revision == (EXPECTED_SCHEMA_REVISION,)
+    assert retired_credential is None
     assert columns == {"provider", "encrypted_token", "updated_at", "expires_at"}
 
 
@@ -310,3 +332,36 @@ def test_postgres_ingestion_worker_recovers_expired_lease_and_reconciles_commit(
         connection.execute("DELETE FROM market_ingestion_runs WHERE run_id=%s", (run_id,))
 
     assert job == ("SUCCEEDED", 2, None)
+
+
+def test_postgres_ai_research_archive_migration_creates_bounded_history_table(migrated_postgres):
+    with psycopg.connect(migrated_postgres, sslmode="disable") as connection:
+        columns = {
+            row[0] for row in connection.execute(
+                """
+                SELECT column_name FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                  AND table_name = 'ai_research_runs'
+                """
+            ).fetchall()
+        }
+        indexes = {
+            row[0] for row in connection.execute(
+                """
+                SELECT indexname FROM pg_indexes
+                WHERE schemaname = current_schema()
+                  AND tablename = 'ai_research_runs'
+                """
+            ).fetchall()
+        }
+    assert {
+        "run_id", "task_type", "provider_id", "model", "status",
+        "request_hash", "request_payload", "response_payload", "token_usage",
+        "cost_usd", "cost_status", "fallback_used", "source_refs",
+        "verification", "created_at", "completed_at",
+    }.issubset(columns)
+    assert {
+        "ix_ai_research_runs_created",
+        "ix_ai_research_runs_task_created",
+        "ix_ai_research_runs_provider_created",
+    }.issubset(indexes)

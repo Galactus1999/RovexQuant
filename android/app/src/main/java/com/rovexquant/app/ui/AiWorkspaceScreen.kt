@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -22,8 +23,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.rovexquant.app.data.model.AiChatMessage
+import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.AiStrategyBrief
+import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.data.repository.QuantDataRepository
 import kotlinx.coroutines.CancellationException
@@ -33,24 +35,28 @@ import java.time.ZoneId
 import java.util.Locale
 
 @Composable
-fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
+fun AiWorkspaceScreen(
+    session: QuantSession,
+    repository: QuantDataRepository,
+    equityInstruments: List<MarketEquityInstrument> = emptyList(),
+    indexKeys: Map<String, String> = emptyMap(),
+    onOpenSettings: () -> Unit = {}
+) {
     val scope = rememberCoroutineScope()
     var providersLoading by remember { mutableStateOf(true) }
     var providers by remember { mutableStateOf(emptyList<com.rovexquant.app.data.model.AiProvider>()) }
     var providerError by remember { mutableStateOf<String?>(null) }
-    var credentialInput by remember { mutableStateOf("") }
-    var credentialSaving by remember { mutableStateOf(false) }
-    var credentialError by remember { mutableStateOf<String?>(null) }
-    var credentialDeleting by remember { mutableStateOf(false) }
-    var providerTesting by remember { mutableStateOf(false) }
-    var providerTestStatus by remember { mutableStateOf<String?>(null) }
-    var selectedFallbacks by remember { mutableStateOf(emptySet<String>()) }
-    var selectedProvider by rememberSaveable { mutableStateOf("") }
-    var model by rememberSaveable { mutableStateOf("") }
-    var messages by remember { mutableStateOf(emptyList<AiChatMessage>()) }
-    var chatInput by rememberSaveable { mutableStateOf("") }
-    var chatLoading by remember { mutableStateOf(false) }
-    var chatError by remember { mutableStateOf<String?>(null) }
+    var configuredTaskRoutes by remember { mutableStateOf<Map<String, AiTaskRoute>>(emptyMap()) }
+    var taskRoutesError by remember { mutableStateOf<String?>(null) }
+    var researchRuns by remember { mutableStateOf(emptyList<com.rovexquant.app.data.model.AiResearchRun>()) }
+    var historyLoading by remember { mutableStateOf(true) }
+    var historyError by remember { mutableStateOf<String?>(null) }
+    var aiBudgetStatus by remember { mutableStateOf<com.rovexquant.app.data.model.AiBudgetStatus?>(null) }
+    var selectedResearchRun by remember { mutableStateOf<com.rovexquant.app.data.model.AiResearchRunDetail?>(null) }
+    var selectedRunLoading by remember { mutableStateOf(false) }
+    var selectedRunError by remember { mutableStateOf<String?>(null) }
+    val automaticTaskRouting = true
+    var evidenceDraft by rememberSaveable { mutableStateOf("") }
 
     var symbol by rememberSaveable { mutableStateOf("RELIANCE") }
     var exchange by rememberSaveable { mutableStateOf("NSE") }
@@ -72,12 +78,6 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
         providerError = null
         try {
             providers = repository.fetchAiProviders(session)
-            val configured = providers.filter { it.configured }
-            if (selectedProvider.isBlank() && providers.isNotEmpty()) {
-                val firstProvider = configured.firstOrNull() ?: providers.first()
-                selectedProvider = firstProvider.providerId
-                model = firstProvider.defaultModel.orEmpty()
-            }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
@@ -85,39 +85,34 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
         } finally {
             providersLoading = false
         }
+        try {
+            configuredTaskRoutes = repository.fetchAiTaskRoutes(session)
+            taskRoutesError = null
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            configuredTaskRoutes = emptyMap()
+            taskRoutesError = failure.message ?: "Server task routes are unavailable."
+        }
+    }
+
+    LaunchedEffect(session, repository) {
+        historyLoading = true
+        historyError = null
+        try {
+            researchRuns = repository.fetchAiResearchRuns(session)
+            aiBudgetStatus = repository.fetchAiBudgetStatus(session)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            historyError = failure.message ?: "AI research history is unavailable."
+        } finally {
+            historyLoading = false
+        }
     }
 
     val configuredProviders = providers.filter { it.configured }
-    val canUseAi = selectedProvider.isNotBlank() && model.isNotBlank() &&
-        configuredProviders.any { it.providerId == selectedProvider }
-
-    fun sendMessage() {
-        val prompt = chatInput.trim()
-        if (prompt.isEmpty() || !canUseAi || chatLoading) return
-        val updated = (messages + AiChatMessage("user", prompt)).takeLast(10)
-        messages = updated
-        chatInput = ""
-        chatError = null
-        chatLoading = true
-        scope.launch {
-            try {
-                val response = repository.sendAiMessage(
-                    session = session,
-                    providerId = selectedProvider,
-                    model = model.trim(),
-                    messages = updated,
-                    fallbackProviders = selectedFallbacks.toList()
-                )
-                messages = (updated + AiChatMessage("assistant", response.content)).takeLast(10)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (failure: Exception) {
-                chatError = failure.message ?: "AI request failed."
-            } finally {
-                chatLoading = false
-            }
-        }
-    }
+    val canUseResearch = "research" in configuredTaskRoutes
 
     fun recoverEodData() {
         if (briefLoading) return
@@ -128,14 +123,15 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
             try {
                 brief = repository.requestAiStrategyBrief(
                     session = session,
-                    providerId = selectedProvider,
-                    model = model.trim(),
+                    providerId = null,
+                    model = null,
                     symbol = symbol.trim(),
                     exchange = exchange,
                     fromDate = fromDate.trim(),
                     toDate = toDate.trim(),
                     strategyContext = strategyContext.trim(),
-                    fallbackProviders = selectedFallbacks.toList()
+                    fallbackProviders = emptyList(),
+                    automaticTaskRouting = true
                 )
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -154,245 +150,197 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
     ) {
         item {
             SectionHeading(
-                "AI Studio · model and tool integrations",
+                "Evidence-led research · server-routed AI",
                 "Quant Intelligence.",
-                "Connect model providers, test credentials, configure failover and run approved research tools. Verified market evidence remains authoritative."
+                "Review archived research, attach verified evidence and run server-routed analysis. Market data remains authoritative."
             )
         }
         item {
             TerminalCard {
-                Eyebrow("AI provider")
-                Spacer(Modifier.height(7.dp))
-                when {
-                    providersLoading -> Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Mint, strokeWidth = 2.dp)
-                        Text("Checking server-side providers…", color = Muted, fontSize = 11.sp)
-                    }
-                    providerError != null && providers.isEmpty() -> Text(
-                        providerError ?: "AI provider discovery failed.",
-                        color = Coral, fontSize = 11.sp, lineHeight = 17.sp
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Eyebrow("Server-owned AI routing")
+                    StatusPill(
+                        if (providersLoading) "Checking" else if (canUseResearch) "Research ready" else "Setup required",
+                        if (!providersLoading && canUseResearch) Mint else Gold
                     )
-                    providers.isEmpty() -> Text(
-                        "No supported AI providers were returned by the backend.",
-                        color = Gold, fontSize = 11.sp, lineHeight = 17.sp
-                    )
-                    else -> {
-                        Row(
-                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(7.dp)
-                        ) {
-                            providers.forEach { provider ->
-                                FilterChip(
-                                    selected = selectedProvider == provider.providerId,
-                                    onClick = {
-                                        selectedProvider = provider.providerId
-                                        model = provider.defaultModel.orEmpty()
-                                        credentialInput = ""
-                                        credentialError = null
-                                    },
-                                    label = {
-                                        Text(
-                                            provider.providerId.replaceFirstChar { it.uppercase() } +
-                                                if (provider.configured) " ✓" else " · setup"
-                                        )
-                                    }
-                                )
-                            }
-                        }
-                        val selected = providers.firstOrNull { it.providerId == selectedProvider }
-                        Spacer(Modifier.height(9.dp))
-                        StatusPill(
-                            if (selected?.configured == true) "Provider configured" else "Credential required",
-                            if (selected?.configured == true) Mint else Gold
-                        )
-                        Spacer(Modifier.height(7.dp))
-                        OutlinedTextField(
-                            value = credentialInput,
-                            onValueChange = { credentialInput = it.take(4096); credentialError = null },
-                            label = { Text("Provider API key") },
-                            placeholder = { Text("Paste the key from the provider console") },
-                            visualTransformation = PasswordVisualTransformation(),
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth().testTag("ai.provider.key")
-                        )
-                        Button(
+                }
+                Text(
+                    "${configuredProviders.size} configured provider(s) · credentials and model setup are managed in Settings.",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp
+                )
+                configuredTaskRoutes["research"]?.let { route ->
+                    Text("Research route · ${route.providerId}/${route.model}", color = Mint, fontSize = 10.sp)
+                }
+                providerError?.let { Text(it, color = Gold, fontSize = 10.sp) }
+                taskRoutesError?.let { Text(it, color = Gold, fontSize = 10.sp) }
+                Button(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth().testTag("ai.open.settings")) {
+                    Text("Manage providers in Settings")
+                }
+            }
+        }
+        item {
+            AiResearchToolsPanel(session, repository) { context ->
+                evidenceDraft = (context + "\n\n" + evidenceDraft).take(10000)
+            }
+        }
+        item {
+            AiResearchBriefingPanel(
+                session = session,
+                repository = repository,
+                providerId = "",
+                model = "",
+                fallbackProviders = emptyList(),
+                canUseAi = canUseResearch,
+                evidenceDraft = evidenceDraft,
+                automaticTaskRouting = automaticTaskRouting
+            )
+        }
+        item {
+            Column(
+                modifier = Modifier.fillMaxWidth().testTag("ai.research.history"),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TerminalCard {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Eyebrow("Persistent research history")
+                        TextButton(
+                            enabled = !historyLoading,
                             onClick = {
-                                val providerId = selectedProvider
-                                val apiKey = credentialInput.trim()
-                                if (providerId.isBlank() || apiKey.length !in 20..4096 || credentialSaving) return@Button
-                                credentialSaving = true
-                                credentialError = null
+                                historyLoading = true
+                                historyError = null
                                 scope.launch {
                                     try {
-                                        repository.saveAiProviderCredential(session, providerId, apiKey)
-                                        credentialInput = ""
-                                        providers = repository.fetchAiProviders(session)
-                                        val updated = providers.firstOrNull { it.providerId == providerId }
-                                        model = updated?.defaultModel.orEmpty().ifBlank { model }
+                                        researchRuns = repository.fetchAiResearchRuns(session)
+                                        aiBudgetStatus = repository.fetchAiBudgetStatus(session)
                                     } catch (cancelled: CancellationException) {
                                         throw cancelled
                                     } catch (failure: Exception) {
-                                        credentialError = failure.message ?: "Unable to store provider credential."
+                                        historyError = failure.message ?: "Research history refresh failed."
                                     } finally {
-                                        credentialSaving = false
+                                        historyLoading = false
                                     }
                                 }
                             },
-                            enabled = !credentialSaving && credentialInput.trim().length in 20..4096,
-                            modifier = Modifier.fillMaxWidth().testTag("ai.provider.save")
+                            modifier = Modifier.testTag("ai.research.history.refresh")
+                        ) { Text(if (historyLoading) "Loading…" else "Refresh") }
+                    }
+                    Text(
+                        "Archived runs are read-only evidence of previous AI requests. Token usage and estimated cost are telemetry, not a guarantee of provider billing.",
+                        color = Muted, fontSize = 9.sp, lineHeight = 14.sp
+                    )
+                    aiBudgetStatus?.let { budget ->
+                        StatusPill(
+                            if (budget.enabled) "Token budgets enabled" else "Token budgets disabled",
+                            if (budget.enabled) Mint else Gold
+                        )
+                        val daily = budget.dailyLimitTokens?.let { "${budget.dailyUsedTokens} / $it tokens" }
+                            ?: "${budget.dailyUsedTokens} tokens · no daily cap"
+                        val monthly = budget.monthlyLimitTokens?.let { "${budget.monthlyUsedTokens} / $it tokens" }
+                            ?: "${budget.monthlyUsedTokens} tokens · no monthly cap"
+                        Text("Daily: $daily", color = Muted, fontSize = 9.sp, modifier = Modifier.testTag("ai.research.budget.daily"))
+                        Text("Monthly: $monthly", color = Muted, fontSize = 9.sp, modifier = Modifier.testTag("ai.research.budget.monthly"))
+                    }
+                    historyError?.let { Text("History unavailable: $it", color = Gold, fontSize = 9.sp, lineHeight = 14.sp) }
+                    if (historyLoading && researchRuns.isEmpty()) CircularProgressIndicator()
+                    if (!historyLoading && researchRuns.isEmpty() && historyError == null) {
+                        Text("No archived research runs yet.", color = Muted, fontSize = 10.sp)
+                    }
+                    researchRuns.take(12).forEach { run ->
+                        Spacer(Modifier.height(7.dp))
+                        Column(
+                            Modifier.fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(PanelRaised)
+                                .padding(10.dp)
+                                .testTag("ai.research.run.${run.runId}")
                         ) {
-                            Text(if (credentialSaving) "Encrypting on backend…" else "Save encrypted provider key")
-                        }
-                        credentialError?.let {
-                            Text(it, color = Coral, fontSize = 10.sp, lineHeight = 15.sp)
-                        }
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = model,
-                    onValueChange = { model = it.take(160) },
-                    label = { Text("Provider model ID") },
-                    placeholder = { Text("Enter a model enabled for this provider") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().testTag("ai.model")
-                )
-                Text(
-                    "API keys are encrypted in the server-side vault. They are not stored in this APK or sent in prompts. Provider connectivity is verified only by the explicit test below.",
-                    color = Muted, fontSize = 10.sp, lineHeight = 15.sp
-                )
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = {
-                            if (providerTesting || selectedProvider.isBlank() || model.isBlank()) return@Button
-                            providerTesting = true
-                            providerTestStatus = null
-                            scope.launch {
-                                try {
-                                    val result = repository.sendAiMessage(
-                                        session = session, providerId = selectedProvider, model = model.trim(),
-                                        messages = listOf(AiChatMessage("user", "Reply with exactly ROVEX_AI_CONNECTION_OK."))
-                                    )
-                                    providerTestStatus = "Connected · ${result.providerId} / ${result.model}"
-                                } catch (cancelled: CancellationException) {
-                                    throw cancelled
-                                } catch (failure: Exception) {
-                                    providerTestStatus = "Connection failed: ${failure.message ?: "provider request failed"}"
-                                } finally { providerTesting = false }
-                            }
-                        },
-                        enabled = canUseAi && !providerTesting,
-                        modifier = Modifier.weight(1f).testTag("ai.provider.test")
-                    ) {
-                        if (providerTesting) CircularProgressIndicator(modifier = Modifier.size(16.dp)) else Text("Test connection")
-                    }
-                    if (providers.firstOrNull { it.providerId == selectedProvider }?.credentialIds?.contains("app") == true) {
-                        TextButton(
-                            enabled = !credentialDeleting && !credentialSaving,
-                            onClick = {
-                                credentialDeleting = true
-                                credentialError = null
-                                scope.launch {
-                                    try {
-                                        repository.deleteAiProviderCredential(session, selectedProvider)
-                                        providers = repository.fetchAiProviders(session)
-                                        providerTestStatus = "App-stored key removed. Environment-managed keys, if any, remain configured."
-                                    } catch (cancelled: CancellationException) {
-                                        throw cancelled
-                                    } catch (failure: Exception) {
-                                        credentialError = failure.message ?: "Unable to remove provider key."
-                                    } finally { credentialDeleting = false }
-                                }
-                            }
-                        ) { Text(if (credentialDeleting) "Removing…" else "Remove app key") }
-                    }
-                }
-                providerTestStatus?.let {
-                    Text(it, color = if (it.startsWith("Connected")) Mint else Gold, fontSize = 10.sp, lineHeight = 15.sp)
-                }
-                val fallbackOptions = configuredProviders.filter { it.providerId != selectedProvider && it.fallbackModelConfigured }
-                Spacer(Modifier.height(8.dp))
-                Eyebrow("Automatic failover · transient errors only")
-                if (fallbackOptions.isEmpty()) {
-                    Text("Failover becomes available when another configured provider has a server-side fallback model.", color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
-                } else {
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                        fallbackOptions.forEach { candidate ->
-                            FilterChip(
-                                selected = candidate.providerId in selectedFallbacks,
-                                onClick = {
-                                    selectedFallbacks = if (candidate.providerId in selectedFallbacks) selectedFallbacks - candidate.providerId
-                                    else (selectedFallbacks + candidate.providerId).take(3).toSet()
-                                },
-                                label = { Text(candidate.providerId.replaceFirstChar { it.uppercase() }) }
+                            Text(
+                                run.taskType.replace('_', ' ').uppercase() + " · " + run.providerId + "/" + run.model,
+                                color = MaterialTheme.colorScheme.onBackground,
+                                fontSize = 10.sp, fontWeight = FontWeight.SemiBold
                             )
+                            Text(
+                                run.createdAt.take(19).replace('T', ' ') + " · " + run.status +
+                                    " · " + run.totalTokens + " tokens" +
+                                    if (run.fallbackUsed) " · fallback used" else "",
+                                color = Muted, fontSize = 9.sp
+                            )
+                            val cost = run.costUsd?.let { "Estimated USD " + String.format(Locale.US, "%.6f", it) }
+                                ?: "Cost unavailable · ${run.costStatus}"
+                            Text(cost, color = Gold, fontSize = 9.sp)
+                            TextButton(
+                                enabled = !selectedRunLoading,
+                                onClick = {
+                                    selectedRunLoading = true
+                                    selectedRunError = null
+                                    selectedResearchRun = null
+                                    scope.launch {
+                                        try {
+                                            selectedResearchRun = repository.fetchAiResearchRun(session, run.runId)
+                                        } catch (cancelled: CancellationException) {
+                                            throw cancelled
+                                        } catch (failure: Exception) {
+                                            selectedRunError = failure.message ?: "Archived research detail is unavailable."
+                                        } finally {
+                                            selectedRunLoading = false
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.testTag("ai.research.run.open.${run.runId}")
+                            ) { Text(if (selectedRunLoading) "Loading details…" else "Open run details") }
                         }
                     }
-                    Text("Fallback providers need a server-side fallback model and credential. Authentication and entitlement errors never silently switch providers.", color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
+                    selectedRunError?.let { Text("Run detail unavailable: $it", color = Gold, fontSize = 9.sp) }
+                    if (selectedRunLoading) CircularProgressIndicator()
+                    selectedResearchRun?.let { detail ->
+                        Column(
+                            Modifier.fillMaxWidth().padding(top = 8.dp)
+                                .testTag("ai.research.run.detail"),
+                            verticalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Eyebrow("Archived run detail · ${detail.status}")
+                            Text("Request", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            Text(detail.requestPayloadJson.take(6000), modifier = Modifier.testTag("ai.research.run.detail.request"), color = MaterialTheme.colorScheme.onBackground, fontSize = 9.sp, lineHeight = 13.sp)
+                            Text("Response", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            Text(detail.responsePayloadJson.take(12000), modifier = Modifier.testTag("ai.research.run.detail.response"), color = MaterialTheme.colorScheme.onBackground, fontSize = 9.sp, lineHeight = 13.sp)
+                            Text("Source references", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            Text(detail.sourceRefsJson.take(6000), color = Cyan, fontSize = 9.sp, lineHeight = 13.sp)
+                            Text("Verification", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            Text(detail.verificationJson.take(6000), color = Gold, fontSize = 9.sp, lineHeight = 13.sp)
+                            Text("Request hash · ${detail.requestHash}", color = Muted, fontSize = 8.sp)
+                        }
+                    }
                 }
-                credentialError?.let { Text(it, color = Coral, fontSize = 10.sp, lineHeight = 15.sp) }
             }
         }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionHeading("Connected research tools", "NSE MCP.", "Discover permitted read-only exchange research tools and explicitly attach a selected result to an AI request.")
-                NseMcpResearchPanel(session, repository) { context ->
-                    chatInput = (context + "\n\n" + chatInput).take(10000)
-                    chatError = null
-                }
+                NseMcpResearchPanel(
+                    session = session,
+                    repository = repository,
+                    onAttachToAi = { context ->
+                        evidenceDraft = (context + "\n\n" + evidenceDraft).take(10000)
+
+                    },
+                    equityInstruments = equityInstruments,
+                    indexKeys = indexKeys
+                )
             }
         }
         item {
             TerminalCard {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Eyebrow("AI conversation")
-                    StatusPill(if (chatLoading) "Thinking" else if (canUseAi) "Configured" else "Setup required", if (chatLoading) Gold else if (canUseAi) Mint else Gold)
-                }
-                Spacer(Modifier.height(8.dp))
-                if (messages.isEmpty()) {
-                    Text(
-                        "Start with a question about a strategy, indicator, market-data quality or research methodology.",
-                        color = Muted, fontSize = 11.sp, lineHeight = 17.sp
-                    )
-                } else {
-                    messages.forEach { message ->
-                        Column(
-                            Modifier.fillMaxWidth()
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(if (message.role == "user") PanelRaised else Ink)
-                                .padding(11.dp)
-                        ) {
-                            Text(
-                                if (message.role == "user") "YOU" else "QUANT AI",
-                                color = if (message.role == "user") Cyan else Mint,
-                                fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(message.content, color = MaterialTheme.colorScheme.onBackground, fontSize = 12.sp, lineHeight = 18.sp)
-                        }
-                        Spacer(Modifier.height(7.dp))
-                    }
-                }
-                OutlinedTextField(
-                    value = chatInput,
-                    onValueChange = { chatInput = it.take(6000) },
-                    label = { Text("Ask Quant AI") },
-                    placeholder = { Text("Explain this setup or help structure a research test…") },
-                    modifier = Modifier.fillMaxWidth().testTag("ai.chat.input"),
-                    minLines = 2,
-                    maxLines = 5
+                Eyebrow("Contextual Copilot")
+                Text(
+                    "The conversational assistant is available from the Copilot control on Market Pulse. It uses the server-owned chat route and can receive metric or strategy context.",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 11.sp,
+                    lineHeight = 17.sp
                 )
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = ::sendMessage,
-                    enabled = canUseAi && chatInput.isNotBlank() && !chatLoading,
-                    modifier = Modifier.fillMaxWidth().testTag("ai.chat.send")
-                ) {
-                    Text(if (chatLoading) "Generating…" else "Send to Quant AI")
-                }
-                if (chatError != null) Text(chatError!!, color = Coral, fontSize = 11.sp, lineHeight = 16.sp)
-                TextButton(onClick = { messages = emptyList(); chatError = null }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Clear conversation")
+                Button(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
+                    Text("Review AI provider setup")
                 }
             }
         }
@@ -405,12 +353,14 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                     color = MaterialTheme.colorScheme.onBackground, fontSize = 12.sp, lineHeight = 18.sp
                 )
                 Spacer(Modifier.height(10.dp))
-                OutlinedTextField(
+                InstrumentSymbolPicker(
                     value = symbol,
-                    onValueChange = { symbol = it.uppercase().filter { ch -> ch.isLetterOrDigit() || ch == '-' || ch == '&' }.take(30) },
-                    label = { Text("NSE/BSE trading symbol") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().testTag("ai.recovery.symbol")
+                    onValueChange = { symbol = it.uppercase().take(40) },
+                    label = "NSE/BSE trading symbol",
+                    testTag = "ai.recovery.symbol",
+                    equities = if (exchange == "NSE") equityInstruments else emptyList(),
+                    indexKeys = if (exchange == "NSE") indexKeys else emptyMap(),
+                    enabled = exchange == "NSE"
                 )
                 Spacer(Modifier.height(7.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -443,7 +393,7 @@ fun AiWorkspaceScreen(session: QuantSession, repository: QuantDataRepository) {
                 ) {
                     Text(
                         if (briefLoading) "Retrieving and analysing…"
-                        else if (canUseAi) "Recover EOD data + analyse"
+                        else if (canUseResearch) "Recover EOD data + analyse"
                         else "Recover adjusted EOD data"
                     )
                 }

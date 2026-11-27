@@ -27,7 +27,6 @@ fun SettingsScreen(
     session: QuantSession,
     repository: QuantDataRepository,
     onBack: () -> Unit,
-    onOpenAiSettings: () -> Unit,
     onOpenMarketPulse: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -35,9 +34,6 @@ fun SettingsScreen(
     var tokenInput by remember { mutableStateOf("") }
     var savingToken by remember { mutableStateOf(false) }
     var tokenError by remember { mutableStateOf<String?>(null) }
-    var providersLoading by remember { mutableStateOf(true) }
-    var configuredAiProviders by remember { mutableStateOf(0) }
-    var providerError by remember { mutableStateOf<String?>(null) }
     var ingestionStatus by remember { mutableStateOf<MarketIngestionStatus?>(null) }
     var ingestionLoading by remember { mutableStateOf(false) }
     var ingestionError by remember { mutableStateOf<String?>(null) }
@@ -62,15 +58,6 @@ fun SettingsScreen(
             ingestionError = failure.message ?: "Database status unavailable"
         } finally {
             ingestionLoading = false
-        }
-        try {
-            configuredAiProviders = repository.fetchAiProviders(session).count { it.configured }
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (failure: Exception) {
-            providerError = failure.message ?: "AI provider status unavailable"
-        } finally {
-            providersLoading = false
         }
     }
 
@@ -156,20 +143,7 @@ fun SettingsScreen(
             }
         }
         item {
-            TerminalCard {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Eyebrow("AI provider connections")
-                    StatusPill(
-                        if (providersLoading) "Checking" else "$configuredAiProviders configured",
-                        if (!providersLoading && configuredAiProviders > 0) Mint else Gold
-                    )
-                }
-                providerError?.let { Text(it, color = Coral, fontSize = 10.sp) }
-
-                Button(onClick = onOpenAiSettings, modifier = Modifier.fillMaxWidth()) {
-                    Text("Open AI provider settings")
-                }
-            }
+            AiProviderSettingsPanel(session = session, repository = repository)
         }
         item {
             TerminalCard {

@@ -4,11 +4,16 @@ import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiDailyBar
 import com.rovexquant.app.data.model.AiProvider
+import com.rovexquant.app.data.model.AiResearchRun
+import com.rovexquant.app.data.model.AiBudgetStatus
+import com.rovexquant.app.data.model.AiResearchRunDetail
+import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.AiStrategyEvidence
 import com.rovexquant.app.data.model.EodMarketSnapshot
 import com.rovexquant.app.data.model.EodStockMove
 import com.rovexquant.app.data.model.IntelligenceFeed
+import com.rovexquant.app.data.model.InstrumentQuoteSnapshot
 import com.rovexquant.app.data.model.IntelligenceSource
 import com.rovexquant.app.data.model.IssuerMapping
 import com.rovexquant.app.data.model.MarketEvent
@@ -32,6 +37,9 @@ import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.NseMcpTool
 import com.rovexquant.app.data.model.QuantSession
+import com.rovexquant.app.data.model.TechnicalIndicators
+import com.rovexquant.app.data.model.TechnicalIndicatorPeriods
+import com.rovexquant.app.domain.OhlcvBar
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -132,7 +140,9 @@ object QuantApi {
                                 name = name,
                                 description = item.optString("description"),
                                 inputSchema = schema,
-                                readOnly = item.optBoolean("read_only", false)
+                                readOnly = item.optBoolean("read_only", false),
+                                requiresConfirmation = item.optBoolean("requires_confirmation", false),
+                                destructive = item.optBoolean("destructive", false)
                             ))
                         }
                     }
@@ -148,7 +158,7 @@ object QuantApi {
         session: QuantSession,
         server: String,
         tool: String,
-        argumentsJson: String
+        argumentsJson: String,
     ): NseMcpResult {
         require(server in setOf("bhavcopy", "cmmkt")) { "Invalid NSE MCP server." }
         require(argumentsJson.toByteArray(Charsets.UTF_8).size <= 32 * 1024) { "Arguments exceed 32 KB." }
@@ -182,6 +192,51 @@ object QuantApi {
         }
     }
 
+
+    fun fetchInstrumentQuote(session: QuantSession, symbol: String): InstrumentQuoteSnapshot? {
+        require(symbol.isNotBlank() && symbol.length <= 80) { "Enter a valid NSE instrument name or symbol." }
+        val body = JSONObject()
+            .put("provider_order", JSONArray().put("upstox"))
+            .put("instruments", JSONArray().put(JSONObject().put("symbol", symbol.trim())))
+            .toString()
+            .toRequestBody("application/json; charset=utf-8".toMediaType())
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/market/quotes")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .post(body)
+            .build()
+        http.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            require(text.toByteArray(Charsets.UTF_8).size <= 128 * 1024) {
+                "Instrument quote snapshot exceeds the 128 KB safety limit."
+            }
+            val root = JSONObject(text)
+            val rows = root.optJSONArray("quotes") ?: return null
+            val quote = rows.optJSONObject(0) ?: return null
+            fun optionalNumber(key: String): Double? =
+                quote.optDouble(key, Double.NaN).takeIf { it.isFinite() && it > 0.0 }
+            val high = optionalNumber("year_high")
+            val low = optionalNumber("year_low")
+            require(high == null || low == null || high >= low) {
+                "Market provider returned an invalid 52-week range."
+            }
+            val volume = quote.optLong("volume", -1L).takeIf { it >= 0L }
+            return InstrumentQuoteSnapshot(
+                symbol = quote.optString("symbol", symbol),
+                provider = quote.optString("provider", root.optString("provider", "unknown")),
+                lastPrice = optionalNumber("last_price"),
+                previousClose = optionalNumber("previous_close"),
+                changePercent = quote.optDouble("change_percent", Double.NaN).takeIf { it.isFinite() },
+                volume = volume,
+                yearHigh = high,
+                yearLow = low,
+                exchangeTimestamp = quote.optString("exchange_timestamp").takeIf { it.isNotBlank() && it != "null" },
+                receivedAt = quote.optString("received_at", root.optString("received_at")),
+                quality = quote.optString("quality", "UNKNOWN")
+            )
+        }
+    }
 
     fun fetchIntelligenceEvents(
         session: QuantSession,
@@ -353,6 +408,130 @@ object QuantApi {
                 reconciliation = parseItem(json.optJSONObject("reconciliation"), "Reconciliation"),
                 notes = notes
             )
+        }
+    }
+
+    /** Fetches server-authorized Upstox V3 intraday candles; provider credentials stay server-side. */
+    fun fetchUpstoxOhlcv(
+        session: QuantSession,
+        exchange: String,
+        symbol: String,
+        interval: String,
+        from: java.time.LocalDate,
+        to: java.time.LocalDate
+    ): List<OhlcvBar> {
+        require(exchange.equals("NSE", ignoreCase = true)) {
+            "Upstox V3 candles are currently supported for NSE only."
+        }
+        require(interval in setOf("1d", "1m", "5m", "10m", "15m", "30m", "1h", "4h")) {
+            "Unsupported chart timeframe."
+        }
+        require(from <= to) { "Chart start date must not be after its end date." }
+        val encodedSymbol = java.net.URLEncoder.encode(symbol.trim(), Charsets.UTF_8.name())
+        val url = "${session.baseUrl}/api/v1/app/market/candles" +
+            "?exchange=NSE&symbol=$encodedSymbol&interval=$interval&from=$from&to=$to"
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        researchHttp.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(body, response.code))
+            require(body.toByteArray(Charsets.UTF_8).size <= 8 * 1024 * 1024) {
+                "Candle response exceeds the 8 MB mobile safety limit."
+            }
+            val rows = JSONObject(body).optJSONArray("bars")
+                ?: throw IllegalStateException("Candle response is missing its bars array.")
+            require(rows.length() <= 20_000) { "Candle response exceeds the 20,000-bar limit." }
+            return buildList(rows.length()) {
+                for (index in 0 until rows.length()) {
+                    val row = rows.optJSONObject(index)
+                        ?: throw IllegalStateException("Candle ${index + 1} is malformed.")
+                    val timestamp = try {
+                        java.time.OffsetDateTime.parse(row.getString("timestamp"))
+                    } catch (failure: Exception) {
+                        throw IllegalStateException("Intraday candle ${index + 1} has an invalid timestamp.", failure)
+                    }
+                    val bar = OhlcvBar(
+                        timestamp = timestamp,
+                        open = row.optDouble("open", Double.NaN),
+                        high = row.optDouble("high", Double.NaN),
+                        low = row.optDouble("low", Double.NaN),
+                        close = row.optDouble("close", Double.NaN),
+                        volume = row.optLong("volume", -1L)
+                    )
+                    require(
+                        bar.open.isFinite() && bar.high.isFinite() && bar.low.isFinite() &&
+                            bar.close.isFinite() && bar.volume >= 0L &&
+                            bar.open > 0.0 && bar.high >= maxOf(bar.open, bar.close) &&
+                            bar.low <= minOf(bar.open, bar.close) && bar.high >= bar.low
+                    ) { "Intraday candle ${index + 1} failed OHLCV validation." }
+                    add(bar)
+                }
+            }
+        }
+    }
+
+    /**
+     * Calls the authenticated deterministic backend indicator engine. Input order is
+     * preserved exactly; JSON null warm-up values remain null and every returned
+     * array is checked against the requested bar count before reaching the chart.
+     */
+    fun fetchTechnicalIndicators(
+        session: QuantSession,
+        bars: List<OhlcvBar>,
+        startIndex: Int,
+        periods: TechnicalIndicatorPeriods = TechnicalIndicatorPeriods()
+    ): TechnicalIndicators {
+        require(bars.isNotEmpty() && bars.size <= 10_000) {
+            "Indicator calculations require between 1 and 10,000 aligned OHLC bars."
+        }
+        require(startIndex >= 0) { "Indicator source offset cannot be negative." }
+        bars.forEachIndexed { index, bar ->
+            require(
+                bar.open.isFinite() && bar.open > 0.0 &&
+                    bar.high.isFinite() && bar.high > 0.0 &&
+                    bar.low.isFinite() && bar.low > 0.0 &&
+                    bar.close.isFinite() && bar.close > 0.0 &&
+                    bar.high >= maxOf(bar.open, bar.close) &&
+                    bar.low <= minOf(bar.open, bar.close) &&
+                    bar.high >= bar.low
+            ) { "OHLC bar ${index + 1} failed validation before indicator calculation." }
+        }
+
+        val close = JSONArray()
+        val high = JSONArray()
+        val low = JSONArray()
+        bars.forEach { bar ->
+            close.put(bar.close)
+            high.put(bar.high)
+            low.put(bar.low)
+        }
+        val payload = JSONObject()
+            .put("close", close)
+            .put("high", high)
+            .put("low", low)
+            .put("sma_period", periods.sma)
+            .put("ema_period", periods.ema)
+            .put("rsi_period", periods.rsi)
+            .put("bollinger_period", periods.bollinger)
+            .put("bollinger_deviations", periods.bollingerDeviations)
+            .put("atr_period", periods.atr)
+            .put("adx_period", periods.adx)
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/research/indicators")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .post(payload.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+
+        researchHttp.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(body, response.code))
+            require(body.toByteArray(Charsets.UTF_8).size <= 2 * 1024 * 1024) {
+                "Indicator response exceeds the 2 MB mobile safety limit."
+            }
+            return parseTechnicalIndicatorsResponse(body, startIndex, bars.size)
         }
     }
 
@@ -668,6 +847,150 @@ object QuantApi {
     }
 
 
+    fun fetchAiTaskRoutes(session: QuantSession): Map<String, AiTaskRoute> {
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/ai/task-routes")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            val routes = JSONObject(text).optJSONObject("routes") ?: JSONObject()
+            return buildMap {
+                val keys = routes.keys()
+                while (keys.hasNext()) {
+                    val task = keys.next()
+                    val route = routes.optJSONObject(task) ?: continue
+                    val provider = route.optString("provider_id")
+                    val model = route.optString("model")
+                    if (provider.isBlank() || model.isBlank()) continue
+                    val fallbackJson = route.optJSONArray("fallback_providers") ?: JSONArray()
+                    val fallbacks = buildList {
+                        for (index in 0 until fallbackJson.length()) {
+                            fallbackJson.optString(index).takeIf { it.isNotBlank() }?.let(::add)
+                        }
+                    }
+                    put(task, AiTaskRoute(provider, model, fallbacks))
+                }
+            }
+        }
+    }
+
+    fun fetchAiResearchRuns(session: QuantSession, limit: Int = 20): List<AiResearchRun> {
+        require(limit in 1..100) { "Research history limit must be between 1 and 100." }
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/ai/research/runs?limit=$limit")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            require(text.toByteArray(Charsets.UTF_8).size <= 512 * 1024) {
+                "AI research history exceeds the 512 KB mobile safety limit."
+            }
+            val rows = JSONObject(text).optJSONArray("runs") ?: JSONArray()
+            return buildList {
+                for (index in 0 until rows.length()) {
+                    val item = rows.optJSONObject(index) ?: continue
+                    val usage = item.optJSONObject("token_usage") ?: JSONObject()
+                    val cost = if (item.isNull("cost_usd")) null else item.optDouble("cost_usd").takeIf { it.isFinite() }
+                    add(AiResearchRun(
+                        runId = item.optString("run_id"),
+                        taskType = item.optString("task_type"),
+                        providerId = item.optString("provider_id"),
+                        model = item.optString("model"),
+                        status = item.optString("status"),
+                        promptTokens = usage.optLong("prompt_tokens").coerceAtLeast(0L),
+                        completionTokens = usage.optLong("completion_tokens").coerceAtLeast(0L),
+                        totalTokens = usage.optLong("total_tokens", usage.optLong("reserved_tokens")).coerceAtLeast(0L),
+                        costUsd = cost,
+                        costStatus = item.optString("cost_status", "NOT_TRACKED"),
+                        fallbackUsed = item.optBoolean("fallback_used"),
+                        createdAt = item.optString("created_at")
+                    ))
+                }
+            }
+        }
+    }
+
+    fun fetchAiResearchRun(session: QuantSession, runId: String): AiResearchRunDetail {
+        require(runId.length in 1..64 && runId.all { it.isLetterOrDigit() || it == '-' }) {
+            "Invalid archived research run identifier."
+        }
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/ai/research/runs/$runId")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            require(text.toByteArray(Charsets.UTF_8).size <= 512 * 1024) {
+                "Archived AI research run exceeds the 512 KB mobile safety limit."
+            }
+            val json = JSONObject(text)
+            fun jsonValue(key: String): String {
+                val value = json.opt(key)
+                return when (value) {
+                    null, JSONObject.NULL -> "{}"
+                    is JSONObject -> value.toString(2)
+                    is JSONArray -> value.toString(2)
+                    else -> value.toString()
+                }
+            }
+            val cost = if (json.isNull("cost_usd")) null else json.optDouble("cost_usd").takeIf { it.isFinite() }
+            return AiResearchRunDetail(
+                runId = json.optString("run_id"),
+                taskType = json.optString("task_type"),
+                providerId = json.optString("provider_id"),
+                model = json.optString("model"),
+                status = json.optString("status"),
+                requestHash = json.optString("request_hash"),
+                requestPayloadJson = jsonValue("request_payload"),
+                responsePayloadJson = jsonValue("response_payload"),
+                tokenUsageJson = jsonValue("token_usage"),
+                costUsd = cost,
+                costStatus = json.optString("cost_status", "NOT_TRACKED"),
+                fallbackUsed = json.optBoolean("fallback_used"),
+                sourceRefsJson = jsonValue("source_refs"),
+                verificationJson = jsonValue("verification"),
+                createdAt = json.optString("created_at"),
+                completedAt = json.optString("completed_at").takeIf { it.isNotBlank() && it != "null" }
+            )
+        }
+    }
+
+    fun fetchAiBudgetStatus(session: QuantSession): AiBudgetStatus {
+        val request = Request.Builder()
+            .url("${session.baseUrl}/api/v1/app/ai/budget")
+            .header("Authorization", "Bearer ${session.accessToken}")
+            .get()
+            .build()
+        masterHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            require(text.toByteArray(Charsets.UTF_8).size <= 64 * 1024) {
+                "AI budget response exceeds the 64 KB mobile safety limit."
+            }
+            val json = JSONObject(text)
+            val daily = json.optJSONObject("daily") ?: JSONObject()
+            val monthly = json.optJSONObject("monthly") ?: JSONObject()
+            fun nullableLong(source: JSONObject, key: String): Long? =
+                if (source.isNull(key)) null else source.optLong(key).coerceAtLeast(0L)
+            return AiBudgetStatus(
+                enabled = json.optBoolean("enabled"),
+                dailyUsedTokens = daily.optLong("used_tokens").coerceAtLeast(0L),
+                dailyLimitTokens = nullableLong(daily, "limit_tokens"),
+                dailyRemainingTokens = nullableLong(daily, "remaining_tokens"),
+                monthlyUsedTokens = monthly.optLong("used_tokens").coerceAtLeast(0L),
+                monthlyLimitTokens = nullableLong(monthly, "limit_tokens"),
+                monthlyRemainingTokens = nullableLong(monthly, "remaining_tokens")
+            )
+        }
+    }
+
     fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) {
         require(providerId in setOf("deepseek", "groq", "openrouter", "gemini", "openai")) {
             "Unsupported AI provider."
@@ -728,12 +1051,20 @@ object QuantApi {
 
     fun sendAiMessage(
         session: QuantSession,
-        providerId: String,
-        model: String,
+        providerId: String?,
+        model: String?,
         messages: List<AiChatMessage>,
         credentialId: String?,
-        fallbackProviders: List<String>
+        fallbackProviders: List<String>,
+        taskType: String
     ): AiCompletion {
+        require((providerId.isNullOrBlank() && model.isNullOrBlank()) ||
+            (!providerId.isNullOrBlank() && !model.isNullOrBlank())) {
+            "Provider and model must be supplied together, or both omitted for server routing."
+        }
+        require(taskType in setOf("chat", "research", "macro_analysis", "filing_extraction", "claim_verification", "summarization")) {
+            "Unsupported AI task type."
+        }
         require(messages.isNotEmpty() && messages.size <= 12) { "Keep AI conversations to the latest 12 messages." }
         val boundedMessages = mutableListOf<AiChatMessage>()
         var combinedCharacters = 0
@@ -750,11 +1081,12 @@ object QuantApi {
             }
         }
         val body = JSONObject()
-            .put("provider_id", providerId)
-            .put("model", model)
             .put("messages", messageArray)
+            .put("task_type", taskType)
             .put("max_tokens", 1200)
             .put("temperature", 0.2)
+        if (!providerId.isNullOrBlank()) body.put("provider_id", providerId)
+        if (!model.isNullOrBlank()) body.put("model", model)
         if (!credentialId.isNullOrBlank()) body.put("credential_id", credentialId)
         body.put("fallback_providers", JSONArray().apply { fallbackProviders.distinct().take(3).forEach { put(it) } })
         val request = Request.Builder()
@@ -771,24 +1103,34 @@ object QuantApi {
 
     fun requestAiStrategyBrief(
         session: QuantSession,
-        providerId: String,
-        model: String,
+        providerId: String?,
+        model: String?,
         symbol: String,
         exchange: String,
         fromDate: String,
         toDate: String,
         strategyContext: String,
         credentialId: String?,
-        fallbackProviders: List<String>
+        fallbackProviders: List<String>,
+        automaticTaskRouting: Boolean
     ): AiStrategyBrief {
+        require(automaticTaskRouting || (!providerId.isNullOrBlank() && !model.isNullOrBlank())) {
+            "Select a configured provider/model or enable server task routing."
+        }
+        require(!automaticTaskRouting || (providerId.isNullOrBlank() && model.isNullOrBlank())) {
+            "Automatic task routing cannot be combined with a manual provider/model."
+        }
         val body = JSONObject()
-            .put("provider_id", providerId)
-            .put("model", model)
             .put("symbol", symbol.trim().uppercase())
+            .put("automatic_task_routing", automaticTaskRouting)
             .put("exchange", exchange.uppercase())
             .put("from_date", fromDate)
             .put("to_date", toDate)
             .put("strategy_context", strategyContext)
+        if (!automaticTaskRouting) {
+            body.put("provider_id", providerId)
+            body.put("model", model)
+        }
         if (!credentialId.isNullOrBlank()) body.put("credential_id", credentialId)
         body.put("fallback_providers", JSONArray().apply { fallbackProviders.distinct().take(3).forEach { put(it) } })
         val request = Request.Builder()
@@ -859,7 +1201,14 @@ object QuantApi {
         credentialId = json.optString("credential_id").takeIf { it.isNotBlank() && it != "null" },
         model = json.optString("model"),
         content = json.optString("content"),
-        fallbackUsed = json.optBoolean("fallback_used", false)
+        fallbackUsed = json.optBoolean("fallback_used", false),
+        taskType = json.optString("task_type", "chat"),
+        promptTokens = json.optInt("usage_prompt_tokens", json.optJSONObject("usage")?.optInt("prompt_tokens") ?: 0),
+        completionTokens = json.optInt("usage_completion_tokens", json.optJSONObject("usage")?.optInt("completion_tokens") ?: 0),
+        totalTokens = json.optInt("usage_total_tokens", json.optJSONObject("usage")?.optInt("total_tokens") ?: 0),
+        costUsd = json.optJSONObject("cost")?.optDouble("usd")?.takeIf { it.isFinite() }
+            ?: json.optDouble("cost_usd", Double.NaN).takeIf { it.isFinite() },
+        costStatus = json.optString("cost_status", "UNKNOWN_MODEL_PRICING")
     )
 
     private fun JSONObject.optionalDouble(key: String): Double? {
@@ -1081,7 +1430,7 @@ object QuantApi {
                     val symbol = item.optString("trading_symbol")
                     val name = item.optString("name")
                     val isin = item.optString("isin")
-                    if (key.startsWith("NSE_EQ|INE") && symbol.isNotBlank() && name.isNotBlank()
+                    if (key.startsWith("NSE_EQ|IN") && symbol.isNotBlank() && name.isNotBlank()
                         && isin.isNotBlank() && key == "NSE_EQ|$isin") {
                         add(MarketEquityInstrument(key, name, symbol, isin))
                     }

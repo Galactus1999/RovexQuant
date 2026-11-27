@@ -175,4 +175,52 @@ class ChartSeriesMapperTest {
             )
         }
     }
+
+    @Test
+    fun intradayEquityPreservesMultipleCandlesWithinOneTradingDate() {
+        val interval = OhlcvInterval.MINUTE_5
+        val instrument = InstrumentCatalog.resolve("RELIANCE", interval = interval)
+        val first = OhlcvBar(
+            OffsetDateTime.parse("2026-11-24T09:15:00+05:30"),
+            100.0, 102.0, 99.0, 101.0, 500L
+        )
+        val second = OhlcvBar(
+            OffsetDateTime.parse("2026-11-24T09:20:00+05:30"),
+            101.0, 103.0, 100.0, 102.0, 700L
+        )
+
+        val mapped = ChartSeriesMapper.map(MarketOhlcvSeries(
+            instrument = instrument,
+            bars = listOf(first, second),
+            volumeAvailable = true,
+            adjustmentStatus = "Raw intraday OHLCV"
+        ))
+
+        assertEquals(OhlcvProvider.UPSTOX_V3_INTRADAY, mapped.instrument.provider)
+        assertEquals("2026-11-24T09:15+05:30", mapped.candles[0].time)
+        assertEquals("2026-11-24T09:20+05:30", mapped.candles[1].time)
+        assertEquals(2, mapped.volumeBars?.size)
+    }
+
+    @Test
+    fun intradayIndexAllowsRepeatedDatesButNeverCreatesVolume() {
+        val instrument = InstrumentCatalog.resolve("NIFTY BANK", interval = OhlcvInterval.HOUR_1)
+        val first = OhlcvBar(
+            OffsetDateTime.parse("2026-11-24T09:15:00+05:30"),
+            50_000.0, 50_100.0, 49_900.0, 50_050.0, 0L
+        )
+        val second = OhlcvBar(
+            OffsetDateTime.parse("2026-11-24T10:15:00+05:30"),
+            50_050.0, 50_200.0, 50_000.0, 50_150.0, 0L
+        )
+        val mapped = ChartSeriesMapper.map(MarketOhlcvSeries(
+            instrument = instrument,
+            bars = listOf(first, second),
+            volumeAvailable = false,
+            adjustmentStatus = "Index OHLC"
+        ))
+
+        assertEquals(2, mapped.candles.size)
+        assertNull(mapped.volumeBars)
+    }
 }

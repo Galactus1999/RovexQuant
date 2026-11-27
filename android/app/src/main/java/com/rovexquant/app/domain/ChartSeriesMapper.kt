@@ -4,7 +4,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
-/** Renderer-neutral daily candle; time is an exchange trading date (ISO-8601). */
+/** Renderer-neutral OHLC candle; daily bars use ISO dates and intraday bars use offset-aware ISO timestamps. */
 data class ChartCandle(
     val time: String,
     val open: Double,
@@ -37,7 +37,7 @@ data class ChartSeriesData(
 
 /**
  * Converts the P1 provider-neutral OHLCV contract to a renderer-neutral chart model.
- * This is intentionally limited to the currently supported DAILY interval.
+ * Daily and intraday timestamps remain distinct; daily trading dates must be unique.
  */
 object ChartSeriesMapper {
     const val MAX_CHART_BARS = 100_000
@@ -45,19 +45,25 @@ object ChartSeriesMapper {
 
     fun map(series: MarketOhlcvSeries): ChartSeriesData {
         val instrument = series.instrument
-        require(instrument.interval == OhlcvInterval.DAILY) {
-            "Chart mapping currently supports daily candles only."
+        require(InstrumentCatalog.resolve(
+            instrument.canonicalSymbol, instrument.exchange, instrument.interval
+        ) == instrument) {
+            "Instrument identity does not match the canonical provider route for its timeframe."
         }
-        require(InstrumentCatalog.resolve(instrument.canonicalSymbol, instrument.exchange) == instrument) {
-            "Instrument identity does not match the canonical P1 provider route."
-        }
-        if (instrument.instrumentType != InstrumentType.EQUITY) {
-            require(!series.volumeAvailable) {
-                "Volume is unavailable for this index provider; an index volume series cannot be displayed."
+        if (instrument.interval.isIntraday) {
+            require(instrument.provider == OhlcvProvider.UPSTOX_V3_INTRADAY) {
+                "Intraday charts require the authenticated Upstox V3 candle provider."
+            }
+            require(series.volumeAvailable == (instrument.instrumentType == InstrumentType.EQUITY)) {
+                "Intraday volume availability must match the verified instrument type."
+            }
+        } else if (instrument.instrumentType != InstrumentType.EQUITY) {
+            require(instrument.provider == OhlcvProvider.UPSTOX_V3_HISTORICAL && !series.volumeAvailable) {
+                "Daily index charts require official Upstox V3 history and must not display traded volume."
             }
         } else {
             require(instrument.provider == OhlcvProvider.TEJHQ_EOD && series.volumeAvailable) {
-                "Equity chart volume requires the validated TejHQ OHLCV source."
+                "Daily equity chart volume requires the validated TejHQ OHLCV source."
             }
         }
         require(series.bars.isNotEmpty()) { "No historical bars are available for this chart." }
@@ -81,8 +87,10 @@ object ChartSeriesMapper {
                 "Chart bars must be strictly ordered by timestamp without duplicates (bar ${index + 1})."
             }
             val tradingDate = bar.timestamp.atZoneSameInstant(exchangeZone).toLocalDate()
-            require(previousTradingDate?.let { tradingDate.isAfter(it) } ?: true) {
-                "Daily chart bars must have unique, increasing exchange trading dates (bar ${index + 1})."
+            if (instrument.interval == OhlcvInterval.DAILY) {
+                require(previousTradingDate?.let { tradingDate.isAfter(it) } ?: true) {
+                    "Daily chart bars must have unique, increasing exchange trading dates (bar ${index + 1})."
+                }
             }
             require(bar.open.isFinite() && bar.open > 0.0 &&
                 bar.high.isFinite() && bar.high > 0.0 &&
@@ -95,7 +103,8 @@ object ChartSeriesMapper {
             ) { "Chart bar ${index + 1} contains an invalid OHLC range." }
             require(bar.volume >= 0L) { "Chart bar ${index + 1} contains negative volume." }
 
-            val time = tradingDate.toString()
+            val time = if (instrument.interval == OhlcvInterval.DAILY) tradingDate.toString()
+                else bar.timestamp.toString()
             candles += ChartCandle(time, bar.open, bar.high, bar.low, bar.close)
             volumes?.add(ChartVolumeBar(time, bar.volume))
             previousInstant = instant

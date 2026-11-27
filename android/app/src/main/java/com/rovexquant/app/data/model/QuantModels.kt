@@ -3,7 +3,14 @@ package com.rovexquant.app.data.model
 data class QuantSession(val baseUrl: String, val accessToken: String)
 data class MarketIndexInstrument(val instrumentKey: String, val name: String, val tradingSymbol: String)
 data class MarketEquityInstrument(val instrumentKey: String, val name: String, val tradingSymbol: String, val isin: String)
-data class NseMcpTool(val name: String, val description: String, val inputSchema: org.json.JSONObject, val readOnly: Boolean)
+data class NseMcpTool(
+    val name: String,
+    val description: String,
+    val inputSchema: org.json.JSONObject,
+    val readOnly: Boolean,
+    val requiresConfirmation: Boolean = false,
+    val destructive: Boolean = false
+)
 data class NseMcpCatalog(val server: String, val tools: List<NseMcpTool>, val failure: String? = null)
 data class NseMcpResult(val provider: String, val dataMode: String, val expectedDelay: String?, val sourceTimestamp: String?, val resultJson: String)
 
@@ -66,4 +73,19 @@ data class MarketIngestionStatus(
     val lastSuccessfulProvider: String? = null,
     val lastSuccessfulRows: Int = 0,
     val lastSuccessfulAt: String? = null
+)
+
+/** Provider-backed quote metadata. Missing fundamentals remain null, never imputed. */
+data class InstrumentQuoteSnapshot(
+    val symbol: String,
+    val provider: String,
+    val lastPrice: Double?,
+    val previousClose: Double?,
+    val changePercent: Double?,
+    val volume: Long?,
+    val yearHigh: Double?,
+    val yearLow: Double?,
+    val exchangeTimestamp: String?,
+    val receivedAt: String,
+    val quality: String
 )

@@ -132,3 +132,39 @@ def test_encrypted_app_credential_is_preferred_without_exposing_it(monkeypatch):
     assert credentials[0].credential_id == "app"
     assert credentials[0].api_key == secret
     assert secret not in repr(gateway.configured_providers())
+
+
+def test_task_routes_are_server_owned_and_validated(monkeypatch):
+    monkeypatch.setenv(
+        "QUANT_AI_TASK_ROUTES",
+        json.dumps({
+            "claim_verification": {
+                "provider_id": "groq",
+                "model": "verifier-model",
+                "fallback_providers": ["deepseek", "groq"],
+            }
+        }),
+    )
+    provider, model, fallbacks = gateway.resolve_task_route(
+        "claim_verification", None, None, None
+    )
+    assert provider == "groq"
+    assert model == "verifier-model"
+    assert fallbacks == ["deepseek", "groq"]
+
+
+def test_task_route_rejects_unsupported_provider_and_task(monkeypatch):
+    monkeypatch.setenv(
+        "QUANT_AI_TASK_ROUTES",
+        json.dumps({
+            "claim_verification": {
+                "provider_id": "untrusted-provider",
+                "model": "verifier-model",
+                "fallback_providers": [],
+            }
+        }),
+    )
+    with pytest.raises(gateway.GatewayError, match="Invalid provider/model"):
+        gateway.configured_task_routes()
+    with pytest.raises(gateway.GatewayError, match="Unsupported AI task type"):
+        gateway.resolve_task_route("execute_trade", "groq", "model", [])

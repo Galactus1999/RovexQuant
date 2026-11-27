@@ -1,4 +1,5 @@
 from datetime import date
+import json
 
 import asyncio
 
@@ -93,6 +94,15 @@ def test_strategy_evidence_summary_does_not_claim_live_data(monkeypatch):
         return {"provider_id": "groq", "model": "test-model", "content": "EOD analysis only.", "usage": {}, "fallback_used": False}
     monkeypatch.setattr(ai_router.tejhq_service, "fetch_ohlcv", fake_fetch)
     monkeypatch.setattr(ai_router, "complete_chat", fake_complete)
+
+    async def fake_verify(**kwargs):
+        assert kwargs["allowed_source_refs"][0].startswith("market:EOD:")
+        assert "END_OF_DAY_ADJUSTED" in kwargs["evidence_text"]
+        return {"status": "VERIFIED", "claims": []}
+
+    monkeypatch.setattr(ai_router, "verify_research_claims", fake_verify)
+    monkeypatch.setattr(ai_router, "reserve_ai_research_run", lambda **kwargs: "research-run-test")
+    monkeypatch.setattr(ai_router, "finish_ai_research_run", lambda *args, **kwargs: None)
     from rovexquant.api.routers.ai import AIStrategyBriefRequest, app_ai_strategy_brief
     request = AIStrategyBriefRequest(
         provider_id="groq", model="test-model", exchange="NSE", symbol="RELIANCE",
@@ -103,6 +113,8 @@ def test_strategy_evidence_summary_does_not_claim_live_data(monkeypatch):
     assert result["data_mode"] == "END_OF_DAY_ADJUSTED"
     assert result["bar_count"] == 70
     assert result["ai"]["content"] == "EOD analysis only."
+    assert result["verification"]["status"] == "VERIFIED"
+    assert result["research_run"]["run_id"] == "research-run-test"
     assert "not suitable for intraday" in result["limitations"][0]
 
 
@@ -333,3 +345,196 @@ def test_short_provider_secrets_are_not_reflected_in_validation_errors(mobile_cl
     )
     assert upstox_response.status_code == 422
     assert upstox_secret not in upstox_response.text
+
+
+def test_mobile_ai_task_routes_are_authenticated_and_do_not_expose_credentials(mobile_client, monkeypatch):
+    client, headers = mobile_client
+    monkeypatch.setenv(
+        "QUANT_AI_TASK_ROUTES",
+        '{"research":{"provider_id":"groq","model":"research-model","fallback_providers":[]}}',
+    )
+    assert client.get("/api/v1/app/ai/task-routes").status_code == 401
+    response = client.get("/api/v1/app/ai/task-routes", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["routes"]["research"]["provider_id"] == "groq"
+    assert "groq-server-secret" not in response.text
+    assert "api_key" not in response.text
+
+
+def test_mobile_ai_research_archive_endpoints_require_session(mobile_client, monkeypatch):
+    client, headers = mobile_client
+    from rovexquant.api.routers import ai as ai_router
+
+    monkeypatch.setattr(ai_router, "get_ai_token_budget_status", lambda: {"daily": {"used": 12}})
+    monkeypatch.setattr(
+        ai_router, "list_ai_research_runs",
+        lambda limit=30, task_type=None: {"runs": [], "limit": limit, "task_type": task_type},
+    )
+    monkeypatch.setattr(
+        ai_router, "get_ai_research_run",
+        lambda run_id: {"run_id": run_id, "status": "SUCCEEDED"},
+    )
+
+    assert client.get("/api/v1/app/ai/budget").status_code == 401
+    assert client.get("/api/v1/app/ai/research/runs").status_code == 401
+    assert client.get("/api/v1/app/ai/research/runs/test-run").status_code == 401
+
+    budget = client.get("/api/v1/app/ai/budget", headers=headers)
+    runs = client.get("/api/v1/app/ai/research/runs?limit=12&task_type=research", headers=headers)
+    detail = client.get("/api/v1/app/ai/research/runs/test-run", headers=headers)
+    assert budget.status_code == 200 and budget.json()["daily"]["used"] == 12
+    assert runs.status_code == 200 and runs.json()["limit"] == 12
+    assert runs.json()["task_type"] == "research"
+    assert detail.status_code == 200 and detail.json()["status"] == "SUCCEEDED"
+
+
+
+def test_mobile_chat_uses_server_owned_research_route(mobile_client, monkeypatch):
+    client, headers = mobile_client
+    monkeypatch.setenv(
+        "QUANT_AI_TASK_ROUTES",
+        json.dumps({
+            "research": {
+                "provider_id": "groq",
+                "model": "server-research-model",
+                "fallback_providers": [],
+            }
+        }),
+    )
+    response = client.post(
+        "/api/v1/app/ai/chat",
+        headers=headers,
+        json={
+            "task_type": "research",
+            "messages": [{"role": "user", "content": "Analyse only the attached evidence."}],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["task_type"] == "research"
+    assert response.json()["provider_id"] == "groq"
+    assert FakeAsyncClient.requests[-1]["json"]["model"] == "server-research-model"
+
+
+def test_strategy_brief_can_use_server_owned_research_route(mobile_client, monkeypatch):
+    client, headers = mobile_client
+    monkeypatch.setenv(
+        "QUANT_AI_TASK_ROUTES",
+        json.dumps({
+            "research": {
+                "provider_id": "groq",
+                "model": "server-research-model",
+                "fallback_providers": [],
+            }
+        }),
+    )
+    from rovexquant.api.routers import ai as ai_router
+    bars = [
+        TejHqDailyBar(
+            date=date.fromordinal(date(2026, 1, 1).toordinal() + i),
+            open=100.0 + i, high=102.0 + i, low=99.0 + i,
+            close=101.0 + i, volume=1000 + i,
+            adjusted_close=101.0 + i, adjustment_factor=1.0,
+        )
+        for i in range(70)
+    ]
+
+    async def fake_fetch(*args, **kwargs):
+        return "tejhq_eod", bars
+
+    async def fake_complete(**kwargs):
+        assert kwargs["provider_id"] == "groq"
+        assert kwargs["model"] == "server-research-model"
+        assert kwargs["task_type"] == "research"
+        return {
+            "provider_id": "groq", "model": "server-research-model",
+            "credential_id": "default", "content": "Server-routed EOD analysis.",
+            "usage": {"prompt_tokens": 40, "completion_tokens": 20, "total_tokens": 60},
+            "fallback_used": False,
+        }
+
+    async def fake_verify(**kwargs):
+        return {"status": "VERIFIED", "claims": []}
+
+    monkeypatch.setattr(ai_router.tejhq_service, "fetch_ohlcv", fake_fetch)
+    monkeypatch.setattr(ai_router, "complete_chat", fake_complete)
+    monkeypatch.setattr(ai_router, "verify_research_claims", fake_verify)
+    monkeypatch.setattr(ai_router, "reserve_ai_research_run", lambda **kwargs: "server-routed-run")
+    monkeypatch.setattr(ai_router, "finish_ai_research_run", lambda *args, **kwargs: None)
+
+    response = client.post(
+        "/api/v1/app/ai/strategy-brief",
+        headers=headers,
+        json={
+            "symbol": "RELIANCE",
+            "exchange": "NSE",
+            "from_date": "2026-01-01",
+            "to_date": "2026-04-01",
+            "strategy_context": "Review the supplied EOD trend.",
+            "automatic_task_routing": True,
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["ai"]["provider_id"] == "groq"
+    assert response.json()["ai"]["model"] == "server-research-model"
+    assert response.json()["research_run"]["run_id"] == "server-routed-run"
+    assert response.json()["research_run"]["archive_status"] == "PERSISTED"
+
+
+def test_research_chat_runs_independent_verifier_and_persists_claim_status(mobile_client, monkeypatch):
+    from rovexquant.api.routers import ai as ai_router
+    client, headers = mobile_client
+
+    monkeypatch.setattr(ai_router, "resolve_task_route", lambda *args: ("groq", "research-model", []))
+    monkeypatch.setattr(ai_router, "reserve_ai_research_run", lambda **kwargs: "00000000-0000-0000-0000-000000000001")
+
+    async def fake_complete_chat(**kwargs):
+        return {
+            "provider_id": "groq",
+            "model": "research-model",
+            "credential_id": "app",
+            "content": "RELIANCE closed at 1,234.50. [market:EOD:2026-11-20:NSE:RELIANCE]",
+            "fallback_used": False,
+            "task_type": "research",
+            "usage": {"prompt_tokens": 100, "completion_tokens": 30, "total_tokens": 130},
+            "cost_usd": None,
+            "cost_status": "UNKNOWN_MODEL_PRICING",
+        }
+
+    async def fake_verify(**kwargs):
+        assert "market:EOD:2026-11-20:NSE:RELIANCE" in kwargs["allowed_source_refs"]
+        return {
+            "status": "VERIFIED",
+            "summary": "1 supported, 0 contradicted, 0 insufficient of 1 claims.",
+            "claims": [{
+                "claim": "RELIANCE closed at 1,234.50.",
+                "source_ref": "market:EOD:2026-11-20:NSE:RELIANCE",
+                "evidence_quote": "close 1,234.50",
+                "verdict": "supported",
+                "reason": "Exact value is present in the supplied snapshot.",
+            }],
+        }
+
+    persisted = {}
+    def fake_finish(run_id, completion, **kwargs):
+        persisted.update({"run_id": run_id, "status": kwargs.get("status"), "verification": kwargs.get("verification")})
+
+    monkeypatch.setattr(ai_router, "complete_chat", fake_complete_chat)
+    monkeypatch.setattr(ai_router, "verify_research_claims", fake_verify)
+    monkeypatch.setattr(ai_router, "finish_ai_research_run", fake_finish)
+
+    response = client.post(
+        "/api/v1/app/ai/chat",
+        headers=headers,
+        json={
+            "task_type": "research",
+            "messages": [{
+                "role": "user",
+                "content": "Evidence [market:EOD:2026-11-20:NSE:RELIANCE]: close 1,234.50",
+            }],
+            "max_tokens": 1000,
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["verification"]["status"] == "VERIFIED"
+    assert persisted["status"] == "VERIFIED"
+    assert persisted["verification"]["claims"][0]["verdict"] == "supported"

@@ -29,7 +29,7 @@ fun PortfolioScreen() {
         allocation.toDoubleOrNull() ?: Double.NaN
     )
     LazyColumn(modifier = Modifier.fillMaxSize().testTag("portfolio.screen"), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { SectionHeading("Capital-aware, never capital-blind", "Portfolio & risk.", "Calculate a cash-equity position from your own capital, stop distance and risk limit.") }
+        item { SectionHeading("A transparent single-trade calculator", "Position sizing.", "Calculate one cash-equity position from capital, entry, stop distance and a planned risk limit. No holdings or broker orders are managed here.") }
         item {
             TerminalCard {
                 Eyebrow("Your risk profile")
@@ -63,10 +63,10 @@ fun PortfolioScreen() {
         }
         item {
             TerminalCard {
-                Eyebrow("Portfolio safeguards")
-                Text("Position allocation · Sector concentration · Maximum open positions · Daily loss cap", color = MaterialTheme.colorScheme.onBackground, fontSize = 13.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold)
+                Eyebrow("Portfolio controls · not implemented")
+                Text("No holdings ledger, aggregate exposure engine, sector concentration monitor, drawdown tracker or daily loss gate is connected yet.", color = MaterialTheme.colorScheme.onBackground, fontSize = 12.sp, lineHeight = 19.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(7.dp))
-                Text("Portfolio-wide exposure and drawdown controls will be enforced by the deterministic risk engine, never by an AI model.", color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
+                Text("The calculator above only sizes one hypothetical position. It does not enforce portfolio-wide limits or prevent a broker order.", color = Gold, fontSize = 10.sp, lineHeight = 16.sp)
             }
         }
         item {

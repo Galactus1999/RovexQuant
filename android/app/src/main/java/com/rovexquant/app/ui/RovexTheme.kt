@@ -14,6 +14,7 @@ val Mint = Color(0xFF55E0B5)
 val Cyan = Color(0xFF71C9F4)
 val Coral = Color(0xFFFF817D)
 val Gold = Color(0xFFF1C878)
+val AiPurple = Color(0xFFBB86FC)
 
 private val RovexColors = darkColorScheme(
     primary = Mint, secondary = Cyan, tertiary = Gold, background = Ink,

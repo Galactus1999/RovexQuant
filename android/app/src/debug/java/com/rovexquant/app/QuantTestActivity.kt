@@ -1,5 +1,9 @@
 package com.rovexquant.app
 
+import android.os.Looper
+import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.rovexquant.app.data.local.QuantSessionStore
@@ -7,6 +11,10 @@ import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiCompletion
 import com.rovexquant.app.data.model.AiDailyBar
 import com.rovexquant.app.data.model.AiProvider
+import com.rovexquant.app.data.model.AiResearchRun
+import com.rovexquant.app.data.model.AiBudgetStatus
+import com.rovexquant.app.data.model.AiResearchRunDetail
+import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.EodMarketSnapshot
 import com.rovexquant.app.data.model.EodStockMove
@@ -29,10 +37,13 @@ import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.QuantSession
+import com.rovexquant.app.data.model.TechnicalIndicators
+import com.rovexquant.app.data.model.TechnicalIndicatorPeriods
 import com.rovexquant.app.data.repository.MarketStream
 import com.rovexquant.app.data.repository.QuantDataRepository
 import com.rovexquant.app.domain.OhlcvBar
 import com.rovexquant.app.domain.InstrumentIdentity
+import com.rovexquant.app.domain.InstrumentType
 import com.rovexquant.app.domain.MarketOhlcvSeries
 import com.rovexquant.app.domain.OhlcvProvider
 import java.time.LocalDate
@@ -70,6 +81,28 @@ class QuantLoginTestActivity : QuantTestActivity() {
 class FakeQuantRepository(
     private val restoreAuthenticatedSession: Boolean
 ) : QuantDataRepository {
+    @Volatile var strategyBriefRequestCount: Int = 0
+        private set
+    @Volatile var instrumentHistoryRequestCount: Int = 0
+        private set
+    @Volatile var aiChatRequestCount: Int = 0
+        private set
+    @Volatile var lastStrategyContext: String? = null
+        private set
+    @Volatile var lastStrategySymbol: String? = null
+        private set
+    @Volatile var lastInstrumentProvider: String? = null
+        private set
+    @Volatile var lastInstrumentSymbol: String? = null
+        private set
+    @Volatile var lastAiRequestPrompt: String? = null
+        private set
+
+    @Volatile var marketStreamStartCount: Int = 0
+        private set
+    @Volatile var marketIngestionRequestCount: Int = 0
+        private set
+
     var rejectLogin = false
     private val testSession = QuantSession("https://quant.test", "test-session-token")
 
@@ -103,15 +136,63 @@ class FakeQuantRepository(
         MarketEquityInstrument("NSE_EQ|INE009A01021", "INFOSYS LIMITED", "INFY", "INE009A01021")
     )
 
-    override suspend fun fetchNseMcpTools(session: QuantSession, server: String): List<NseMcpCatalog> {
-        val servers = if (server == "both") listOf("bhavcopy", "cmmkt") else listOf(server)
-        return servers.map {
-            NseMcpCatalog(it, emptyList(), "No tools in deterministic UI test fixture.")
+    override suspend fun fetchNseMcpTools(session: QuantSession, server: String): List<NseMcpCatalog> =
+        withContext(Dispatchers.IO) {
+            val servers = if (server == "both") listOf("bhavcopy", "cmmkt") else listOf(server)
+            servers.map { serverName -> NseMcpCatalog(serverName, emptyList(), null) }
         }
-    }
 
     override suspend fun fetchAiProviders(session: QuantSession) =
-        listOf(AiProvider("groq", true, listOf("default")))
+        listOf(AiProvider("groq", true, listOf("default"), defaultModel = "fixture-model"))
+
+    override suspend fun fetchAiTaskRoutes(session: QuantSession): Map<String, AiTaskRoute> =
+        mapOf("research" to AiTaskRoute("groq", "server-research-model", emptyList()))
+
+    override suspend fun fetchAiResearchRuns(session: QuantSession, limit: Int) = listOf(
+        AiResearchRun(
+            runId = "fixture-research",
+            taskType = "research",
+            providerId = "groq",
+            model = "server-research-model",
+            status = "SUCCEEDED",
+            promptTokens = 120,
+            completionTokens = 80,
+            totalTokens = 200,
+            costUsd = null,
+            costStatus = "UNKNOWN_MODEL_PRICING",
+            fallbackUsed = false,
+            createdAt = "2026-11-24T10:00:00Z"
+        )
+    ).take(limit)
+
+    override suspend fun fetchAiBudgetStatus(session: QuantSession) = AiBudgetStatus(
+        enabled = true,
+        dailyUsedTokens = 200,
+        dailyLimitTokens = 10_000,
+        dailyRemainingTokens = 9_800,
+        monthlyUsedTokens = 200,
+        monthlyLimitTokens = 100_000,
+        monthlyRemainingTokens = 99_800
+    )
+
+    override suspend fun fetchAiResearchRun(session: QuantSession, runId: String) = AiResearchRunDetail(
+        runId = runId,
+        taskType = "research",
+        providerId = "groq",
+        model = "server-research-model",
+        status = "SUCCEEDED",
+        requestHash = "fixture-hash",
+        requestPayloadJson = """{"messages":[{"role":"user","content":"Fixture research prompt"}]}""",
+        responsePayloadJson = """{"content":"Deterministic archived research detail."}""",
+        tokenUsageJson = """{"prompt_tokens":120,"completion_tokens":80,"total_tokens":200}""",
+        costUsd = null,
+        costStatus = "UNKNOWN_MODEL_PRICING",
+        fallbackUsed = false,
+        sourceRefsJson = """[{"provider":"fixture","url":"https://fixture.example"}]""",
+        verificationJson = """{"status":"NOT_CONFIGURED"}""",
+        createdAt = "2026-11-24T10:00:00Z",
+        completedAt = "2026-11-24T10:00:01Z"
+    )
 
     override suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String) = Unit
     override suspend fun deleteAiProviderCredential(session: QuantSession, providerId: String) = Unit
@@ -121,7 +202,10 @@ class FakeQuantRepository(
         session: QuantSession,
         exchange: String,
         force: Boolean
-    ): String = "SUCCEEDED"
+    ): String {
+        marketIngestionRequestCount += 1
+        return "SUCCEEDED"
+    }
 
     override suspend fun fetchMarketIngestionStatus(
         session: QuantSession,
@@ -192,27 +276,46 @@ class FakeQuantRepository(
         from: LocalDate,
         to: LocalDate
     ): MarketOhlcvSeries {
+        instrumentHistoryRequestCount += 1
+        lastInstrumentProvider = instrument.provider.name
+        lastInstrumentSymbol = instrument.canonicalSymbol
         val bars = buildList {
-            var date = to.minusDays(160)
+            var date = if (instrument.interval.isIntraday) from else to.minusDays(160)
             var index = 0
             while (!date.isAfter(to)) {
                 if (date.dayOfWeek.value <= 5) {
-                    val close = 100.0 + index * 0.25
-                    val open = close - 0.2
-                    add(
-                        OhlcvBar(
-                            timestamp = OffsetDateTime.of(
+                    val intradayStepMinutes = when (instrument.interval.apiUnit) {
+                        "hours" -> (instrument.interval.apiInterval ?: 1) * 60
+                        "minutes" -> instrument.interval.apiInterval ?: 5
+                        else -> 0
+                    }
+                    val observations = if (instrument.interval.isIntraday) 30 else 1
+                    repeat(observations) { candleIndex ->
+                        val close = 100.0 + index * 0.25
+                        val open = close - 0.2
+                        val timestamp = if (instrument.interval.isIntraday) {
+                            OffsetDateTime.of(
+                                date.year, date.monthValue, date.dayOfMonth, 9, 15, 0, 0,
+                                ZoneOffset.ofHoursMinutes(5, 30)
+                            ).plusMinutes((candleIndex * intradayStepMinutes).toLong())
+                        } else {
+                            OffsetDateTime.of(
                                 date.year, date.monthValue, date.dayOfMonth, 15, 30, 0, 0,
                                 ZoneOffset.ofHoursMinutes(5, 30)
-                            ),
-                            open = open,
-                            high = close + 0.5,
-                            low = open - 0.5,
-                            close = close,
-                            volume = if (instrument.provider == OhlcvProvider.TEJHQ_EOD) 100_000L + index else 0L
+                            )
+                        }
+                        add(
+                            OhlcvBar(
+                                timestamp = timestamp,
+                                open = open,
+                                high = close + 0.5,
+                                low = open - 0.5,
+                                close = close,
+                                volume = if (instrument.instrumentType == InstrumentType.EQUITY) 100_000L + index else 0L
+                            )
                         )
-                    )
-                    index++
+                        index++
+                    }
                 }
                 date = date.plusDays(1)
             }
@@ -221,8 +324,10 @@ class FakeQuantRepository(
             instrument = instrument,
             bars = bars,
             retrievedAt = Instant.parse("2026-11-24T10:00:00Z"),
-            volumeAvailable = instrument.provider == OhlcvProvider.TEJHQ_EOD,
-            adjustmentStatus = if (instrument.provider == OhlcvProvider.TEJHQ_EOD) {
+            volumeAvailable = instrument.instrumentType == InstrumentType.EQUITY,
+            adjustmentStatus = if (instrument.interval.isIntraday) {
+                "Deterministic test fixture · raw intraday OHLCV"
+            } else if (instrument.instrumentType == InstrumentType.EQUITY) {
                 "Deterministic test fixture · raw EOD"
             } else {
                 "Deterministic test fixture · price-return index OHLC"
@@ -233,6 +338,31 @@ class FakeQuantRepository(
     override suspend fun fetchTejHqOhlcv(
         exchange: String, symbol: String, from: LocalDate, to: LocalDate
     ): List<OhlcvBar> = emptyList()
+
+    override suspend fun fetchTechnicalIndicators(
+        bars: List<OhlcvBar>,
+        startIndex: Int,
+        periods: TechnicalIndicatorPeriods
+    ): TechnicalIndicators {
+        val count = bars.size
+        fun series(period: Int, value: (Int) -> Double): List<Double?> =
+            List(count) { index -> if (index + 1 < period) null else value(index) }
+        return TechnicalIndicators(
+            startIndex = startIndex,
+            barCount = count,
+            sma = series(periods.sma) { bars[it].close },
+            ema = series(periods.ema) { bars[it].close },
+            rsi = series(periods.rsi + 1) { 50.0 },
+            macdLine = series(26) { 0.5 },
+            macdSignal = series(34) { 0.4 },
+            macdHistogram = series(34) { 0.1 },
+            bollingerUpper = series(periods.bollinger) { bars[it].close + 1.0 },
+            bollingerMiddle = series(periods.bollinger) { bars[it].close },
+            bollingerLower = series(periods.bollinger) { bars[it].close - 1.0 },
+            atr = series(periods.atr + 1) { 1.0 },
+            adx = series(periods.adx * 2) { 25.0 }
+        )
+    }
 
     override suspend fun fetchEventStudy(
         session: QuantSession, symbol: String, eventDate: String, benchmarkSymbol: String?
@@ -286,25 +416,38 @@ class FakeQuantRepository(
 
     override suspend fun sendAiMessage(
         session: QuantSession,
-        providerId: String,
-        model: String,
+        providerId: String?,
+        model: String?,
         messages: List<AiChatMessage>,
         credentialId: String?,
-        fallbackProviders: List<String>
-    ) = AiCompletion(providerId, credentialId, model, "Deterministic AI fixture response.", false)
+        fallbackProviders: List<String>,
+        taskType: String
+    ): AiCompletion {
+        aiChatRequestCount += 1
+        lastAiRequestPrompt = messages.lastOrNull()?.content
+        return AiCompletion(
+        providerId ?: "groq", credentialId, model ?: "server-research-model",
+        "Deterministic AI fixture response.", false, taskType
+        )
+    }
 
     override suspend fun requestAiStrategyBrief(
         session: QuantSession,
-        providerId: String,
-        model: String,
+        providerId: String?,
+        model: String?,
         symbol: String,
         exchange: String,
         fromDate: String,
         toDate: String,
         strategyContext: String,
         credentialId: String?,
-        fallbackProviders: List<String>
-    ) = AiStrategyBrief(
+        fallbackProviders: List<String>,
+        automaticTaskRouting: Boolean
+    ): AiStrategyBrief {
+        strategyBriefRequestCount += 1
+        lastStrategyContext = strategyContext
+        lastStrategySymbol = symbol
+        return AiStrategyBrief(
         provider = "tejhq_eod",
         dataMode = "END_OF_DAY",
         exchange = exchange,
@@ -327,17 +470,24 @@ class FakeQuantRepository(
             trendContext = "CLOSE_ABOVE_SMA20_AND_SMA50"
         ),
         bars = listOf(AiDailyBar(toDate, 2480.0, 2520.0, 2470.0, 2500.0, 100000)),
-        ai = AiCompletion(providerId, credentialId, model, "Deterministic EOD strategy fixture response.", false),
+        ai = AiCompletion(
+            providerId ?: "groq", credentialId, model ?: "server-research-model",
+            "Deterministic EOD strategy fixture response.", false, "research"
+        ),
         dataRights = "Private personal research only.",
         limitations = listOf("EOD daily bars only.")
-    )
+        )
+    }
 
     override suspend fun callNseMcpTool(
         session: QuantSession,
         server: String,
         tool: String,
         argumentsJson: String
-    ) = NseMcpResult("test", "TEST", null, null, JSONObject().toString())
+    ): NseMcpResult = NseMcpResult(
+        "test", "TEST", "Deterministic fixture", "2026-11-24",
+        JSONObject().put("tool", tool).put("source", "deterministic-fixture").toString(2)
+    )
 
     override fun createMarketStream(
         session: QuantSession,
@@ -345,6 +495,7 @@ class FakeQuantRepository(
         onTicks: (List<MarketTick>) -> Unit
     ): MarketStream = object : MarketStream {
         override fun start(instrumentKeys: List<String>) {
+            marketStreamStartCount += 1
             onStatus("Connected · deterministic UI test")
         }
 

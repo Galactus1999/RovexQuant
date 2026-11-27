@@ -16,6 +16,67 @@ import httpx
 
 from rovexquant.ai.providers import SUPPORTED
 
+TASK_TYPES = frozenset({
+    "chat", "research", "macro_analysis", "filing_extraction",
+    "claim_verification", "summarization",
+})
+
+
+def configured_task_routes() -> dict[str, dict[str, Any]]:
+    """Load validated, server-owned task routes without exposing credentials."""
+    raw = os.getenv("QUANT_AI_TASK_ROUTES", "").strip()
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise GatewayError("Invalid QUANT_AI_TASK_ROUTES configuration", 503) from error
+    if not isinstance(parsed, dict):
+        raise GatewayError("QUANT_AI_TASK_ROUTES must be a JSON object", 503)
+    routes: dict[str, dict[str, Any]] = {}
+    for task, route in parsed.items():
+        if task not in TASK_TYPES or not isinstance(route, dict):
+            raise GatewayError("AI task routing contains an unsupported task or route", 503)
+        provider, model = route.get("provider_id"), route.get("model")
+        fallbacks = route.get("fallback_providers", [])
+        if (
+            not isinstance(provider, str) or provider not in SUPPORTED
+            or not isinstance(model, str) or not model.strip() or len(model) > 160
+        ):
+            raise GatewayError(f"Invalid provider/model in AI task route: {task}", 503)
+        if (
+            not isinstance(fallbacks, list) or len(fallbacks) > 3
+            or any(not isinstance(item, str) or item not in SUPPORTED for item in fallbacks)
+        ):
+            raise GatewayError(f"Invalid fallback providers in AI task route: {task}", 503)
+        routes[task] = {
+            "provider_id": provider,
+            "model": model.strip(),
+            "fallback_providers": list(dict.fromkeys(fallbacks)),
+        }
+    return routes
+
+
+def resolve_task_route(
+    task_type: str,
+    provider_id: str | None,
+    model: str | None,
+    fallback_providers: list[str] | None,
+) -> tuple[str, str, list[str] | None]:
+    if task_type not in TASK_TYPES:
+        raise GatewayError("Unsupported AI task type", 422)
+    if provider_id is not None or model is not None:
+        if (
+            not isinstance(provider_id, str) or provider_id not in SUPPORTED
+            or not isinstance(model, str) or not model.strip() or len(model) > 160
+        ):
+            raise GatewayError("A supported provider and model must be selected together", 422)
+        return provider_id, model.strip(), fallback_providers
+    route = configured_task_routes().get(task_type)
+    if route is None:
+        raise GatewayError(f"No model route is configured for task: {task_type}", 503)
+    return route["provider_id"], route["model"], route["fallback_providers"]
+
 
 @dataclass(frozen=True, slots=True)
 class Credential:
@@ -104,14 +165,18 @@ def _provider_headers(provider_id: str, api_key: str) -> dict[str, str]:
 
 async def complete_chat(
     *,
-    provider_id: str,
-    model: str,
+    provider_id: str | None,
+    model: str | None,
     messages: list[dict[str, str]],
     max_tokens: int = 1200,
     temperature: float = 0.2,
     credential_id: str | None = None,
     fallback_providers: list[str] | None = None,
+    task_type: str = "chat",
 ) -> dict[str, Any]:
+    provider_id, model, fallback_providers = resolve_task_route(
+        task_type, provider_id, model, fallback_providers
+    )
     if provider_id not in SUPPORTED:
         raise GatewayError("Unsupported AI provider", 400)
     if not model.strip() or len(model) > 160:
@@ -190,6 +255,7 @@ async def complete_chat(
                 "content": content,
                 "usage": safe_usage,
                 "fallback_used": index > 0,
+                "task_type": task_type,
             }
         except GatewayError as error:
             if error.status_code == 503:

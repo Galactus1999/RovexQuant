@@ -16,12 +16,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -33,6 +35,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rovexquant.app.feature.workspace.QuantWorkspaceViewModel
+import java.time.Instant
 
 private enum class TerminalSection(val label: String, val glyph: String) {
     PULSE("Pulse", "◈"),
@@ -42,7 +45,7 @@ private enum class TerminalSection(val label: String, val glyph: String) {
     PORTFOLIO("Portfolio", "▤"),
     INTELLIGENCE("Intel", "✦"),
     MACRO("Macro", "◎"),
-    AI("Chat", "◉")
+    AI("AI Lab", "✦")
 }
 
 @Composable
@@ -54,10 +57,15 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
     val state by workspace.uiState.collectAsStateWithLifecycle()
     var selected by remember { mutableStateOf(TerminalSection.PULSE) }
     var showSettings by remember { mutableStateOf(false) }
+    var showInstrumentSearch by remember { mutableStateOf(false) }
     val wideLayout = shouldUseNavigationRail(androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp)
     var selectedInstrument by remember { mutableStateOf<Pair<String, String>?>(null) }
-    BackHandler(enabled = showSettings || selectedInstrument != null) {
-        if (showSettings) showSettings = false else selectedInstrument = null
+    BackHandler(enabled = showInstrumentSearch || showSettings || selectedInstrument != null) {
+        when {
+            showInstrumentSearch -> showInstrumentSearch = false
+            showSettings -> showSettings = false
+            else -> selectedInstrument = null
+        }
     }
 
     if (state.restoringSession) {
@@ -78,18 +86,58 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
         return
     }
 
+    if (showInstrumentSearch) {
+        InstrumentSearchDialog(
+            equities = state.equities,
+            indexKeys = state.indexKeys,
+            onDismiss = { showInstrumentSearch = false },
+            onSelect = { symbol, name ->
+                selectedInstrument = symbol to name
+                selected = TerminalSection.PULSE
+                showSettings = false
+                showInstrumentSearch = false
+            }
+        )
+    }
+
     Column(Modifier.fillMaxSize().background(Ink)) {
         Column(Modifier.padding(horizontal = 17.dp)) {
+            val nowMillis = System.currentTimeMillis()
+            val healthLevel = resolveSystemHealthLevel(
+                streamStatus = state.streamStatus,
+                eodSnapshotStatus = state.eodSnapshotStatus,
+                hasEodSnapshot = state.eodSnapshot != null,
+                ticks = state.ticks,
+                requiredInstrumentKeys = listOfNotNull(
+                    state.indexKeys["NIFTY 50"],
+                    state.indexKeys["NIFTY BANK"]
+                ).toSet(),
+                nowMillis = nowMillis
+            )
+            val latestTickAt = state.ticks.values.maxByOrNull { it.receivedAt }?.receivedAt
             TerminalHeader(
-                status = when {
-                    state.streamStatus.startsWith("Live") -> "Live data"
-                    state.streamStatus.contains("stale", ignoreCase = true) -> "Stale data"
-                    state.streamStatus.startsWith("Connected") -> "Connected"
-                    else -> "Backend"
+                status = state.streamStatus,
+                healthLevel = healthLevel,
+                diagnosticDetails = listOf(
+                    "Market stream · ${state.streamStatus}",
+                    "Latest quote · ${latestTickAt ?: "No quote received"} · ${state.ticks.size} instruments cached",
+                    "NSE EOD snapshot · ${state.eodSnapshot?.let { "${it.tradingDate} · ${it.pricedSymbols} priced symbols" } ?: state.eodSnapshotStatus}",
+                    "Database ingestion · ${state.marketIngestionStatusLabel}"
+                ),
+                onRetry = {
+                    workspace.reconnectMarketStream()
+                    workspace.refreshEodSnapshot()
+                    workspace.refreshMarketIngestionStatus()
                 },
                 onSignOut = workspace::signOut,
                 onOpenSettings = { showSettings = true }
             )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(
+                    onClick = { showInstrumentSearch = true },
+                    modifier = Modifier.testTag("instrument.global.search.open")
+                ) { Text("⌕ Find company / index", color = Cyan, fontSize = 11.sp) }
+            }
         }
         Row(Modifier.weight(1f).fillMaxWidth()) {
             if (wideLayout && !showSettings && selectedInstrument == null) {
@@ -103,7 +151,6 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
                     session = activeSession,
                     repository = workspace.repository,
                     onBack = { showSettings = false },
-                    onOpenAiSettings = { showSettings = false; selected = TerminalSection.AI },
                     onOpenMarketPulse = { showSettings = false; selected = TerminalSection.PULSE }
                 )
             } else if (selectedInstrument != null) {
@@ -112,6 +159,7 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
                     symbol = instrument.first,
                     displayName = instrument.second,
                     repository = workspace.repository,
+                    session = activeSession,
                     onBack = { selectedInstrument = null }
                 )
             } else {
@@ -127,18 +175,37 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
                         eodSnapshot = state.eodSnapshot,
                         eodSnapshotStatus = state.eodSnapshotStatus,
                         onRefreshEodSnapshot = workspace::refreshEodSnapshot,
-                        onOpenInstrument = { symbol, name -> selectedInstrument = symbol to name }
+                        onOpenInstrument = { symbol, name -> selectedInstrument = symbol to name },
+                        repository = workspace.repository
                     )
                     TerminalSection.SCANNER -> StrategyScannerScreen(onOpenAi = { selected = TerminalSection.AI })
                     TerminalSection.SIGNALS -> SignalsScreen()
                     TerminalSection.LAB -> ResearchLabScreen(
                         session = activeSession,
-                        repository = workspace.repository
+                        repository = workspace.repository,
+                        equityInstruments = state.equities,
+                        indexKeys = state.indexKeys
                     )
                     TerminalSection.PORTFOLIO -> PortfolioScreen()
-                    TerminalSection.INTELLIGENCE -> IntelligenceCentreScreen(session = activeSession, repository = workspace.repository)
-                    TerminalSection.MACRO -> MacroEventResearchScreen(session = activeSession, repository = workspace.repository)
-                    TerminalSection.AI -> AiWorkspaceScreen(session = activeSession, repository = workspace.repository)
+                    TerminalSection.INTELLIGENCE -> IntelligenceCentreScreen(
+                        session = activeSession,
+                        repository = workspace.repository,
+                        equityInstruments = state.equities,
+                        indexKeys = state.indexKeys
+                    )
+                    TerminalSection.MACRO -> MacroEventResearchScreen(
+                        session = activeSession,
+                        repository = workspace.repository,
+                        equityInstruments = state.equities,
+                        indexKeys = state.indexKeys
+                    )
+                    TerminalSection.AI -> AiWorkspaceScreen(
+                        session = activeSession,
+                        repository = workspace.repository,
+                        equityInstruments = state.equities,
+                        indexKeys = state.indexKeys,
+                        onOpenSettings = { showSettings = true }
+                    )
                 }
             }
             }
@@ -300,5 +367,36 @@ private fun TerminalNavigation(
                 }
             }
         }
+    }
+}
+
+
+internal fun resolveSystemHealthLevel(
+    streamStatus: String,
+    eodSnapshotStatus: String,
+    hasEodSnapshot: Boolean,
+    ticks: Map<String, com.rovexquant.app.data.model.MarketTick>,
+    requiredInstrumentKeys: Set<String>,
+    nowMillis: Long
+): SystemHealthLevel {
+    val stream = streamStatus.lowercase()
+    val eod = eodSnapshotStatus.lowercase()
+    val hardFailure = listOf("failed", "error", "unavailable").any { token ->
+        stream.contains(token) || (eod.contains(token) && !hasEodSnapshot)
+    }
+    if (hardFailure) return SystemHealthLevel.ERROR
+
+    val criticalQuotesFresh = requiredInstrumentKeys.isNotEmpty() && requiredInstrumentKeys.all { key ->
+        val tick = ticks[key]
+        tick != null && tick.quality == "VALID" && runCatching {
+            val receivedAt = Instant.parse(tick.receivedAt).toEpochMilli()
+            receivedAt <= nowMillis + 60_000 && receivedAt >= nowMillis - 30_000
+        }.getOrDefault(false)
+    }
+    val liveStream = stream.startsWith("live")
+    return if (liveStream && criticalQuotesFresh && hasEodSnapshot) {
+        SystemHealthLevel.HEALTHY
+    } else {
+        SystemHealthLevel.DEGRADED
     }
 }
