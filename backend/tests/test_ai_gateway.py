@@ -86,7 +86,10 @@ def test_chat_completion_uses_server_credential_and_returns_normalized_result(cl
 
 def test_provider_fallback_on_rate_limit_does_not_rotate_same_provider_keys(client, monkeypatch):
     monkeypatch.setenv("GROQ_API_KEYS_JSON", json.dumps({"primary": "groq-one", "secondary": "groq-two"}))
-    monkeypatch.setenv("DEEPSEEK_FALLBACK_MODEL", "deepseek-flash")
+    monkeypatch.delenv("DEEPSEEK_FALLBACK_MODEL", raising=False)
+    FakeAsyncClient.catalogue_responses = [
+        FakeResponse(200, {"data": [{"id": "deepseek-chat-current"}]})
+    ]
     FakeAsyncClient.responses = [
         FakeResponse(429, {"error": "rate limited"}),
         FakeResponse(200, {"choices": [{"message": {"content": "Fallback response"}}]}),
@@ -99,7 +102,7 @@ def test_provider_fallback_on_rate_limit_does_not_rotate_same_provider_keys(clie
     assert response.status_code == 200
     assert response.json()["provider_id"] == "deepseek"
     assert response.json()["fallback_used"] is True
-    assert [item["headers"]["Authorization"] for item in FakeAsyncClient.requests] == [
+    assert [item["headers"]["Authorization"] for item in FakeAsyncClient.requests if item.get("method") != "GET"] == [
         "Bearer groq-one", "Bearer deepseek-secret"
     ]
 
