@@ -51,6 +51,8 @@ def test_bulk_symbol_history_uses_one_parameterized_query_and_returns_provider_r
     assert rows[0]["date"] == "2026-11-26"
     assert rows[0]["provider"] == "tejhq_eod"
     assert rows[0]["data_mode"] == "END_OF_DAY"
+    assert rows[0]["price_basis"] == "RAW_CLOSE"
+    assert rows[0]["adjustment_factor"] is None
     query, params = connection.queries[0]
     assert "unnest(%s::text[], %s::date[])" in query
     assert "ROW_NUMBER() OVER" in query
