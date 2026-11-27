@@ -163,7 +163,10 @@ object ResearchCsvFolderImporter {
                     val parsed = parseFolderCsv(csvContent, instrument.instrumentType == InstrumentType.EQUITY)
                     validateDailyBars(parsed)
                     val merged = OhlcvCsvResearch.merge(existing.orEmpty(), parsed)
-                    ResearchCsvDatasetStore.save(context, instrument, merged, displayName)
+                    ResearchCsvDatasetStore.save(
+                        context, instrument, merged, displayName,
+                        priceBasis = UniversalOhlcvCsvParser.detectPriceBasis(csvContent)
+                    )
                     // Cache commit precedes the ledger write; a crash only causes a safe idempotent re-import.
                     prefs.edit().putString(ledgerKey, contentHash).apply()
                     imported++
