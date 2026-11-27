@@ -151,6 +151,97 @@ def _select_credential(provider_id: str, requested_id: str | None) -> Credential
     )
 
 
+async def discover_provider_model(provider_id: str) -> str | None:
+    """Discover a usable chat model from the provider catalogue; never require a caller model ID."""
+    if provider_id not in SUPPORTED:
+        raise GatewayError("Unsupported AI provider", 400)
+    configured_default = os.getenv(f"{provider_id.upper()}_DEFAULT_MODEL", "").strip()
+    if configured_default:
+        if len(configured_default) > 160:
+            raise GatewayError(f"Invalid default model configuration for {provider_id}", 503)
+        return configured_default
+    credentials = _credentials_for(provider_id)
+    if not credentials:
+        return None
+    credential = _select_credential(provider_id, None)
+    config = SUPPORTED[provider_id]
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=5.0)) as client:
+            response = await client.get(
+                f"{config.base_url}/models",
+                headers=_provider_headers(provider_id, credential.api_key),
+            )
+    except (httpx.TimeoutException, httpx.RequestError):
+        return None
+    if response.status_code in (401, 403):
+        raise GatewayError(f"{provider_id} rejected its configured credential during model discovery", 502)
+    if response.status_code == 429 or response.status_code >= 500:
+        return None
+    if response.status_code >= 400:
+        return None
+    try:
+        payload = response.json()
+    except (ValueError, TypeError):
+        return None
+    rows = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(rows, list):
+        return None
+    excluded = (
+        "embed", "embedding", "whisper", "moderation", "rerank", "tts",
+        "transcri", "speech", "audio", "image", "vision", "video",
+    )
+    candidates: list[str] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        model_id = row.get("id")
+        if not isinstance(model_id, str) or not model_id.strip() or len(model_id) > 160:
+            continue
+        normalized = model_id.lower()
+        if any(term in normalized for term in excluded):
+            continue
+        # Provider metadata, when supplied, can explicitly identify non-chat models.
+        architecture = row.get("architecture")
+        modality = architecture.get("modality") if isinstance(architecture, dict) else None
+        if isinstance(modality, str) and "text" not in modality.lower():
+            continue
+        supported = row.get("supported_parameters")
+        if isinstance(supported, list) and supported and not any(
+            item in {"messages", "chat", "tools", "response_format"} for item in supported
+        ):
+            continue
+        candidates.append(model_id.strip())
+    # Preserve provider catalogue order: providers may rank their current/recommended
+    # models first. The selected ID is never exposed as a user-editable setting.
+    return candidates[0] if candidates else None
+
+
+async def resolve_auto_route(
+    enabled_provider_ids: list[str] | None = None,
+) -> tuple[str, str, list[str]]:
+    """Choose the first enabled, credentialed provider with a discoverable chat model."""
+    enabled = list(SUPPORTED) if enabled_provider_ids is None else enabled_provider_ids
+    if not isinstance(enabled, list) or len(enabled) > len(SUPPORTED):
+        raise GatewayError("Invalid enabled AI provider selection", 422)
+    if any(not isinstance(item, str) or item not in SUPPORTED for item in enabled):
+        raise GatewayError("Enabled AI provider selection contains an unsupported provider", 422)
+    enabled = list(dict.fromkeys(enabled))
+    if not enabled:
+        raise GatewayError("All AI providers are disabled. Enable at least one configured provider.", 503)
+    available: list[str] = []
+    for provider in enabled:
+        if not _credentials_for(provider):
+            continue
+        model = await discover_provider_model(provider)
+        if model:
+            available.append(provider)
+            if len(available) == 1:
+                selected_model = model
+    if not available:
+        raise GatewayError("No enabled AI provider has a usable credential and discoverable chat model", 503)
+    return available[0], selected_model, available[1:]
+
+
 def _provider_headers(provider_id: str, api_key: str) -> dict[str, str]:
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     if provider_id == "openrouter":
@@ -173,10 +264,15 @@ async def complete_chat(
     credential_id: str | None = None,
     fallback_providers: list[str] | None = None,
     task_type: str = "chat",
+    enabled_provider_ids: list[str] | None = None,
 ) -> dict[str, Any]:
-    provider_id, model, fallback_providers = resolve_task_route(
-        task_type, provider_id, model, fallback_providers
-    )
+    if provider_id is None and model is None:
+        provider_id, model, auto_fallbacks = await resolve_auto_route(enabled_provider_ids)
+        fallback_providers = auto_fallbacks
+    else:
+        provider_id, model, fallback_providers = resolve_task_route(
+            task_type, provider_id, model, fallback_providers
+        )
     if provider_id not in SUPPORTED:
         raise GatewayError("Unsupported AI provider", 400)
     if not model.strip() or len(model) > 160:
@@ -209,9 +305,9 @@ async def complete_chat(
             credential = _select_credential(candidate, selected_id)
             config = SUPPORTED[candidate]
             fallback_model = os.getenv(f"{candidate.upper()}_FALLBACK_MODEL", "").strip()
-            selected_model = model if index == 0 else fallback_model
+            selected_model = model if index == 0 else (fallback_model or await discover_provider_model(candidate))
             if not selected_model:
-                last_error = GatewayError(f"No fallback model configured for {candidate}", 503)
+                last_error = GatewayError(f"No discoverable chat model is available for {candidate}", 503)
                 continue
             payload = {
                 "model": selected_model,
