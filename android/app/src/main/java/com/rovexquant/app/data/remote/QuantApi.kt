@@ -1135,7 +1135,7 @@ object QuantApi {
             .put("from_date", fromDate)
             .put("to_date", toDate)
             .put("strategy_context", strategyContext)
-        if (!automaticTaskRouting) {
+        if (!providerId.isNullOrBlank() && !model.isNullOrBlank()) {
             body.put("provider_id", providerId)
             body.put("model", model)
         }
