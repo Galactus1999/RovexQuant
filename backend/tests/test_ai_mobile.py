@@ -21,8 +21,15 @@ class FakeResponse:
         }
 
 
+class FakeCatalogueResponse:
+    status_code = 200
+    def json(self):
+        return {"data": [{"id": "groq-chat-auto"}]}
+
+
 class FakeAsyncClient:
     requests = []
+    catalogue_responses = []
     def __init__(self, *args, **kwargs):
         pass
     async def __aenter__(self):
@@ -32,6 +39,9 @@ class FakeAsyncClient:
     async def post(self, url, headers, json):
         self.requests.append({"url": url, "headers": headers, "json": json})
         return FakeResponse()
+    async def get(self, url, headers):
+        self.requests.append({"method": "GET", "url": url, "headers": headers})
+        return self.catalogue_responses.pop(0) if self.catalogue_responses else FakeCatalogueResponse()
 
 
 @pytest.fixture
@@ -40,9 +50,9 @@ def mobile_client(monkeypatch):
     monkeypatch.setenv("QUANT_APP_PASSWORD", "correct-password")
     monkeypatch.setenv("QUANT_APP_SESSION_SIGNING_KEY", "x" * 48)
     monkeypatch.setenv("GROQ_API_KEY", "groq-server-secret")
-    monkeypatch.setenv("GROQ_FALLBACK_MODEL", "groq-fallback-test-model")
     monkeypatch.setattr(gateway.httpx, "AsyncClient", FakeAsyncClient)
     FakeAsyncClient.requests = []
+    FakeAsyncClient.catalogue_responses = []
     token, _ = issue_app_session("quant-test", "correct-password")
     return TestClient(app), {"Authorization": f"Bearer {token}"}
 
@@ -54,8 +64,8 @@ def test_mobile_ai_provider_catalogue_requires_app_session(mobile_client):
     assert response.status_code == 200
     groq = next(item for item in response.json()["providers"] if item["provider_id"] == "groq")
     assert groq["configured"] is True
-    assert groq["fallback_model_configured"] is True
-    assert "groq-fallback-test-model" not in response.text
+    assert "default_model" not in response.text
+    assert "fallback_model" not in response.text
     assert "groq-server-secret" not in response.text
     assert "QUANT_AI_GATEWAY_TOKEN" not in response.text
 
@@ -198,7 +208,7 @@ def test_adjusted_eod_data_is_returned_when_ai_provider_is_not_configured(monkey
     assert result["bar_count"] == 40
     assert result["data_mode"] == "END_OF_DAY_ADJUSTED"
     assert result["ai"] is None
-    assert "Configure an AI provider" in result["ai_error"]
+    assert "No enabled AI provider" in result["ai_error"]
 
 
 def test_adjusted_eod_data_survives_ai_provider_failure(monkeypatch):
@@ -389,43 +399,27 @@ def test_mobile_ai_research_archive_endpoints_require_session(mobile_client, mon
 
 
 
-def test_mobile_chat_uses_server_owned_research_route(mobile_client, monkeypatch):
+def test_mobile_chat_discovers_model_without_task_routes(mobile_client, monkeypatch):
     client, headers = mobile_client
-    monkeypatch.setenv(
-        "QUANT_AI_TASK_ROUTES",
-        json.dumps({
-            "research": {
-                "provider_id": "groq",
-                "model": "server-research-model",
-                "fallback_providers": [],
-            }
-        }),
-    )
+    monkeypatch.delenv("QUANT_AI_TASK_ROUTES", raising=False)
     response = client.post(
         "/api/v1/app/ai/chat",
         headers=headers,
         json={
             "task_type": "research",
+            "enabled_provider_ids": ["groq"],
             "messages": [{"role": "user", "content": "Analyse only the attached evidence."}],
         },
     )
     assert response.status_code == 200
     assert response.json()["task_type"] == "research"
     assert response.json()["provider_id"] == "groq"
-    assert FakeAsyncClient.requests[-1]["json"]["model"] == "server-research-model"
+    assert FakeAsyncClient.requests[-1]["json"]["model"] == "groq-chat-auto"
 
 
 def test_strategy_brief_can_use_server_owned_research_route(mobile_client, monkeypatch):
     client, headers = mobile_client
     monkeypatch.setenv(
-        "QUANT_AI_TASK_ROUTES",
-        json.dumps({
-            "research": {
-                "provider_id": "groq",
-                "model": "server-research-model",
-                "fallback_providers": [],
-            }
-        }),
     )
     from rovexquant.api.routers import ai as ai_router
     bars = [
@@ -446,8 +440,8 @@ def test_strategy_brief_can_use_server_owned_research_route(mobile_client, monke
         assert kwargs["model"] == "server-research-model"
         assert kwargs["task_type"] == "research"
         return {
-            "provider_id": "groq", "model": "server-research-model",
-            "credential_id": "default", "content": "Server-routed EOD analysis.",
+            "provider_id": "groq", "model": "groq-chat-auto",
+            "credential_id": "default", "content": "Automatically routed EOD analysis.",
             "usage": {"prompt_tokens": 40, "completion_tokens": 20, "total_tokens": 60},
             "fallback_used": False,
         }
@@ -475,7 +469,7 @@ def test_strategy_brief_can_use_server_owned_research_route(mobile_client, monke
     )
     assert response.status_code == 200
     assert response.json()["ai"]["provider_id"] == "groq"
-    assert response.json()["ai"]["model"] == "server-research-model"
+    assert response.json()["ai"]["model"] == "groq-chat-auto"
     assert response.json()["research_run"]["run_id"] == "server-routed-run"
     assert response.json()["research_run"]["archive_status"] == "PERSISTED"
 
@@ -484,7 +478,9 @@ def test_research_chat_runs_independent_verifier_and_persists_claim_status(mobil
     from rovexquant.api.routers import ai as ai_router
     client, headers = mobile_client
 
-    monkeypatch.setattr(ai_router, "resolve_task_route", lambda *args: ("groq", "research-model", []))
+    async def automatic_route(enabled_provider_ids=None):
+        return "groq", "research-model", []
+    monkeypatch.setattr(ai_router, "resolve_auto_route", automatic_route)
     monkeypatch.setattr(ai_router, "reserve_ai_research_run", lambda **kwargs: "00000000-0000-0000-0000-000000000001")
 
     async def fake_complete_chat(**kwargs):
