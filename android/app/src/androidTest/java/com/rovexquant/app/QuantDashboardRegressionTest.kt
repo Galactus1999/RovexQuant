@@ -524,6 +524,10 @@ class QuantDashboardRegressionTest {
         waitForAutomaticProviderReadiness()
         composeRule.onNodeWithTag("ai.open.settings").performClick()
         composeRule.onNodeWithTag("settings.screen").assertIsDisplayed()
+        // Settings is a LazyColumn; explicitly materialize the provider card
+        // before waiting for its controls in the semantics tree.
+        composeRule.onNodeWithTag("settings.screen")
+            .performScrollToNode(hasTestTag("settings.ai.provider.toggle.groq"))
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("settings.ai.provider.toggle.groq")
                 .fetchSemanticsNodes().isNotEmpty() &&
