@@ -5,6 +5,7 @@ import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.local.TejHqOhlcvStore
 import com.rovexquant.app.data.local.ResearchCsvDatasetStore
 import com.rovexquant.app.data.local.ResearchCsvFolderImporter
+import com.rovexquant.app.data.local.ResearchCsvAutoSyncManager
 import com.rovexquant.app.data.model.MacroResearchSummary
 import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.repository.QuantDataRepository
@@ -18,6 +19,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
@@ -56,6 +58,15 @@ fun ResearchLabScreen(
     var csvFolderStatus by remember { mutableStateOf<String?>(null) }
     var csvFolderError by remember { mutableStateOf<String?>(null) }
     var csvFolderDatasets by remember { mutableStateOf(ResearchCsvDatasetStore.list(context)) }
+    val csvAutoSyncPrefs = remember(context) {
+        context.getSharedPreferences("research_csv_auto_sync", 0)
+    }
+    var csvAutoSyncEnabled by remember(context) {
+        mutableStateOf(csvAutoSyncPrefs.getBoolean("enabled", true))
+    }
+    var csvAutoSyncLoading by remember { mutableStateOf(false) }
+    var csvAutoSyncStatus by remember { mutableStateOf<String?>(null) }
+    var csvAutoSyncError by remember { mutableStateOf<String?>(null) }
     var macroSummary by remember { mutableStateOf<MacroResearchSummary?>(null) }
     var macroLoading by remember { mutableStateOf(false) }
     var macroError by remember { mutableStateOf<String?>(null) }
@@ -106,6 +117,45 @@ fun ResearchLabScreen(
         refreshMacroResearch()
     }
 
+    fun runCsvAutoSync(force: Boolean) {
+        if (csvAutoSyncLoading) return
+        if (session == null || repository == null) {
+            csvAutoSyncError = "Sign in and connect the Quant workspace before refreshing imported datasets."
+            return
+        }
+        if (csvFolderDatasets.isEmpty()) {
+            csvAutoSyncStatus = "Import instrument-mapped CSV datasets first."
+            return
+        }
+        csvAutoSyncLoading = true
+        csvAutoSyncError = null
+        scope.launch {
+            try {
+                val report = ResearchCsvAutoSyncManager.sync(
+                    context, repository, session, force = force
+                )
+                csvFolderDatasets = withContext(Dispatchers.IO) {
+                    ResearchCsvDatasetStore.list(context)
+                }
+                csvAutoSyncStatus = report.summary
+                csvAutoSyncError = report.errors.take(5).joinToString(" · ")
+                    .takeIf { it.isNotBlank() }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                csvAutoSyncError = failure.message ?: "Imported datasets could not be refreshed."
+            } finally {
+                csvAutoSyncLoading = false
+            }
+        }
+    }
+
+    LaunchedEffect(session, repository, csvAutoSyncEnabled, csvFolderDatasets.size) {
+        if (csvAutoSyncEnabled && session != null && repository != null && csvFolderDatasets.isNotEmpty()) {
+            runCsvAutoSync(force = false)
+        }
+    }
+
     fun loadSelectedFile(uri: Uri) {
         loading = true
         error = null
@@ -146,6 +196,7 @@ fun ResearchLabScreen(
                 summary = loaded.first
                 datasetName = loaded.second
                 csvFolderDatasets = ResearchCsvDatasetStore.list(context)
+                if (csvAutoSyncEnabled) runCsvAutoSync(force = false)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
@@ -170,6 +221,9 @@ fun ResearchLabScreen(
             }
             csvFolderDatasets = report.datasets
             csvFolderStatus = report.summary
+            if (csvAutoSyncEnabled && session != null && repository != null) {
+                runCsvAutoSync(force = false)
+            }
             csvFolderError = report.errors.take(5).joinToString(" · ").takeIf { it.isNotBlank() }
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -313,6 +367,53 @@ fun ResearchLabScreen(
         }
         item {
             TerminalCard {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Eyebrow("Automatic data updates")
+                        Text(
+                            "Refresh imported daily datasets",
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Switch(
+                        checked = csvAutoSyncEnabled,
+                        onCheckedChange = { enabled ->
+                            csvAutoSyncEnabled = enabled
+                            csvAutoSyncPrefs.edit().putBoolean("enabled", enabled).apply()
+                        },
+                        modifier = Modifier.testTag("research.csv.auto_sync")
+                    )
+                }
+                Text(
+                    "When Research Lab opens, the app checks mapped datasets every 12 hours. Equity history is refreshed in exchange batches from the persistent EOD Data Hub; supported NSE indices use Upstox historical candles. Requires internet and a signed-in Quant session. It does not run while the app is closed.",
+                    color = Muted,
+                    fontSize = 10.sp,
+                    lineHeight = 16.sp
+                )
+                Button(
+                    onClick = { runCsvAutoSync(force = true) },
+                    enabled = !csvAutoSyncLoading && csvFolderDatasets.isNotEmpty() &&
+                        session != null && repository != null,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (csvAutoSyncLoading) "Refreshing imported datasets…" else "Sync imported datasets now")
+                }
+                csvAutoSyncStatus?.let {
+                    Text(it, color = Mint, fontSize = 10.sp, lineHeight = 15.sp)
+                }
+                csvAutoSyncError?.let {
+                    Text(it, color = Coral, fontSize = 10.sp, lineHeight = 15.sp)
+                }
+            }
+        }
+        item {
+            TerminalCard {
                 Eyebrow("Automatic CSV folder import")
                 Text(
                     "Choose a folder once. Its immediate CSV files are rescanned whenever Research Lab opens or when you tap Scan now. Only this selected folder is read; the app does not crawl device storage.",
@@ -363,7 +464,8 @@ fun ResearchLabScreen(
                                 Text(
                                     dataset.rowCount.toString() + " bars · " +
                                         dataset.firstTimestamp.substringBefore("T") + " to " +
-                                        dataset.lastTimestamp.substringBefore("T"),
+                                        dataset.lastTimestamp.substringBefore("T") +
+                                        (dataset.lastSyncProvider?.let { " · updated via " + it } ?: " · awaiting online update"),
                                     color = Muted,
                                     fontSize = 9.sp
                                 )
