@@ -10,6 +10,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
@@ -20,7 +21,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiProvider
-import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.QuantSession
 import com.rovexquant.app.data.repository.QuantDataRepository
 import kotlinx.coroutines.CancellationException
@@ -33,9 +33,8 @@ fun AiProviderSettingsPanel(
 ) {
     val scope = rememberCoroutineScope()
     var providers by remember { mutableStateOf(emptyList<AiProvider>()) }
-    var routes by remember { mutableStateOf<Map<String, AiTaskRoute>>(emptyMap()) }
+    var enabledProviders by remember { mutableStateOf(emptySet<String>()) }
     var selectedProvider by rememberSaveable { mutableStateOf("") }
-    var model by rememberSaveable { mutableStateOf("") }
     var apiKey by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(true) }
     var saving by remember { mutableStateOf(false) }
@@ -53,11 +52,9 @@ fun AiProviderSettingsPanel(
                 if (selectedProvider.isBlank() || providers.none { it.providerId == selectedProvider }) {
                     val preferred = providers.firstOrNull { it.configured } ?: providers.firstOrNull()
                     selectedProvider = preferred?.providerId.orEmpty()
-                    model = preferred?.defaultModel.orEmpty()
-                } else {
-                    model = providers.firstOrNull { it.providerId == selectedProvider }?.defaultModel.orEmpty().ifBlank { model }
                 }
-                routes = repository.fetchAiTaskRoutes(session)
+                enabledProviders = providers.filter { repository.isAiProviderEnabled(it.providerId) }
+                    .map { it.providerId }.toSet()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
@@ -91,12 +88,45 @@ fun AiProviderSettingsPanel(
                         selected = selectedProvider == provider.providerId,
                         onClick = {
                             selectedProvider = provider.providerId
-                            model = provider.defaultModel.orEmpty()
                             apiKey = ""
                             status = null
                             error = null
                         },
                         label = { Text(provider.providerId.replaceFirstChar { it.uppercase() }) }
+                    )
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Eyebrow("Provider switches")
+            Text(
+                "Turn providers on or off. RovexQuant discovers a compatible chat model automatically.",
+                color = Muted, fontSize = 10.sp, lineHeight = 14.sp
+            )
+            providers.forEach { provider ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(Modifier.weight(1f)) {
+                        Text(provider.providerId.replaceFirstChar { it.uppercase() },
+                            color = MaterialTheme.colorScheme.onBackground, fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold)
+                        Text(if (provider.configured) "Credential configured" else "Not configured · add a key below",
+                            color = if (provider.configured) Mint else Muted, fontSize = 9.sp)
+                    }
+                    Switch(
+                        checked = provider.providerId in enabledProviders,
+                        onCheckedChange = { enabled ->
+                            val previous = enabledProviders
+                            enabledProviders = if (enabled) previous + provider.providerId else previous - provider.providerId
+                            scope.launch {
+                                try {
+                                    repository.setAiProviderEnabled(provider.providerId, enabled)
+                                    status = null
+                                } catch (failure: Exception) {
+                                    error = failure.message ?: "Provider setting could not be saved."
+                                    enabledProviders = previous
+                                }
+                            }
+                        },
+                        modifier = Modifier.testTag("settings.ai.provider.toggle.${provider.providerId}")
                     )
                 }
             }
@@ -108,13 +138,6 @@ fun AiProviderSettingsPanel(
                     if (selected?.configured == true) Mint else Gold
                 )
             }
-            OutlinedTextField(
-                value = model,
-                onValueChange = { model = it.take(160); status = null },
-                label = { Text("Provider model ID") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().testTag("settings.ai.model")
-            )
             OutlinedTextField(
                 value = apiKey,
                 onValueChange = { apiKey = it.take(4096); error = null; status = null },
@@ -155,7 +178,7 @@ fun AiProviderSettingsPanel(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = {
-                        if (testing || selectedProvider.isBlank() || model.isBlank()) return@Button
+                        if (testing || selectedProvider.isBlank() || enabledProviders.isEmpty()) return@Button
                         testing = true
                         error = null
                         status = null
@@ -163,13 +186,13 @@ fun AiProviderSettingsPanel(
                             try {
                                 val response = repository.sendAiMessage(
                                     session = session,
-                                    providerId = selectedProvider,
-                                    model = model.trim(),
+                                    providerId = null,
+                                    model = null,
                                     messages = listOf(AiChatMessage("user", "Reply with exactly ROVEX_AI_CONNECTION_OK.")),
                                     fallbackProviders = emptyList(),
                                     taskType = "chat"
                                 )
-                                status = "Connection verified · ${response.providerId} / ${response.model}"
+                                status = "Connection verified · ${response.providerId}"
                             } catch (cancelled: CancellationException) {
                                 throw cancelled
                             } catch (failure: Exception) {
@@ -179,7 +202,7 @@ fun AiProviderSettingsPanel(
                             }
                         }
                     },
-                    enabled = !testing && selected?.configured == true && model.isNotBlank(),
+                    enabled = !testing && selected?.configured == true && enabledProviders.isNotEmpty(),
                     modifier = Modifier.weight(1f).testTag("settings.ai.provider.test")
                 ) {
                     if (testing) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
@@ -213,21 +236,5 @@ fun AiProviderSettingsPanel(
         }
         error?.let { Text(it, color = Coral, fontSize = 10.sp, lineHeight = 15.sp) }
         status?.let { Text(it, color = if (it.startsWith("Connection verified")) Mint else Gold, fontSize = 10.sp, lineHeight = 15.sp) }
-        Spacer(Modifier.height(8.dp))
-        Eyebrow("Server-owned task routes")
-        if (routes.isEmpty()) {
-            Text("No task routes are currently available. Configure QUANT_AI_TASK_ROUTES on the backend.", color = Gold, fontSize = 10.sp, lineHeight = 15.sp)
-        } else {
-            routes.toSortedMap().forEach { (task, route) ->
-                Text(
-                    "${task.replace('_', ' ')} · ${route.providerId}/${route.model}" +
-                        if (route.fallbackProviders.isEmpty()) "" else " · fallback: ${route.fallbackProviders.joinToString()}",
-                    color = Muted,
-                    fontSize = 10.sp,
-                    lineHeight = 15.sp,
-                    modifier = Modifier.testTag("settings.ai.route.$task")
-                )
-            }
-        }
     }
 }
