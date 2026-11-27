@@ -21,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -427,7 +428,11 @@ fun QuantCopilotSheet(
             itemsIndexed(messages) { index, message ->
                 Column(
                     Modifier.fillMaxWidth().background(PanelRaised, RoundedCornerShape(12.dp))
-                        .padding(10.dp).testTag("copilot.message.$index")
+                        .padding(10.dp)
+                        // A message bubble is one logical accessibility item. Merge
+                        // its role label and message body into the tagged container.
+                        .testTag("copilot.message.$index")
+                        .semantics(mergeDescendants = true) {}
                 ) {
                     Text(if (message.role == "user") "YOU" else "COPILOT", color = if (message.role == "user") Cyan else Mint, fontSize = 8.sp, fontWeight = FontWeight.Bold)
                     Text(message.content, color = MaterialTheme.colorScheme.onBackground, fontSize = 11.sp, lineHeight = 16.sp)
