@@ -34,12 +34,12 @@ object UniversalOhlcvCsvParser {
         val table = readTable(content)
         val columns = columns(table.headers)
         val symbolIndex = columns.first("symbol", "tickersymbol", "tradingsymbol", "scname")
-        val dateIndex = columns.required("timestamp", "datetime", "date", "time", "traddt", "tradedate")
-        val openIndex = columns.required("open", "opnpric", "openingprice")
+        val dateIndex = columns.required("timestamp", "datetime", "date", "date1", "time", "traddt", "tradedate")
+        val openIndex = columns.required("open", "opnpric", "openingprice", "openprice")
         val highIndex = columns.required("high", "hghpric", "highprice")
         val lowIndex = columns.required("low", "lwpric", "lowprice")
-        val closeIndex = columns.required("close", "clspric", "closingprice", "lastprice", "ltp", "adjclose")
-        val volumeIndex = columns.first("volume", "vol", "ttltradgvol", "tottrdqty", "tradedqty", "qty")
+        val closeIndex = columns.required("close", "clspric", "closingprice", "closeprice", "lastprice", "ltp", "adjclose")
+        val volumeIndex = columns.first("volume", "vol", "ttltradgvol", "ttltrdqnty", "tottrdqty", "totaltradedqty", "tradedqty", "qty")
         require(!volumeRequired || volumeIndex >= 0) { "CSV is missing a Volume column" }
         if (symbolIndex >= 0) {
             val symbols = table.rows.mapNotNull { it.getOrNull(symbolIndex)?.trim()?.takeIf(String::isNotEmpty) }.distinct()
@@ -82,12 +82,12 @@ object UniversalOhlcvCsvParser {
         val seriesIndex = columns.first("sctysrs", "series", "securityseries")
         if (symbolIndex < 0 || seriesIndex < 0) return null
 
-        val dateIndex = columns.required("traddt", "tradedate", "timestamp", "date")
-        val openIndex = columns.required("opnpric", "open", "openingprice")
+        val dateIndex = columns.required("traddt", "tradedate", "timestamp", "date", "date1")
+        val openIndex = columns.required("opnpric", "open", "openingprice", "openprice")
         val highIndex = columns.required("hghpric", "high", "highprice")
         val lowIndex = columns.required("lwpric", "low", "lowprice")
-        val closeIndex = columns.required("clspric", "close", "closingprice", "lastprice")
-        val volumeIndex = columns.required("ttltradgvol", "tottrdqty", "volume", "vol")
+        val closeIndex = columns.required("clspric", "close", "closingprice", "closeprice", "lastprice")
+        val volumeIndex = columns.required("ttltradgvol", "ttltrdqnty", "tottrdqty", "totaltradedqty", "volume", "vol")
         require(table.rows.size <= 1_000_000) { "Bhavcopy exceeds the 1,000,000 row safety limit" }
 
         val grouped = linkedMapOf<String, MutableList<OhlcvBar>>()
