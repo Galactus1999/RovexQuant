@@ -465,8 +465,8 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("ai.research.run.detail.request")
             .assertTextContains("Fixture research prompt", substring = true)
         // Provider/model configuration is deliberately outside this research
-        // workspace. Verify the server-owned route as read-only state instead of
-        // testing the retired provider selector and embedded chat panel.
+        // workspace. Verify automatic provider readiness here; provider switches
+        // and encrypted credential management are covered in Settings below.
         waitForAutomaticProviderReadiness()
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.recovery.symbol.find"))
         composeRule.onNodeWithTag("ai.recovery.symbol.find").performClick()
