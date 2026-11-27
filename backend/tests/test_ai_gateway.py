@@ -18,6 +18,7 @@ class FakeResponse:
 
 class FakeAsyncClient:
     responses = []
+    catalogue_responses = []
     requests = []
 
     def __init__(self, *args, **kwargs):
@@ -33,6 +34,10 @@ class FakeAsyncClient:
         self.requests.append({"url": url, "headers": headers, "json": json})
         return self.responses.pop(0)
 
+    async def get(self, url, headers):
+        self.requests.append({"method": "GET", "url": url, "headers": headers})
+        return self.catalogue_responses.pop(0)
+
 
 @pytest.fixture
 def client(monkeypatch):
@@ -41,6 +46,7 @@ def client(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "deepseek-secret")
     monkeypatch.setattr(gateway.httpx, "AsyncClient", FakeAsyncClient)
     FakeAsyncClient.responses = []
+    FakeAsyncClient.catalogue_responses = []
     FakeAsyncClient.requests = []
     return TestClient(app)
 
@@ -168,3 +174,44 @@ def test_task_route_rejects_unsupported_provider_and_task(monkeypatch):
         gateway.configured_task_routes()
     with pytest.raises(gateway.GatewayError, match="Unsupported AI task type"):
         gateway.resolve_task_route("execute_trade", "groq", "model", [])
+
+
+
+def test_auto_route_discovers_chat_model_without_task_routes(client, monkeypatch):
+    monkeypatch.delenv("QUANT_AI_TASK_ROUTES", raising=False)
+    monkeypatch.delenv("GROQ_DEFAULT_MODEL", raising=False)
+    FakeAsyncClient.catalogue_responses = [
+        FakeResponse(200, {"data": [
+            {"id": "text-embedding-latest"},
+            {"id": "chat-model-current", "supported_parameters": ["messages", "temperature"]},
+        ]})
+    ]
+    provider, model, fallbacks = __import__(
+        "asyncio"
+    ).run(gateway.resolve_auto_route(["groq"]))
+    assert provider == "groq"
+    assert model == "chat-model-current"
+    assert fallbacks == []
+    assert FakeAsyncClient.requests[0]["url"].endswith("/models")
+
+
+def test_auto_route_respects_disabled_provider_selection(client, monkeypatch):
+    monkeypatch.delenv("QUANT_AI_TASK_ROUTES", raising=False)
+    with pytest.raises(gateway.GatewayError, match="All AI providers are disabled"):
+        __import__("asyncio").run(gateway.resolve_auto_route([]))
+
+
+def test_auto_route_skips_unconfigured_and_uses_next_enabled_provider(client, monkeypatch):
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.delenv("GROQ_API_KEYS_JSON", raising=False)
+    monkeypatch.delenv("GROQ_DEFAULT_MODEL", raising=False)
+    monkeypatch.delenv("DEEPSEEK_DEFAULT_MODEL", raising=False)
+    FakeAsyncClient.catalogue_responses = [
+        FakeResponse(200, {"data": [{"id": "deepseek-chat-current"}]})
+    ]
+    provider, model, fallbacks = __import__(
+        "asyncio"
+    ).run(gateway.resolve_auto_route(["groq", "deepseek"]))
+    assert provider == "deepseek"
+    assert model == "deepseek-chat-current"
+    assert fallbacks == []
