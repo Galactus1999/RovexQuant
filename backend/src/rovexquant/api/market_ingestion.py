@@ -3,14 +3,27 @@ from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from rovexquant.market_data.eod_ingestion import enqueue_ingestion_run
 from rovexquant.market_data.eod_store import (
-    EodStoreError, latest_ingestion_status, latest_persisted_snapshot, symbol_history,
+    EodStoreError, bulk_symbol_history, latest_ingestion_status, latest_persisted_snapshot, symbol_history,
 )
 from rovexquant.security.dependencies import require_app_session
 
 router = APIRouter()
+
+
+class BulkHistoryTarget(BaseModel):
+    symbol: str
+    from_date: date
+
+
+class BulkHistoryRequest(BaseModel):
+    exchange: Literal["nse", "bse"]
+    targets: list[BulkHistoryTarget] = Field(min_length=1, max_length=2000)
+    to_date: date
+    limit_per_symbol: int = Field(default=60, ge=1, le=60)
 
 
 def _store_error(error: EodStoreError) -> HTTPException:
@@ -94,3 +107,34 @@ def app_market_ingestion_history(
         }
     except EodStoreError as error:
         raise _store_error(error) from error
+
+
+@router.post(
+    "/api/v1/app/market-data/ingestion/history/bulk",
+    dependencies=[Depends(require_app_session)],
+)
+def app_market_ingestion_bulk_history(request: BulkHistoryRequest):
+    """Return a bounded EOD history window for up to 2,000 imported instruments."""
+    targets = [
+        {"symbol": target.symbol, "from_date": target.from_date}
+        for target in request.targets
+    ]
+    try:
+        bars = bulk_symbol_history(
+            request.exchange,
+            targets,
+            to_date=request.to_date,
+            limit_per_symbol=request.limit_per_symbol,
+        )
+    except EodStoreError as error:
+        raise _store_error(error) from error
+    return {
+        "store": "persistent-eod-store",
+        "exchange": request.exchange.upper(),
+        "data_mode": "END_OF_DAY",
+        "to_date": request.to_date.isoformat(),
+        "bars": bars,
+        "count": len(bars),
+        "symbols_requested": len(targets),
+        "symbols_returned": len({row["symbol"] for row in bars}),
+    }
