@@ -125,7 +125,7 @@ object ResearchCsvFolderImporter {
                     require(!bounded.exceeded) { "CSV exceeds the configured per-file or folder byte limit." }
                     val bytes = bounded.bytes
                     val csvContent = decodeCsvBytes(bytes)
-                    val exchange = if (displayName.startsWith("BSE_", ignoreCase = true)) "BSE" else "NSE"
+                    val exchange = if (displayName.contains("BSE", ignoreCase = true)) "BSE" else "NSE"
                     val exchangeRows = UniversalOhlcvCsvParser.parseExchangeBhavcopy(csvContent, exchange)
                     if (exchangeRows != null) {
                         val contentHash = sha256(bytes)
@@ -260,7 +260,7 @@ object ResearchCsvFolderImporter {
         sourceFileName: String,
         content: String
     ): List<ResearchCsvDatasetMetadata>? {
-        val exchange = if (sourceFileName.startsWith("BSE_", ignoreCase = true)) "BSE" else "NSE"
+        val exchange = if (sourceFileName.contains("BSE", ignoreCase = true)) "BSE" else "NSE"
         val grouped = UniversalOhlcvCsvParser.parseExchangeBhavcopy(content, exchange) ?: return null
         return grouped.map { (symbol, bars) ->
             val instrument = InstrumentCatalog.resolve(symbol, exchange, OhlcvInterval.DAILY)
