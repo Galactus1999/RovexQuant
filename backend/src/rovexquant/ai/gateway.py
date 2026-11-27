@@ -160,7 +160,10 @@ async def discover_provider_model(provider_id: str) -> str | None:
     config = SUPPORTED[provider_id]
     catalogue_url = f"{config.base_url}/models"
     if provider_id == "openrouter":
-        catalogue_url += "?input_modalities=text"
+        # OpenRouter supports endpoint-aware catalogue filtering. Restrict the
+        # discovery result to models that actually serve Chat Completions rather
+        # than relying on text input alone (which does not prove endpoint support).
+        catalogue_url += "?endpoints=%2Fapi%2Fv1%2Fchat%2Fcompletions&input_modalities=text"
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=5.0)) as client:
             response = await client.get(
