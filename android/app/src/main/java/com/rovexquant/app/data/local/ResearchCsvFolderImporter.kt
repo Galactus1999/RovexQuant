@@ -12,10 +12,8 @@ import com.rovexquant.app.domain.OhlcvInterval
 import com.rovexquant.app.domain.UniversalOhlcvCsvParser
 import com.rovexquant.app.domain.InstrumentType
 import java.time.LocalDate
-import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -250,7 +248,7 @@ object ResearchCsvFolderImporter {
     }
 
     /** Accept a raw CSV or a ZIP containing exactly one bounded CSV entry. */
-    fun decodeCsvPayload(sourceFileName: String, bytes: ByteArray): String {
+    fun decodeCsvPayload(bytes: ByteArray): String {
         require(bytes.size <= MAX_CSV_BYTES) { "Selected file exceeds the 20 MB import limit." }
         val isZip = bytes.size >= 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte()
         if (!isZip) return decodeCsvBytes(bytes)
@@ -287,7 +285,7 @@ object ResearchCsvFolderImporter {
         sourceFileName: String,
         bytes: ByteArray
     ): List<ResearchCsvDatasetMetadata>? =
-        importExchangeBhavcopy(context, sourceFileName, decodeCsvPayload(sourceFileName, bytes))
+        importExchangeBhavcopy(context, sourceFileName, decodeCsvPayload(bytes))
 
     /** Import a multi-security NSE/BSE UDiFF Bhavcopy into separate local instrument datasets. */
     fun importExchangeBhavcopy(
