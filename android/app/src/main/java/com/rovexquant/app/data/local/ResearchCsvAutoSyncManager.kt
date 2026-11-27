@@ -151,9 +151,8 @@ object ResearchCsvAutoSyncManager {
         val results = mutableListOf<DatasetSyncResult>()
         for (metadata in datasets) {
             if (metadata.priceBasis != "RAW_CLOSE") {
-                results += DatasetSyncResult(
-                    false, metadata.label + ": adjusted-close CSV cannot be merged with raw EOD prices."
-                )
+                markIfUnchanged(context, metadata, "manual-only · adjusted close")
+                results += DatasetSyncResult(updated = false)
                 continue
             }
             try {
@@ -219,8 +218,9 @@ object ResearchCsvAutoSyncManager {
         repository: QuantDataRepository,
         metadata: ResearchCsvDatasetMetadata
     ): DatasetSyncResult {
-        require(metadata.priceBasis == "RAW_CLOSE") {
-            "Adjusted-close CSV cannot be merged with raw Upstox history."
+        if (metadata.priceBasis != "RAW_CLOSE") {
+            markIfUnchanged(context, metadata, "manual-only · adjusted close")
+            return DatasetSyncResult(updated = false)
         }
         val existing = withContext(Dispatchers.IO) {
             ResearchCsvDatasetStore.load(context, metadata)
