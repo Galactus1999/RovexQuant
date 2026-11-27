@@ -465,7 +465,8 @@ fun ResearchLabScreen(
                                     dataset.rowCount.toString() + " bars · " +
                                         dataset.firstTimestamp.substringBefore("T") + " to " +
                                         dataset.lastTimestamp.substringBefore("T") +
-                                        (dataset.lastSyncProvider?.let { " · updated via " + it } ?: " · awaiting online update"),
+                                        (dataset.lastSyncProvider?.let { " · updated via " + it } ?: " · awaiting online update") +
+                                        (if (dataset.priceBasis == "ADJUSTED_CLOSE") " · adjusted-only" else ""),
                                     color = Muted,
                                     fontSize = 9.sp
                                 )
