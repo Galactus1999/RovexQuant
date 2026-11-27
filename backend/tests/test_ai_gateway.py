@@ -283,3 +283,36 @@ def test_automatic_selection_falls_back_to_next_enabled_provider_on_rate_limit(c
     assert result["model"] == "deepseek-chat-current"
     assert result["fallback_used"] is True
     assert result["content"] == "Fallback response"
+
+
+
+def test_openrouter_discovery_filters_for_chat_completions_endpoint(client, monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "openrouter-secret")
+    FakeAsyncClient.catalogue_responses = [
+        FakeResponse(200, {"data": [
+            {
+                "id": "provider/text-chat-model",
+                "architecture": {
+                    "modality": "text->text",
+                    "input_modalities": ["text"],
+                    "output_modalities": ["text"],
+                },
+            },
+            {
+                "id": "provider/text-embedding-model",
+                "architecture": {
+                    "modality": "text->embedding",
+                    "input_modalities": ["text"],
+                    "output_modalities": ["embeddings"],
+                },
+            },
+        ]})
+    ]
+    import asyncio
+
+    model = asyncio.run(gateway.discover_provider_model("openrouter"))
+    assert model == "provider/text-chat-model"
+    assert FakeAsyncClient.requests[0]["url"] == (
+        "https://openrouter.ai/api/v1/models"
+        "?endpoints=%2Fapi%2Fv1%2Fchat%2Fcompletions&input_modalities=text"
+    )
