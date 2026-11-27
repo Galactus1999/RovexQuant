@@ -36,7 +36,7 @@ data class ResearchCsvAutoSyncReport(
         get() = when {
             busy -> "An imported-dataset refresh is already running."
             totalDatasets == 0 -> "No instrument-mapped CSV datasets are available to refresh."
-            dueDatasets == 0 -> "All " + totalDatasets + " imported datasets are within the 12-hour refresh window."
+            dueDatasets == 0 -> "All " + totalDatasets + " imported datasets are within the 4-hour refresh window."
             else -> "Checked " + processedDatasets + "/" + dueDatasets +
                 " due datasets · updated " + updatedDatasets +
                 " · unchanged " + unchangedDatasets +
@@ -58,7 +58,7 @@ private data class DatasetSyncResult(
 object ResearchCsvAutoSyncManager {
     private val marketZone = ZoneId.of("Asia/Kolkata")
     private val syncMutex = Mutex()
-    private const val AUTO_SYNC_INTERVAL_MILLIS = 12L * 60L * 60L * 1000L
+    private const val AUTO_SYNC_INTERVAL_MILLIS = 4L * 60L * 60L * 1000L
     private const val MAX_DATASETS_PER_PASS = 2_000
     private const val MAX_CONCURRENT_INDEX_REQUESTS = 3
 
