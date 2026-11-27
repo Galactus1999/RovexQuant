@@ -26,6 +26,8 @@ import com.rovexquant.app.data.model.MarketIntegrityStatus
 import com.rovexquant.app.data.model.MarketDataHealth
 import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.model.MarketIngestionStatus
+import com.rovexquant.app.data.model.MarketHistoryTarget
+import com.rovexquant.app.data.model.MarketHistoryBulkResult
 import com.rovexquant.app.data.model.NseMcpCatalog
 import com.rovexquant.app.data.model.NseMcpResult
 import com.rovexquant.app.data.model.QuantSession
@@ -63,6 +65,12 @@ interface QuantDataRepository {
         session: QuantSession, exchange: String = "nse", force: Boolean = false
     ): String
     suspend fun fetchMarketIngestionStatus(session: QuantSession, exchange: String = "nse"): MarketIngestionStatus
+    suspend fun fetchMarketHistoryBulk(
+        session: QuantSession,
+        exchange: String,
+        targets: List<MarketHistoryTarget>,
+        toDate: LocalDate
+    ): MarketHistoryBulkResult = MarketHistoryBulkResult(emptyMap(), emptyMap())
     suspend fun fetchInstrumentQuote(session: QuantSession, symbol: String): InstrumentQuoteSnapshot? = null
     suspend fun fetchIntelligenceEvents(session: QuantSession, query: String, timespan: String): IntelligenceFeed
     suspend fun fetchMacroResearch(session: QuantSession): MacroResearchSummary
