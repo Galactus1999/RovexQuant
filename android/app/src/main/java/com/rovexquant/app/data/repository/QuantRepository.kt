@@ -197,7 +197,11 @@ class QuantRepository(context: Context) : QuantDataRepository {
             },
             providerNote = when (instrument.provider) {
                 OhlcvProvider.UPSTOX_V3_HISTORICAL ->
-                    "Upstox V3 historical daily candles; server-side read-only Analytics Token; index volume is not available."
+                    if (instrument.instrumentType == com.rovexquant.app.domain.InstrumentType.EQUITY) {
+                        "Upstox V3 historical daily OHLCV; server-side read-only Analytics Token; corporate-action adjustment is not applied."
+                    } else {
+                        "Upstox V3 historical daily index OHLC; server-side read-only Analytics Token; index volume is not available."
+                    }
                 OhlcvProvider.UPSTOX_V3_INTRADAY ->
                     "Upstox V3 historical/intraday candles; server-side read-only Analytics Token; interval history is provider-limited."
                 OhlcvProvider.TEJHQ_EOD -> null
