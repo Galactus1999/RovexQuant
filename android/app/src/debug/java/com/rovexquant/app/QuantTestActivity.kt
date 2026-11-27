@@ -143,7 +143,7 @@ class FakeQuantRepository(
         }
 
     override suspend fun fetchAiProviders(session: QuantSession) =
-        listOf(AiProvider("groq", true, listOf("default")))
+        listOf(AiProvider("groq", true, listOf("default"), defaultModel = "fixture-model"))
 
     override suspend fun fetchAiTaskRoutes(session: QuantSession): Map<String, AiTaskRoute> =
         mapOf("research" to AiTaskRoute("groq", "server-research-model", emptyList()))
