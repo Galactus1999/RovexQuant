@@ -334,6 +334,25 @@ async def complete_chat(
                 continue
             if response.status_code in (401, 403):
                 raise GatewayError(f"{candidate} rejected its configured credential", 502)
+            if response.status_code in (400, 404, 422):
+                try:
+                    error_payload = response.json()
+                except (ValueError, TypeError):
+                    error_payload = {}
+                error_text = json.dumps(error_payload, ensure_ascii=False).lower()
+                model_unavailable = "model" in error_text and any(
+                    marker in error_text for marker in (
+                        "not found", "does not exist", "not available",
+                        "not supported", "model_not_found", "unsupported model",
+                    )
+                )
+                if model_unavailable:
+                    last_error = GatewayError(
+                        f"{candidate} no longer accepts the discovered model; trying the next enabled provider",
+                        503,
+                    )
+                    continue
+                raise GatewayError(f"{candidate} rejected the request (HTTP {response.status_code})", 502)
             if response.status_code >= 400:
                 raise GatewayError(f"{candidate} rejected the request (HTTP {response.status_code})", 502)
             data = response.json()
