@@ -414,7 +414,7 @@ fun QuantCopilotSheet(
     var error by remember { mutableStateOf<String?>(null) }
 
     Column(
-        Modifier.fillMaxWidth().heightIn(min = 400.dp, max = 620.dp).padding(16.dp),
+        Modifier.fillMaxWidth().fillMaxHeight().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         Eyebrow("Contextual research assistant")
