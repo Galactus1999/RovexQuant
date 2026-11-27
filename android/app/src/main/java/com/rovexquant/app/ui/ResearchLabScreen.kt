@@ -391,7 +391,7 @@ fun ResearchLabScreen(
                     )
                 }
                 Text(
-                    "When Research Lab opens, the app checks mapped datasets every 12 hours. Equity history is refreshed in exchange batches from the persistent EOD Data Hub; supported NSE indices use Upstox historical candles. Requires internet and a signed-in Quant session. It does not run while the app is closed.",
+                    "When Research Lab opens, the app checks mapped datasets every 4 hours. Equity history is refreshed in exchange batches from the persistent EOD Data Hub; supported NSE indices use Upstox historical candles. Requires internet and a signed-in Quant session. It does not run while the app is closed.",
                     color = Muted,
                     fontSize = 10.sp,
                     lineHeight = 16.sp
