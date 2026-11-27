@@ -240,3 +240,16 @@ def test_chat_automatically_discovers_model_when_no_task_routes_exist(client, mo
     assert result["content"] == "Automatic response"
     assert any(request.get("url", "").endswith("/models") for request in FakeAsyncClient.requests)
     assert any(request.get("url", "").endswith("/chat/completions") for request in FakeAsyncClient.requests)
+
+
+
+def test_gemini_model_catalogue_prefix_is_normalized(client, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "gemini-secret")
+    monkeypatch.delenv("GEMINI_DEFAULT_MODEL", raising=False)
+    FakeAsyncClient.catalogue_responses = [
+        FakeResponse(200, {"data": [{"id": "models/gemini-chat-current"}]})
+    ]
+    import asyncio
+
+    model = asyncio.run(gateway.discover_provider_model("gemini"))
+    assert model == "gemini-chat-current"
