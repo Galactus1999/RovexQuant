@@ -463,7 +463,7 @@ fun QuantCopilotSheet(
                                 )
                             ) + messages.toList(),
                             fallbackProviders = emptyList(),
-                            taskType = "chat"
+                            taskType = "research"
                         )
                         messages.add(AiChatMessage("assistant", response.content))
                     } catch (cancelled: CancellationException) {
