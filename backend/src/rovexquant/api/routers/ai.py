@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, SecretStr, model_validator
 
 from rovexquant.ai.gateway import (
     GatewayError, authorize_gateway, complete_chat, configured_providers, configured_task_routes,
-    resolve_task_route,
+    resolve_task_route, resolve_auto_route,
 )
 from rovexquant.ai.claim_verifier import extract_research_source_refs, verify_research_claims
 from rovexquant.market_data.eod_store import EodStoreError
@@ -49,6 +49,7 @@ class AIChatRequest(BaseModel):
     credential_id: str | None = Field(default=None, min_length=1, max_length=80)
     fallback_providers: list[str] = Field(default_factory=list, max_length=3)
     task_type: str = Field(default="chat", min_length=1, max_length=48)
+    enabled_provider_ids: list[str] | None = Field(default=None, max_length=5)
     max_tokens: int = Field(default=1200, ge=1, le=4096)
     temperature: float = Field(default=0.2, ge=0, le=2)
 
@@ -76,6 +77,7 @@ class AIStrategyBriefRequest(BaseModel):
     credential_id: str | None = Field(default=None, min_length=1, max_length=80)
     fallback_providers: list[str] = Field(default_factory=list, max_length=3)
     automatic_task_routing: bool = False
+    enabled_provider_ids: list[str] | None = Field(default=None, max_length=5)
 
     @model_validator(mode="after")
     def validate_date_range(self):
@@ -275,9 +277,12 @@ async def app_ai_chat(request: AIChatRequest):
     """Mobile AI access is authorized by the short-lived Quant app session."""
     run_id = None
     try:
-        provider_id, model, fallback_providers = resolve_task_route(
-            request.task_type, request.provider_id, request.model, request.fallback_providers
-        )
+        if request.provider_id is None and request.model is None:
+            provider_id, model, fallback_providers = await resolve_auto_route(request.enabled_provider_ids)
+        else:
+            provider_id, model, fallback_providers = resolve_task_route(
+                request.task_type, request.provider_id, request.model, request.fallback_providers
+            )
         mobile_messages = [
             {
                 "role": "system",
@@ -440,7 +445,9 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
         ai_error = None
         verification = None
         research_run = {"archive_status": "NOT_CREATED"}
-        if (request.provider_id and request.model) or request.automatic_task_routing:
+        if (request.provider_id and request.model) or request.automatic_task_routing or (
+            request.provider_id is None and request.model is None
+        ):
             run_id = None
             archive_error_message = None
             source_ref = (
@@ -453,9 +460,14 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
             )
             request_payload = {"system_prompt": system_prompt, "evidence": user_evidence}
             try:
-                route_provider, route_model, route_fallbacks = resolve_task_route(
-                    "research", request.provider_id, request.model, request.fallback_providers
-                )
+                if request.provider_id is None and request.model is None:
+                    route_provider, route_model, route_fallbacks = await resolve_auto_route(
+                        request.enabled_provider_ids
+                    )
+                else:
+                    route_provider, route_model, route_fallbacks = resolve_task_route(
+                        "research", request.provider_id, request.model, request.fallback_providers
+                    )
                 try:
                     run_id = reserve_ai_research_run(
                         task_type="research", provider_id=route_provider, model=route_model,
@@ -530,7 +542,7 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
                     research_run = {"run_id": run_id, "archive_status": "FAILED"}
                 ai_error = f"Data was recovered, but AI commentary is unavailable: {error}"
         else:
-            ai_error = "Data was recovered. Configure an AI provider/model or enable the configured research task route to receive AI commentary."
+            ai_error = "Data was recovered, but AI commentary is disabled or no enabled provider is configured."
 
         return {
             "provider": provider_id,
