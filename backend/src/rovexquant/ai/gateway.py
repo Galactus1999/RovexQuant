@@ -237,6 +237,8 @@ async def resolve_auto_route(
             available.append(provider)
             if len(available) == 1:
                 selected_model = model
+            if len(available) == 4:
+                break
     if not available:
         raise GatewayError("No enabled AI provider has a usable credential and discoverable chat model", 503)
     return available[0], selected_model, available[1:]
