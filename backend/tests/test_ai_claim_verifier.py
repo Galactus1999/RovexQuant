@@ -73,3 +73,24 @@ def test_claim_verifier_requires_structured_json():
         pass
     else:
         raise AssertionError("Unstructured verifier output must be rejected")
+
+
+
+def test_verifier_does_not_require_task_routes_and_refuses_same_model(monkeypatch):
+    import asyncio
+    from rovexquant.ai import claim_verifier
+
+    async def same_model_route(enabled_provider_ids=None):
+        return "groq", "current-chat-model", []
+
+    monkeypatch.setattr(claim_verifier, "resolve_auto_route", same_model_route)
+    result = asyncio.run(claim_verifier.verify_research_claims(
+        draft="The supplied market closed higher.",
+        evidence_text="[market:EOD:2026-11-20:NSE:TEST] Close: 100",
+        allowed_source_refs=["market:EOD:2026-11-20:NSE:TEST"],
+        research_provider="groq",
+        research_model="current-chat-model",
+        enabled_provider_ids=["groq"],
+    ))
+    assert result["status"] == "NOT_INDEPENDENT"
+    assert "second enabled provider/model" in result["summary"].lower()
