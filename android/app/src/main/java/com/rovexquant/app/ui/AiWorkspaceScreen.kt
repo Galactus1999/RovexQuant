@@ -24,7 +24,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rovexquant.app.data.model.MarketEquityInstrument
-import com.rovexquant.app.data.model.AiChatMessage
 import com.rovexquant.app.data.model.AiStrategyBrief
 import com.rovexquant.app.data.model.AiTaskRoute
 import com.rovexquant.app.data.model.QuantSession
@@ -153,7 +152,7 @@ fun AiWorkspaceScreen(
             SectionHeading(
                 "Evidence-led research · server-routed AI",
                 "Quant Intelligence.",
-                "Connect model providers, test credentials, configure failover and run approved research tools. Verified market evidence remains authoritative."
+                "Review archived research, attach verified evidence and run server-routed analysis. Market data remains authoritative."
             )
         }
         item {
@@ -184,7 +183,6 @@ fun AiWorkspaceScreen(
         item {
             AiResearchToolsPanel(session, repository) { context ->
                 evidenceDraft = (context + "\n\n" + evidenceDraft).take(10000)
-                chatError = null
             }
         }
         item {
