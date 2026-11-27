@@ -136,6 +136,7 @@ object ResearchCsvFolderImporter {
                             continue
                         }
                         exchangeRows.forEach { (symbol, bars) ->
+                            validateDailyBars(bars)
                             val instrument = InstrumentCatalog.resolve(symbol, exchange, OhlcvInterval.DAILY)
                             val existing = ResearchCsvDatasetStore.load(context, instrument)
                             val merged = OhlcvCsvResearch.merge(existing.orEmpty(), bars)
@@ -272,6 +273,7 @@ object ResearchCsvFolderImporter {
         val exchange = if (sourceFileName.contains("BSE", ignoreCase = true)) "BSE" else "NSE"
         val grouped = UniversalOhlcvCsvParser.parseExchangeBhavcopy(content, exchange) ?: return null
         return grouped.map { (symbol, bars) ->
+            validateDailyBars(bars)
             val instrument = InstrumentCatalog.resolve(symbol, exchange, OhlcvInterval.DAILY)
             val merged = OhlcvCsvResearch.merge(
                 ResearchCsvDatasetStore.load(context, instrument).orEmpty(), bars
