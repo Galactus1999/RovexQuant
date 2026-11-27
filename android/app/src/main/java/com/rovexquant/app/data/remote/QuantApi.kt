@@ -1056,7 +1056,8 @@ object QuantApi {
         messages: List<AiChatMessage>,
         credentialId: String?,
         fallbackProviders: List<String>,
-        taskType: String
+        taskType: String,
+        enabledProviderIds: List<String>
     ): AiCompletion {
         require((providerId.isNullOrBlank() && model.isNullOrBlank()) ||
             (!providerId.isNullOrBlank() && !model.isNullOrBlank())) {
@@ -1085,6 +1086,10 @@ object QuantApi {
             .put("task_type", taskType)
             .put("max_tokens", 1200)
             .put("temperature", 0.2)
+            .put("enabled_provider_ids", JSONArray().apply {
+                enabledProviderIds.distinct().filter { it in setOf("openai", "gemini", "deepseek", "groq", "openrouter") }
+                    .forEach { put(it) }
+            })
         if (!providerId.isNullOrBlank()) body.put("provider_id", providerId)
         if (!model.isNullOrBlank()) body.put("model", model)
         if (!credentialId.isNullOrBlank()) body.put("credential_id", credentialId)
@@ -1112,17 +1117,20 @@ object QuantApi {
         strategyContext: String,
         credentialId: String?,
         fallbackProviders: List<String>,
-        automaticTaskRouting: Boolean
+        automaticTaskRouting: Boolean,
+        enabledProviderIds: List<String>
     ): AiStrategyBrief {
-        require(automaticTaskRouting || (!providerId.isNullOrBlank() && !model.isNullOrBlank())) {
-            "Select a configured provider/model or enable server task routing."
-        }
-        require(!automaticTaskRouting || (providerId.isNullOrBlank() && model.isNullOrBlank())) {
-            "Automatic task routing cannot be combined with a manual provider/model."
+        require((providerId.isNullOrBlank() && model.isNullOrBlank()) ||
+            (!providerId.isNullOrBlank() && !model.isNullOrBlank())) {
+            "Provider and model must be supplied together, or both omitted for automatic selection."
         }
         val body = JSONObject()
             .put("symbol", symbol.trim().uppercase())
-            .put("automatic_task_routing", automaticTaskRouting)
+            .put("automatic_task_routing", providerId.isNullOrBlank() && model.isNullOrBlank())
+            .put("enabled_provider_ids", JSONArray().apply {
+                enabledProviderIds.distinct().filter { it in setOf("openai", "gemini", "deepseek", "groq", "openrouter") }
+                    .forEach { put(it) }
+            })
             .put("exchange", exchange.uppercase())
             .put("from_date", fromDate)
             .put("to_date", toDate)
