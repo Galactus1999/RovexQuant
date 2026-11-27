@@ -69,6 +69,16 @@ object UniversalOhlcvCsvParser {
         return sortAndValidate(bars)
     }
 
+    fun detectPriceBasis(content: String): String {
+        val table = readTable(content)
+        val columns = columns(table.headers)
+        val rawClose = columns.first(
+            "close", "clspric", "closingprice", "closeprice", "lastprice", "ltp"
+        )
+        val adjustedClose = columns.first("adjclose")
+        return if (rawClose < 0 && adjustedClose >= 0) "ADJUSTED_CLOSE" else "RAW_CLOSE"
+    }
+
     /**
      * Parse a multi-security exchange Bhavcopy when it has an explicit symbol and
      * exchange-series column. Returns null when the file is not that dataset type.
