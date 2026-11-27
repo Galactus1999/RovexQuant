@@ -95,6 +95,13 @@ fun MarketPulseScreen(
     var copilotInitialPrompt by rememberSaveable { mutableStateOf("") }
     val copilotSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
 
+    // Open the contextual assistant fully so its prompt and send controls are
+    // immediately reachable on compact screens, rather than hiding below a
+    // partially-expanded sheet viewport.
+    LaunchedEffect(showCopilotSheet) {
+        if (showCopilotSheet) copilotSheetState.expand()
+    }
+
     // Freshness only has meaning when at least one live tick exists. Do not
     // keep a periodic state writer alive on the offline/empty dashboard: Compose
     // tests (and other virtual-clock hosts) must be able to reach quiescence.
