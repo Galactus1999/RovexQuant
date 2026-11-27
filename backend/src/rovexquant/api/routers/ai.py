@@ -349,6 +349,7 @@ async def app_ai_chat(request: AIChatRequest):
                     allowed_source_refs=allowed_source_refs,
                     research_provider=completion.get("provider_id", provider_id),
                     research_model=completion.get("model", model),
+                    enabled_provider_ids=request.enabled_provider_ids,
                 )
             except Exception as error:
                 verification = {
@@ -498,7 +499,9 @@ async def app_ai_strategy_brief(request: AIStrategyBriefRequest):
                         draft=str(completion.get("content", "")), evidence_text=evidence_text,
                         allowed_source_refs=[source_ref],
                         research_provider=str(completion.get("provider_id", route_provider)),
-                        research_model=str(completion.get("model", route_model)), max_tokens=1200,
+                        research_model=str(completion.get("model", route_model)),
+                        enabled_provider_ids=request.enabled_provider_ids,
+                        max_tokens=1200,
                     )
                 except Exception as verifier_error:
                     verification = {
