@@ -26,7 +26,8 @@ data class ResearchCsvDatasetMetadata(
     val sourceFileName: String,
     val fileName: String,
     val lastSyncedAtMillis: Long = 0L,
-    val lastSyncProvider: String? = null
+    val lastSyncProvider: String? = null,
+    val priceBasis: String = "RAW_CLOSE"
 ) {
     val label: String get() = "$exchange:$canonicalSymbol"
 }
@@ -72,7 +73,8 @@ object ResearchCsvDatasetStore {
         bars: List<OhlcvBar>,
         sourceFileName: String,
         lastSyncProvider: String? = null,
-        lastSyncedAtMillis: Long = 0L
+        lastSyncedAtMillis: Long = 0L,
+        priceBasis: String = "RAW_CLOSE"
     ): ResearchCsvDatasetMetadata {
         require(instrument.interval == OhlcvInterval.DAILY) {
             "Automatic folder import currently supports daily OHLCV datasets only."
@@ -107,7 +109,8 @@ object ResearchCsvDatasetStore {
             sourceFileName = sourceFileName.take(120),
             fileName = fileName,
             lastSyncedAtMillis = lastSyncedAtMillis,
-            lastSyncProvider = lastSyncProvider
+            lastSyncProvider = lastSyncProvider,
+            priceBasis = priceBasis
         )
         val persisted = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString(ENTRY_PREFIX + key, encode(metadata))
@@ -164,6 +167,7 @@ object ResearchCsvDatasetStore {
         .put("fileName", metadata.fileName)
         .put("lastSyncedAtMillis", metadata.lastSyncedAtMillis)
         .put("lastSyncProvider", metadata.lastSyncProvider)
+        .put("priceBasis", metadata.priceBasis)
         .toString()
 
     private fun decode(value: String): ResearchCsvDatasetMetadata {
@@ -183,7 +187,8 @@ object ResearchCsvDatasetStore {
             sourceFileName = json.optString("sourceFileName", ""),
             fileName = json.getString("fileName"),
             lastSyncedAtMillis = json.optLong("lastSyncedAtMillis", 0L),
-            lastSyncProvider = json.optString("lastSyncProvider").takeIf { it.isNotBlank() }
+            lastSyncProvider = json.optString("lastSyncProvider").takeIf { it.isNotBlank() },
+            priceBasis = json.optString("priceBasis", "RAW_CLOSE")
         )
     }
 
