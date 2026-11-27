@@ -358,7 +358,7 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithText("Import OHLCV CSV").assertIsDisplayed()
         composeRule.onNodeWithText("More").performClick()
         composeRule.onNodeWithText("Portfolio").performClick()
-        composeRule.onNodeWithText("Portfolio & risk.").assertIsDisplayed()
+        composeRule.onNodeWithText("Position sizing.").assertIsDisplayed()
         composeRule.onNodeWithTag("portfolio.entry").performScrollTo()
         composeRule.onNodeWithTag("portfolio.entry").assertIsDisplayed()
     }
