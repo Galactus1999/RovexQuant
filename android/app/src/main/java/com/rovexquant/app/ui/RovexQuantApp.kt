@@ -107,7 +107,11 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
                 streamStatus = state.streamStatus,
                 eodSnapshotStatus = state.eodSnapshotStatus,
                 hasEodSnapshot = state.eodSnapshot != null,
-                ticks = state.ticks.values.toList(),
+                ticks = state.ticks,
+                requiredInstrumentKeys = listOfNotNull(
+                    state.indexKeys["NIFTY 50"],
+                    state.indexKeys["NIFTY BANK"]
+                ).toSet(),
                 nowMillis = nowMillis
             )
             val latestTickAt = state.ticks.values.maxByOrNull { it.receivedAt }?.receivedAt
@@ -371,7 +375,8 @@ internal fun resolveSystemHealthLevel(
     streamStatus: String,
     eodSnapshotStatus: String,
     hasEodSnapshot: Boolean,
-    ticks: List<com.rovexquant.app.data.model.MarketTick>,
+    ticks: Map<String, com.rovexquant.app.data.model.MarketTick>,
+    requiredInstrumentKeys: Set<String>,
     nowMillis: Long
 ): SystemHealthLevel {
     val stream = streamStatus.lowercase()
@@ -381,14 +386,15 @@ internal fun resolveSystemHealthLevel(
     }
     if (hardFailure) return SystemHealthLevel.ERROR
 
-    val freshValidTick = ticks.any { tick ->
-        tick.quality == "VALID" && runCatching {
+    val criticalQuotesFresh = requiredInstrumentKeys.isNotEmpty() && requiredInstrumentKeys.all { key ->
+        val tick = ticks[key]
+        tick != null && tick.quality == "VALID" && runCatching {
             val receivedAt = Instant.parse(tick.receivedAt).toEpochMilli()
             receivedAt <= nowMillis + 60_000 && receivedAt >= nowMillis - 30_000
         }.getOrDefault(false)
     }
     val liveStream = stream.startsWith("live")
-    return if (liveStream && freshValidTick && hasEodSnapshot) {
+    return if (liveStream && criticalQuotesFresh && hasEodSnapshot) {
         SystemHealthLevel.HEALTHY
     } else {
         SystemHealthLevel.DEGRADED
