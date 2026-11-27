@@ -253,3 +253,30 @@ def test_gemini_model_catalogue_prefix_is_normalized(client, monkeypatch):
 
     model = asyncio.run(gateway.discover_provider_model("gemini"))
     assert model == "gemini-chat-current"
+
+
+
+def test_automatic_selection_falls_back_to_next_enabled_provider_on_rate_limit(client, monkeypatch):
+    monkeypatch.delenv("QUANT_AI_TASK_ROUTES", raising=False)
+    monkeypatch.delenv("GROQ_DEFAULT_MODEL", raising=False)
+    monkeypatch.delenv("DEEPSEEK_DEFAULT_MODEL", raising=False)
+    FakeAsyncClient.catalogue_responses = [
+        FakeResponse(200, {"data": [{"id": "groq-chat-current"}]}),
+        FakeResponse(200, {"data": [{"id": "deepseek-chat-current"}]}),
+    ]
+    FakeAsyncClient.responses = [
+        FakeResponse(429, {"error": "rate limited"}),
+        FakeResponse(200, {"choices": [{"message": {"content": "Fallback response"}}]}),
+    ]
+    import asyncio
+
+    result = asyncio.run(gateway.complete_chat(
+        provider_id=None,
+        model=None,
+        enabled_provider_ids=["groq", "deepseek"],
+        messages=[{"role": "user", "content": "Test automatic failover."}],
+    ))
+    assert result["provider_id"] == "deepseek"
+    assert result["model"] == "deepseek-chat-current"
+    assert result["fallback_used"] is True
+    assert result["content"] == "Fallback response"
