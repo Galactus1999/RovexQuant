@@ -323,7 +323,7 @@ fun AiWorkspaceScreen(
                     repository = repository,
                     onAttachToAi = { context ->
                         evidenceDraft = (context + "\n\n" + evidenceDraft).take(10000)
-                        chatError = null
+
                     },
                     equityInstruments = equityInstruments,
                     indexKeys = indexKeys
