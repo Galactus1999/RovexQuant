@@ -99,7 +99,7 @@ class QuantDashboardRegressionTest {
     @Test fun visualStrategyPlaygroundCallsEodResearchAndPeekOpensCopilot() {
         waitForDashboard()
         val activity = composeRule.activity
-        val initialStrategyRequests = activity.fakeRepository.strategyBriefRequestCount
+        val initialHistoryRequests = activity.fakeRepository.instrumentHistoryRequestCount
         val initialChatRequests = activity.fakeRepository.aiChatRequestCount
 
         composeRule.onNodeWithTag("market.pulse.list")
@@ -108,11 +108,12 @@ class QuantDashboardRegressionTest {
             .assertIsDisplayed()
         composeRule.onNodeWithTag("strategy.run").performClick()
         composeRule.waitUntil(10_000) {
-            activity.fakeRepository.strategyBriefRequestCount > initialStrategyRequests &&
+            activity.fakeRepository.instrumentHistoryRequestCount > initialHistoryRequests &&
                 composeRule.onAllNodesWithTag("strategy.metric.rsi.14").fetchSemanticsNodes().isNotEmpty()
         }
-        assertTrue(activity.fakeRepository.lastStrategySymbol == "RELIANCE")
-        assertTrue(activity.fakeRepository.lastStrategyContext?.contains("User-selected planned risk budget") == true)
+        assertTrue(activity.fakeRepository.lastInstrumentProvider == "UPSTOX_V3_HISTORICAL")
+        assertTrue(activity.fakeRepository.lastInstrumentSymbol == "RELIANCE")
+        assertTrue(activity.fakeRepository.lastAiRequestPrompt?.contains("User-selected planned risk budget") == true)
 
         composeRule.onNodeWithTag("strategy.metric.rsi.14").performTouchInput { longClick() }
         composeRule.onNodeWithTag("strategy.metric.peek").assertIsDisplayed()
