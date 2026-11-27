@@ -415,7 +415,7 @@ fun AiWorkspaceScreen(
                 TerminalCard {
                     val aiResult = report.ai
                     if (aiResult != null) {
-                        Eyebrow("AI strategy review · ${aiResult.providerId} / ${aiResult.model}")
+                        Eyebrow("AI strategy review · ${aiResult.providerId}")
                         Spacer(Modifier.height(7.dp))
                         Text(aiResult.content, color = MaterialTheme.colorScheme.onBackground, fontSize = 12.sp, lineHeight = 19.sp)
                         if (aiResult.fallbackUsed) {
