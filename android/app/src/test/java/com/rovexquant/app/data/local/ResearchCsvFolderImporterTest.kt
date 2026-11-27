@@ -130,7 +130,7 @@ class ResearchCsvFolderImporterTest {
             zip.write("TradDt,TckrSymb,SctySrs,OpnPric,HghPric,LwPric,ClsPric,TtlTradgVol\n2026-11-24,RELIANCE,EQ,100,102,99,101,1000".toByteArray())
             zip.closeEntry()
         }
-        val csv = ResearchCsvFolderImporter.decodeCsvPayload("BhavCopy_NSE_CM.zip", output.toByteArray())
+        val csv = ResearchCsvFolderImporter.decodeCsvPayload(output.toByteArray())
         val grouped = com.rovexquant.app.domain.UniversalOhlcvCsvParser.parseExchangeBhavcopy(csv, "NSE")!!
         assertEquals(setOf("RELIANCE"), grouped.keys)
     }
@@ -146,7 +146,7 @@ class ResearchCsvFolderImporterTest {
             }
         }
         assertThrows(IllegalArgumentException::class.java) {
-            ResearchCsvFolderImporter.decodeCsvPayload("reports.zip", output.toByteArray())
+            ResearchCsvFolderImporter.decodeCsvPayload(output.toByteArray())
         }
     }
 
