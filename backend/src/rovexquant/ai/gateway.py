@@ -165,10 +165,13 @@ async def discover_provider_model(provider_id: str) -> str | None:
         return None
     credential = _select_credential(provider_id, None)
     config = SUPPORTED[provider_id]
+    catalogue_url = f"{config.base_url}/models"
+    if provider_id == "openrouter":
+        catalogue_url += "?input_modalities=text"
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=5.0)) as client:
             response = await client.get(
-                f"{config.base_url}/models",
+                catalogue_url,
                 headers=_provider_headers(provider_id, credential.api_key),
             )
     except (httpx.TimeoutException, httpx.RequestError):
@@ -188,15 +191,20 @@ async def discover_provider_model(provider_id: str) -> str | None:
         return None
     excluded = (
         "embed", "embedding", "whisper", "moderation", "rerank", "tts",
-        "transcri", "speech", "audio", "image", "vision", "video",
+        "transcri", "speech", "audio", "image", "vision", "video", "realtime",
     )
     candidates: list[str] = []
     for row in rows:
         if not isinstance(row, dict):
             continue
         model_id = row.get("id")
-        if not isinstance(model_id, str) or not model_id.strip() or len(model_id) > 160:
+        if not isinstance(model_id, str) or not model_id.strip() or len(model_id) > 180:
             continue
+        if row.get("active") is False or row.get("shutdown_date"):
+            continue
+        # Gemini's OpenAI-compatible model catalogue may prefix IDs with "models/".
+        if provider_id == "gemini" and model_id.startswith("models/"):
+            model_id = model_id.split("/", 1)[1]
         normalized = model_id.lower()
         if any(term in normalized for term in excluded):
             continue
@@ -204,6 +212,12 @@ async def discover_provider_model(provider_id: str) -> str | None:
         architecture = row.get("architecture")
         modality = architecture.get("modality") if isinstance(architecture, dict) else None
         if isinstance(modality, str) and "text" not in modality.lower():
+            continue
+        input_modalities = row.get("input_modalities")
+        if isinstance(input_modalities, list) and input_modalities and "text" not in input_modalities:
+            continue
+        output_modalities = row.get("output_modalities")
+        if isinstance(output_modalities, list) and output_modalities and "text" not in output_modalities:
             continue
         supported = row.get("supported_parameters")
         if isinstance(supported, list) and supported and not any(
@@ -228,20 +242,18 @@ async def resolve_auto_route(
     enabled = list(dict.fromkeys(enabled))
     if not enabled:
         raise GatewayError("All AI providers are disabled. Enable at least one configured provider.", 503)
-    available: list[str] = []
-    for provider in enabled:
+    for index, provider in enumerate(enabled):
         if not _credentials_for(provider):
             continue
         model = await discover_provider_model(provider)
         if model:
-            available.append(provider)
-            if len(available) == 1:
-                selected_model = model
-            if len(available) == 4:
-                break
-    if not available:
-        raise GatewayError("No enabled AI provider has a usable credential and discoverable chat model", 503)
-    return available[0], selected_model, available[1:]
+            # Fallbacks are resolved lazily only if the primary provider is unavailable.
+            fallbacks = [
+                candidate for candidate in enabled[index + 1:]
+                if _credentials_for(candidate)
+            ][:3]
+            return provider, model, fallbacks
+    raise GatewayError("No enabled AI provider has a usable credential and discoverable chat model", 503)
 
 
 def _provider_headers(provider_id: str, api_key: str) -> dict[str, str]:
