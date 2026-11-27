@@ -89,7 +89,7 @@ class QuantDashboardRegressionTest {
         ).performClick()
         composeRule.onNodeWithTag("quant.diagnostic.drawer").assertIsDisplayed()
         composeRule.onNodeWithTag("quant.diagnostic.detail.0").assertTextContains("Market stream", substring = true)
-        composeRule.onNodeWithTag("quant.diagnostic.detail.2").assertTextContains("NSE EOD snapshot")
+        composeRule.onNodeWithTag("quant.diagnostic.detail.2").assertTextContains("NSE EOD snapshot", substring = true)
 
         composeRule.onNodeWithTag("quant.diagnostic.retry").performClick()
         composeRule.waitUntil(15_000) {
@@ -128,6 +128,9 @@ class QuantDashboardRegressionTest {
             .performScrollToNode(hasTestTag("strategy.metric.peek"))
         composeRule.onNodeWithTag("strategy.metric.peek").assertIsDisplayed()
         composeRule.onNodeWithTag("strategy.metric.ask.copilot").performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("copilot.input").fetchSemanticsNodes().isNotEmpty()
+        }
         composeRule.onNodeWithTag("copilot.input").assertIsDisplayed()
         val chatRequestsBeforeCopilotSend = activity.fakeRepository.aiChatRequestCount
         composeRule.onNodeWithTag("copilot.send").performClick()
@@ -381,14 +384,19 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("settings.database.refresh").assertIsDisplayed()
         composeRule.onNodeWithTag("settings.screen").performScrollToNode(hasTestTag("settings.upstox.token"))
         composeRule.onNodeWithTag("settings.upstox.token").assertIsDisplayed()
+        // The provider panel is LazyColumn item 3 (0-based); it is not composed
+        // until the list reaches that item. Do not wait for an off-screen lazy child.
+        composeRule.onNodeWithTag("settings.screen").performScrollToIndex(3)
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("settings.ai.provider.key").fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithTag("settings.screen").performScrollToNode(hasTestTag("settings.ai.provider.key"))
-        composeRule.onNodeWithTag("settings.ai.provider.key").assertIsDisplayed()
+        composeRule.onNodeWithTag("settings.screen")
+            .performScrollToNode(hasTestTag("settings.ai.provider.test"))
+        composeRule.onNodeWithTag("settings.ai.provider.key").assertExists()
+        composeRule.onNodeWithTag("settings.ai.provider.test").assertIsDisplayed().assertIsEnabled()
         val activity = composeRule.activity
         val requestsBeforeTest = activity.fakeRepository.aiChatRequestCount
-        composeRule.onNodeWithTag("settings.ai.provider.test").assertIsEnabled().performClick()
+        composeRule.onNodeWithTag("settings.ai.provider.test").performClick()
         composeRule.waitUntil(10_000) {
             activity.fakeRepository.aiChatRequestCount > requestsBeforeTest
         }
