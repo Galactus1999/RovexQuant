@@ -54,6 +54,7 @@ interface QuantDataRepository {
     suspend fun fetchAiResearchRun(session: QuantSession, runId: String): AiResearchRunDetail
     suspend fun saveAiProviderCredential(session: QuantSession, providerId: String, apiKey: String)
     suspend fun deleteAiProviderCredential(session: QuantSession, providerId: String)
+    suspend fun setAiProviderEnabled(providerId: String, enabled: Boolean) = Unit
     suspend fun saveUpstoxAnalyticsToken(session: QuantSession, token: String)
     suspend fun fetchUpstoxConfigured(session: QuantSession): Boolean
     suspend fun fetchLatestEodMarketSnapshot(session: QuantSession, exchange: String = "nse"): EodMarketSnapshot
