@@ -81,6 +81,11 @@ class QuantLoginTestActivity : QuantTestActivity() {
 class FakeQuantRepository(
     private val restoreAuthenticatedSession: Boolean
 ) : QuantDataRepository {
+    @Volatile var marketStreamStartCount: Int = 0
+        private set
+    @Volatile var marketIngestionRequestCount: Int = 0
+        private set
+
     var rejectLogin = false
     private val testSession = QuantSession("https://quant.test", "test-session-token")
 
@@ -180,7 +185,10 @@ class FakeQuantRepository(
         session: QuantSession,
         exchange: String,
         force: Boolean
-    ): String = "SUCCEEDED"
+    ): String {
+        marketIngestionRequestCount += 1
+        return "SUCCEEDED"
+    }
 
     override suspend fun fetchMarketIngestionStatus(
         session: QuantSession,
@@ -458,6 +466,7 @@ class FakeQuantRepository(
         onTicks: (List<MarketTick>) -> Unit
     ): MarketStream = object : MarketStream {
         override fun start(instrumentKeys: List<String>) {
+            marketStreamStartCount += 1
             onStatus("Connected · deterministic UI test")
         }
 
