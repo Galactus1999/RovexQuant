@@ -140,7 +140,10 @@ object ResearchCsvFolderImporter {
                             val instrument = InstrumentCatalog.resolve(symbol, exchange, OhlcvInterval.DAILY)
                             val existing = ResearchCsvDatasetStore.load(context, instrument)
                             val merged = OhlcvCsvResearch.merge(existing.orEmpty(), bars)
-                            ResearchCsvDatasetStore.save(context, instrument, merged, displayName)
+                            ResearchCsvDatasetStore.save(
+                                context, instrument, merged, displayName,
+                                priceBasis = UniversalOhlcvCsvParser.detectPriceBasis(csvContent)
+                            )
                             rowsImported += bars.size
                         }
                         prefs.edit().putString(ledgerKey, contentHash).apply()
@@ -225,7 +228,10 @@ object ResearchCsvFolderImporter {
         val merged = OhlcvCsvResearch.merge(
             ResearchCsvDatasetStore.load(context, instrument).orEmpty(), bars
         )
-        return ResearchCsvDatasetStore.save(context, instrument, merged, sourceFileName)
+        return ResearchCsvDatasetStore.save(
+            context, instrument, merged, sourceFileName,
+            priceBasis = UniversalOhlcvCsvParser.detectPriceBasis(content)
+        )
     }
 
     /** Decode common CSV encodings without silently treating UTF-16 as UTF-8. */
