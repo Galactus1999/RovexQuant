@@ -440,6 +440,13 @@ def bulk_symbol_history(
                     WHERE bar.exchange=%s
                       AND bar.trading_date BETWEEN target.from_date AND %s
                     ORDER BY bar.symbol, bar.trading_date,
+                             CASE
+                                 WHEN bar.exchange='NSE' AND bar.series='EQ' THEN 0
+                                 WHEN bar.exchange='BSE' AND bar.series='A' THEN 0
+                                 WHEN bar.exchange='NSE' AND bar.series='BE' THEN 1
+                                 WHEN bar.exchange='BSE' AND bar.series='B' THEN 1
+                                 ELSE 2
+                             END,
                              adjusted.source_retrieved_at DESC NULLS LAST,
                              bar.source_retrieved_at DESC, bar.provider
                 ),
