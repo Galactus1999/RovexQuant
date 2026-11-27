@@ -172,7 +172,8 @@ fun RovexQuantApp(viewModelFactory: ViewModelProvider.Factory? = null) {
                         eodSnapshot = state.eodSnapshot,
                         eodSnapshotStatus = state.eodSnapshotStatus,
                         onRefreshEodSnapshot = workspace::refreshEodSnapshot,
-                        onOpenInstrument = { symbol, name -> selectedInstrument = symbol to name }
+                        onOpenInstrument = { symbol, name -> selectedInstrument = symbol to name },
+                        repository = workspace.repository
                     )
                     TerminalSection.SCANNER -> StrategyScannerScreen(onOpenAi = { selected = TerminalSection.AI })
                     TerminalSection.SIGNALS -> SignalsScreen()
