@@ -63,12 +63,12 @@ class QuantDashboardRegressionTest {
         // string that exposed a pinned model ID.
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToIndex(1)
         composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithText("Research ready")
+            composeRule.onAllNodesWithText("RESEARCH READY")
                 .fetchSemanticsNodes().isNotEmpty() &&
                 composeRule.onAllNodesWithTag("ai.open.settings")
                     .fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("Research ready").assertIsDisplayed()
+        composeRule.onNodeWithText("RESEARCH READY").assertIsDisplayed()
         composeRule.onNodeWithTag("ai.open.settings").assertIsDisplayed()
     }
 
