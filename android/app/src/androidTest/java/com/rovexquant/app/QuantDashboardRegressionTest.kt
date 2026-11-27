@@ -142,9 +142,11 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithTag("copilot.send").performClick()
         composeRule.waitUntil(10_000) {
             activity.fakeRepository.aiChatRequestCount > chatRequestsBeforeCopilotSend &&
-                composeRule.onAllNodesWithTag("copilot.message.1").fetchSemanticsNodes().isNotEmpty()
+                composeRule.onAllNodesWithTag("copilot.message.content.1").fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithTag("copilot.message.1").assertTextContains("Deterministic AI fixture response.")
+        // Assert the actual Text semantics node, not its unmerged Column parent.
+        composeRule.onNodeWithTag("copilot.message.content.1")
+            .assertTextEquals("Deterministic AI fixture response.")
     }
 
     @Test fun appStartsWithQuantMarketPulseAndHonestOfflineState() {
