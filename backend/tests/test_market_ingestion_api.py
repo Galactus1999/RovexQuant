@@ -67,6 +67,64 @@ def test_market_ingestion_snapshot_returns_postgres_data_only(monkeypatch):
     assert response.json()["trading_date"] == "2026-11-20"
 
 
+def test_bulk_market_history_requires_app_session():
+    response = TestClient(api.app).post(
+        "/api/v1/app/market-data/ingestion/history/bulk",
+        json={
+            "exchange": "nse",
+            "targets": [{"symbol": "RELIANCE", "from_date": "2026-11-17"}],
+            "to_date": "2026-11-27",
+        },
+    )
+    assert response.status_code == 401
+
+
+def test_bulk_market_history_returns_bounded_persisted_rows(monkeypatch):
+    from rovexquant.api import market_ingestion
+
+    token = _session(monkeypatch)
+    calls = []
+    rows = [{
+        "symbol": "RELIANCE", "series": "EQ", "date": "2026-11-26",
+        "open": 100.0, "high": 105.0, "low": 99.0, "close": 104.0,
+        "volume": 1000, "provider": "tejhq_eod", "data_mode": "END_OF_DAY",
+    }]
+    monkeypatch.setattr(
+        market_ingestion, "bulk_symbol_history",
+        lambda exchange, targets, to_date, limit_per_symbol: (
+            calls.append((exchange, targets, to_date, limit_per_symbol)) or rows
+        ),
+    )
+    response = TestClient(api.app).post(
+        "/api/v1/app/market-data/ingestion/history/bulk",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "exchange": "nse",
+            "targets": [{"symbol": "RELIANCE", "from_date": "2026-11-17"}],
+            "to_date": "2026-11-27",
+            "limit_per_symbol": 30,
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["count"] == 1
+    assert response.json()["symbols_returned"] == 1
+    assert response.json()["bars"][0]["provider"] == "tejhq_eod"
+    assert calls[0][0] == "nse"
+    assert calls[0][1] == [{"symbol": "RELIANCE", "from_date": __import__("datetime").date(2026, 11, 17)}]
+    assert calls[0][3] == 30
+
+
+def test_bulk_market_history_rejects_more_than_two_thousand_targets(monkeypatch):
+    token = _session(monkeypatch)
+    targets = [{"symbol": f"STK{i}", "from_date": "2026-11-17"} for i in range(2001)]
+    response = TestClient(api.app).post(
+        "/api/v1/app/market-data/ingestion/history/bulk",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"exchange": "nse", "targets": targets, "to_date": "2026-11-27"},
+    )
+    assert response.status_code == 422
+
+
 def test_market_ingestion_collection_requires_app_session():
     client = TestClient(api.app)
     assert client.post("/api/v1/app/market-data/ingestion/collect/nse").status_code == 401
