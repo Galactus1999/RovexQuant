@@ -299,7 +299,7 @@ def test_openrouter_discovery_filters_for_chat_completions_endpoint(client, monk
                 },
             },
             {
-                "id": "provider/text-embedding-model",
+                "id": "provider/opaque-model-b",
                 "architecture": {
                     "modality": "text->embedding",
                     "input_modalities": ["text"],
