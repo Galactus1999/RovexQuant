@@ -40,7 +40,8 @@ fun AiWorkspaceScreen(
     session: QuantSession,
     repository: QuantDataRepository,
     equityInstruments: List<MarketEquityInstrument> = emptyList(),
-    indexKeys: Map<String, String> = emptyMap()
+    indexKeys: Map<String, String> = emptyMap(),
+    onOpenSettings: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     var providersLoading by remember { mutableStateOf(true) }
@@ -55,21 +56,8 @@ fun AiWorkspaceScreen(
     var selectedResearchRun by remember { mutableStateOf<com.rovexquant.app.data.model.AiResearchRunDetail?>(null) }
     var selectedRunLoading by remember { mutableStateOf(false) }
     var selectedRunError by remember { mutableStateOf<String?>(null) }
-    var selectedTaskType by rememberSaveable { mutableStateOf("research") }
-    var automaticTaskRouting by rememberSaveable { mutableStateOf(false) }
-    var credentialInput by remember { mutableStateOf("") }
-    var credentialSaving by remember { mutableStateOf(false) }
-    var credentialError by remember { mutableStateOf<String?>(null) }
-    var credentialDeleting by remember { mutableStateOf(false) }
-    var providerTesting by remember { mutableStateOf(false) }
-    var providerTestStatus by remember { mutableStateOf<String?>(null) }
-    var selectedFallbacks by remember { mutableStateOf(emptySet<String>()) }
-    var selectedProvider by rememberSaveable { mutableStateOf("") }
-    var model by rememberSaveable { mutableStateOf("") }
-    var messages by remember { mutableStateOf(emptyList<AiChatMessage>()) }
-    var chatInput by rememberSaveable { mutableStateOf("") }
-    var chatLoading by remember { mutableStateOf(false) }
-    var chatError by remember { mutableStateOf<String?>(null) }
+    val automaticTaskRouting = true
+    var evidenceDraft by rememberSaveable { mutableStateOf("") }
 
     var symbol by rememberSaveable { mutableStateOf("RELIANCE") }
     var exchange by rememberSaveable { mutableStateOf("NSE") }
@@ -91,12 +79,6 @@ fun AiWorkspaceScreen(
         providerError = null
         try {
             providers = repository.fetchAiProviders(session)
-            val configured = providers.filter { it.configured }
-            if (selectedProvider.isBlank() && providers.isNotEmpty()) {
-                val firstProvider = configured.firstOrNull() ?: providers.first()
-                selectedProvider = firstProvider.providerId
-                model = firstProvider.defaultModel.orEmpty()
-            }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
@@ -131,39 +113,7 @@ fun AiWorkspaceScreen(
     }
 
     val configuredProviders = providers.filter { it.configured }
-    val canUseAi = selectedProvider.isNotBlank() && model.isNotBlank() &&
-        configuredProviders.any { it.providerId == selectedProvider }
-    val canSendChat = if (automaticTaskRouting) selectedTaskType in configuredTaskRoutes else canUseAi
-    val canUseResearch = if (automaticTaskRouting) "research" in configuredTaskRoutes else canUseAi
-
-    fun sendMessage() {
-        val prompt = chatInput.trim()
-        if (prompt.isEmpty() || !canSendChat || chatLoading) return
-        val updated = (messages + AiChatMessage("user", prompt)).takeLast(10)
-        messages = updated
-        chatInput = ""
-        chatError = null
-        chatLoading = true
-        scope.launch {
-            try {
-                val response = repository.sendAiMessage(
-                    session = session,
-                    providerId = if (automaticTaskRouting) null else selectedProvider,
-                    model = if (automaticTaskRouting) null else model.trim(),
-                    messages = updated,
-                    fallbackProviders = if (automaticTaskRouting) emptyList() else selectedFallbacks.toList(),
-                    taskType = selectedTaskType
-                )
-                messages = (updated + AiChatMessage("assistant", response.content)).takeLast(10)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (failure: Exception) {
-                chatError = failure.message ?: "AI request failed."
-            } finally {
-                chatLoading = false
-            }
-        }
-    }
+    val canUseResearch = "research" in configuredTaskRoutes
 
     fun recoverEodData() {
         if (briefLoading) return
@@ -174,15 +124,15 @@ fun AiWorkspaceScreen(
             try {
                 brief = repository.requestAiStrategyBrief(
                     session = session,
-                    providerId = if (automaticTaskRouting) null else selectedProvider,
-                    model = if (automaticTaskRouting) null else model.trim(),
+                    providerId = null,
+                    model = null,
                     symbol = symbol.trim(),
                     exchange = exchange,
                     fromDate = fromDate.trim(),
                     toDate = toDate.trim(),
                     strategyContext = strategyContext.trim(),
-                    fallbackProviders = if (automaticTaskRouting) emptyList() else selectedFallbacks.toList(),
-                    automaticTaskRouting = automaticTaskRouting
+                    fallbackProviders = emptyList(),
+                    automaticTaskRouting = true
                 )
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -201,227 +151,39 @@ fun AiWorkspaceScreen(
     ) {
         item {
             SectionHeading(
-                "AI Studio · model and tool integrations",
+                "Evidence-led research · server-routed AI",
                 "Quant Intelligence.",
                 "Connect model providers, test credentials, configure failover and run approved research tools. Verified market evidence remains authoritative."
             )
         }
         item {
             TerminalCard {
-                Eyebrow("AI provider")
-                Spacer(Modifier.height(7.dp))
-                when {
-                    providersLoading -> Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Mint, strokeWidth = 2.dp)
-                        Text("Checking server-side providers…", color = Muted, fontSize = 11.sp)
-                    }
-                    providerError != null && providers.isEmpty() -> Text(
-                        providerError ?: "AI provider discovery failed.",
-                        color = Coral, fontSize = 11.sp, lineHeight = 17.sp
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Eyebrow("Server-owned AI routing")
+                    StatusPill(
+                        if (providersLoading) "Checking" else if (canUseResearch) "Research ready" else "Setup required",
+                        if (!providersLoading && canUseResearch) Mint else Gold
                     )
-                    providers.isEmpty() -> Text(
-                        "No supported AI providers were returned by the backend.",
-                        color = Gold, fontSize = 11.sp, lineHeight = 17.sp
-                    )
-                    else -> {
-                        Row(
-                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(7.dp)
-                        ) {
-                            providers.forEach { provider ->
-                                FilterChip(
-                                    selected = selectedProvider == provider.providerId,
-                                    onClick = {
-                                        selectedProvider = provider.providerId
-                                        model = provider.defaultModel.orEmpty()
-                                        credentialInput = ""
-                                        credentialError = null
-                                    },
-                                    label = {
-                                        Text(
-                                            provider.providerId.replaceFirstChar { it.uppercase() } +
-                                                if (provider.configured) " ✓" else " · setup"
-                                        )
-                                    }
-                                )
-                            }
-                        }
-                        val selected = providers.firstOrNull { it.providerId == selectedProvider }
-                        Spacer(Modifier.height(9.dp))
-                        StatusPill(
-                            if (selected?.configured == true) "Provider configured" else "Credential required",
-                            if (selected?.configured == true) Mint else Gold
-                        )
-                        Spacer(Modifier.height(7.dp))
-                        OutlinedTextField(
-                            value = credentialInput,
-                            onValueChange = { credentialInput = it.take(4096); credentialError = null },
-                            label = { Text("Provider API key") },
-                            placeholder = { Text("Paste the key from the provider console") },
-                            visualTransformation = PasswordVisualTransformation(),
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth().testTag("ai.provider.key")
-                        )
-                        Button(
-                            onClick = {
-                                val providerId = selectedProvider
-                                val apiKey = credentialInput.trim()
-                                if (providerId.isBlank() || apiKey.length !in 20..4096 || credentialSaving) return@Button
-                                credentialSaving = true
-                                credentialError = null
-                                scope.launch {
-                                    try {
-                                        repository.saveAiProviderCredential(session, providerId, apiKey)
-                                        credentialInput = ""
-                                        providers = repository.fetchAiProviders(session)
-                                        val updated = providers.firstOrNull { it.providerId == providerId }
-                                        model = updated?.defaultModel.orEmpty().ifBlank { model }
-                                    } catch (cancelled: CancellationException) {
-                                        throw cancelled
-                                    } catch (failure: Exception) {
-                                        credentialError = failure.message ?: "Unable to store provider credential."
-                                    } finally {
-                                        credentialSaving = false
-                                    }
-                                }
-                            },
-                            enabled = !credentialSaving && credentialInput.trim().length in 20..4096,
-                            modifier = Modifier.fillMaxWidth().testTag("ai.provider.save")
-                        ) {
-                            Text(if (credentialSaving) "Encrypting on backend…" else "Save encrypted provider key")
-                        }
-                        credentialError?.let {
-                            Text(it, color = Coral, fontSize = 10.sp, lineHeight = 15.sp)
-                        }
-                    }
                 }
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = model,
-                    onValueChange = { model = it.take(160) },
-                    label = { Text("Provider model ID") },
-                    placeholder = { Text("Enter a model enabled for this provider") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().testTag("ai.model")
-                )
                 Text(
-                    "API keys are encrypted in the server-side vault. They are not stored in this APK or sent in prompts. Provider connectivity is verified only by the explicit test below.",
-                    color = Muted, fontSize = 10.sp, lineHeight = 15.sp
+                    "${configuredProviders.size} configured provider(s) · credentials and model setup are managed in Settings.",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp
                 )
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = {
-                            if (providerTesting || selectedProvider.isBlank() || model.isBlank()) return@Button
-                            providerTesting = true
-                            providerTestStatus = null
-                            scope.launch {
-                                try {
-                                    val result = repository.sendAiMessage(
-                                        session = session, providerId = selectedProvider, model = model.trim(),
-                                        messages = listOf(AiChatMessage("user", "Reply with exactly ROVEX_AI_CONNECTION_OK."))
-                                    )
-                                    providerTestStatus = "Connected · ${result.providerId} / ${result.model}"
-                                } catch (cancelled: CancellationException) {
-                                    throw cancelled
-                                } catch (failure: Exception) {
-                                    providerTestStatus = "Connection failed: ${failure.message ?: "provider request failed"}"
-                                } finally { providerTesting = false }
-                            }
-                        },
-                        enabled = canUseAi && !providerTesting,
-                        modifier = Modifier.weight(1f).testTag("ai.provider.test")
-                    ) {
-                        if (providerTesting) CircularProgressIndicator(modifier = Modifier.size(16.dp)) else Text("Test connection")
-                    }
-                    if (providers.firstOrNull { it.providerId == selectedProvider }?.credentialIds?.contains("app") == true) {
-                        TextButton(
-                            enabled = !credentialDeleting && !credentialSaving,
-                            onClick = {
-                                credentialDeleting = true
-                                credentialError = null
-                                scope.launch {
-                                    try {
-                                        repository.deleteAiProviderCredential(session, selectedProvider)
-                                        providers = repository.fetchAiProviders(session)
-                                        providerTestStatus = "App-stored key removed. Environment-managed keys, if any, remain configured."
-                                    } catch (cancelled: CancellationException) {
-                                        throw cancelled
-                                    } catch (failure: Exception) {
-                                        credentialError = failure.message ?: "Unable to remove provider key."
-                                    } finally { credentialDeleting = false }
-                                }
-                            }
-                        ) { Text(if (credentialDeleting) "Removing…" else "Remove app key") }
-                    }
+                configuredTaskRoutes["research"]?.let { route ->
+                    Text("Research route · ${route.providerId}/${route.model}", color = Mint, fontSize = 10.sp)
                 }
-                providerTestStatus?.let {
-                    Text(it, color = if (it.startsWith("Connected")) Mint else Gold, fontSize = 10.sp, lineHeight = 15.sp)
+                providerError?.let { Text(it, color = Gold, fontSize = 10.sp) }
+                taskRoutesError?.let { Text(it, color = Gold, fontSize = 10.sp) }
+                Button(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth().testTag("ai.open.settings")) {
+                    Text("Manage providers in Settings")
                 }
-                val fallbackOptions = configuredProviders.filter { it.providerId != selectedProvider && it.fallbackModelConfigured }
-                Spacer(Modifier.height(8.dp))
-                Eyebrow("Automatic failover · transient errors only")
-                if (fallbackOptions.isEmpty()) {
-                    Text("Failover becomes available when another configured provider has a server-side fallback model.", color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
-                } else {
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                        fallbackOptions.forEach { candidate ->
-                            FilterChip(
-                                selected = candidate.providerId in selectedFallbacks,
-                                onClick = {
-                                    selectedFallbacks = if (candidate.providerId in selectedFallbacks) selectedFallbacks - candidate.providerId
-                                    else (selectedFallbacks + candidate.providerId).take(3).toSet()
-                                },
-                                label = { Text(candidate.providerId.replaceFirstChar { it.uppercase() }) }
-                            )
-                        }
-                    }
-                    Text("Fallback providers need a server-side fallback model and credential. Authentication and entitlement errors never silently switch providers.", color = Muted, fontSize = 9.sp, lineHeight = 14.sp)
-                }
-                Spacer(Modifier.height(10.dp))
-                Eyebrow("Task-specific server routing")
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    listOf("research", "chat", "macro_analysis", "filing_extraction", "claim_verification", "summarization").forEach { task ->
-                        FilterChip(
-                            selected = selectedTaskType == task,
-                            onClick = { selectedTaskType = task },
-                            enabled = !chatLoading && !briefLoading,
-                            label = { Text(task.replace('_', ' ').replaceFirstChar { it.uppercase() }) },
-                            modifier = Modifier.testTag("ai.task.type.$task")
-                        )
-                    }
-                }
-                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = automaticTaskRouting,
-                        onCheckedChange = { automaticTaskRouting = it },
-                        enabled = !chatLoading && !briefLoading,
-                        modifier = Modifier.testTag("ai.task.auto")
-                    )
-                    Text("Use server-owned task route instead of manual provider/model", color = Muted, fontSize = 10.sp)
-                }
-                configuredTaskRoutes[selectedTaskType]?.let { route ->
-                    Text(
-                        "Configured route · ${route.providerId}/${route.model}" +
-                            if (route.fallbackProviders.isEmpty()) " · no failover" else " · failover: ${route.fallbackProviders.joinToString()}",
-                        color = Mint, fontSize = 9.sp, lineHeight = 14.sp, modifier = Modifier.testTag("ai.task.route")
-                    )
-                }
-                if (automaticTaskRouting && selectedTaskType !in configuredTaskRoutes) {
-                    Text(
-                        "No server route is configured for this task. Add QUANT_AI_TASK_ROUTES on the backend or switch to manual provider selection.",
-                        color = Gold, fontSize = 9.sp, lineHeight = 14.sp
-                    )
-                }
-                taskRoutesError?.let { Text("Task routes unavailable: $it", color = Gold, fontSize = 9.sp) }
-                credentialError?.let { Text(it, color = Coral, fontSize = 10.sp, lineHeight = 15.sp) }
             }
         }
         item {
             AiResearchToolsPanel(session, repository) { context ->
-                chatInput = (context + "\n\n" + chatInput).take(10000)
+                evidenceDraft = (context + "\n\n" + evidenceDraft).take(10000)
                 chatError = null
             }
         }
@@ -429,11 +191,11 @@ fun AiWorkspaceScreen(
             AiResearchBriefingPanel(
                 session = session,
                 repository = repository,
-                providerId = selectedProvider,
-                model = model,
-                fallbackProviders = selectedFallbacks.toList(),
+                providerId = "",
+                model = "",
+                fallbackProviders = emptyList(),
                 canUseAi = canUseResearch,
-                evidenceDraft = chatInput,
+                evidenceDraft = evidenceDraft,
                 automaticTaskRouting = automaticTaskRouting
             )
         }
@@ -562,7 +324,7 @@ fun AiWorkspaceScreen(
                     session = session,
                     repository = repository,
                     onAttachToAi = { context ->
-                        chatInput = (context + "\n\n" + chatInput).take(10000)
+                        evidenceDraft = (context + "\n\n" + evidenceDraft).take(10000)
                         chatError = null
                     },
                     equityInstruments = equityInstruments,
@@ -572,55 +334,15 @@ fun AiWorkspaceScreen(
         }
         item {
             TerminalCard {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Eyebrow("AI conversation")
-                    StatusPill(if (chatLoading) "Thinking" else if (canSendChat) "Configured" else "Setup required", if (chatLoading) Gold else if (canSendChat) Mint else Gold)
-                }
-                Spacer(Modifier.height(8.dp))
-                if (messages.isEmpty()) {
-                    Text(
-                        "Start with a question about a strategy, indicator, market-data quality or research methodology.",
-                        color = Muted, fontSize = 11.sp, lineHeight = 17.sp
-                    )
-                } else {
-                    messages.forEach { message ->
-                        Column(
-                            Modifier.fillMaxWidth()
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(if (message.role == "user") PanelRaised else Ink)
-                                .padding(11.dp)
-                        ) {
-                            Text(
-                                if (message.role == "user") "YOU" else "QUANT AI",
-                                color = if (message.role == "user") Cyan else Mint,
-                                fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(message.content, color = MaterialTheme.colorScheme.onBackground, fontSize = 12.sp, lineHeight = 18.sp)
-                        }
-                        Spacer(Modifier.height(7.dp))
-                    }
-                }
-                OutlinedTextField(
-                    value = chatInput,
-                    onValueChange = { chatInput = it.take(6000) },
-                    label = { Text("Ask Quant AI") },
-                    placeholder = { Text("Explain this setup or help structure a research test…") },
-                    modifier = Modifier.fillMaxWidth().testTag("ai.chat.input"),
-                    minLines = 2,
-                    maxLines = 5
+                Eyebrow("Contextual Copilot")
+                Text(
+                    "The conversational assistant is available from the Copilot control on Market Pulse. It uses the server-owned chat route and can receive metric or strategy context.",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 11.sp,
+                    lineHeight = 17.sp
                 )
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = ::sendMessage,
-                    enabled = canSendChat && chatInput.isNotBlank() && !chatLoading,
-                    modifier = Modifier.fillMaxWidth().testTag("ai.chat.send")
-                ) {
-                    Text(if (chatLoading) "Generating…" else "Send to Quant AI")
-                }
-                if (chatError != null) Text(chatError!!, color = Coral, fontSize = 11.sp, lineHeight = 16.sp)
-                TextButton(onClick = { messages = emptyList(); chatError = null }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Clear conversation")
+                Button(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
+                    Text("Review AI provider setup")
                 }
             }
         }
