@@ -27,7 +27,6 @@ fun SettingsScreen(
     session: QuantSession,
     repository: QuantDataRepository,
     onBack: () -> Unit,
-    onOpenAiSettings: () -> Unit,
     onOpenMarketPulse: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -156,20 +155,7 @@ fun SettingsScreen(
             }
         }
         item {
-            TerminalCard {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Eyebrow("AI provider connections")
-                    StatusPill(
-                        if (providersLoading) "Checking" else "$configuredAiProviders configured",
-                        if (!providersLoading && configuredAiProviders > 0) Mint else Gold
-                    )
-                }
-                providerError?.let { Text(it, color = Coral, fontSize = 10.sp) }
-
-                Button(onClick = onOpenAiSettings, modifier = Modifier.fillMaxWidth()) {
-                    Text("Open AI provider settings")
-                }
-            }
+            AiProviderSettingsPanel(session = session, repository = repository)
         }
         item {
             TerminalCard {
