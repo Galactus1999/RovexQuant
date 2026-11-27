@@ -215,3 +215,28 @@ def test_auto_route_skips_unconfigured_and_uses_next_enabled_provider(client, mo
     assert provider == "deepseek"
     assert model == "deepseek-chat-current"
     assert fallbacks == []
+
+
+
+def test_chat_automatically_discovers_model_when_no_task_routes_exist(client, monkeypatch):
+    monkeypatch.delenv("QUANT_AI_TASK_ROUTES", raising=False)
+    monkeypatch.delenv("GROQ_DEFAULT_MODEL", raising=False)
+    FakeAsyncClient.catalogue_responses = [
+        FakeResponse(200, {"data": [{"id": "embedding-only"}, {"id": "groq-chat-current"}]})
+    ]
+    FakeAsyncClient.responses = [
+        FakeResponse(200, {"choices": [{"message": {"content": "Automatic response"}}]})
+    ]
+    import asyncio
+
+    result = asyncio.run(gateway.complete_chat(
+        provider_id=None,
+        model=None,
+        enabled_provider_ids=["groq"],
+        messages=[{"role": "user", "content": "Test automatic selection."}],
+    ))
+    assert result["provider_id"] == "groq"
+    assert result["model"] == "groq-chat-current"
+    assert result["content"] == "Automatic response"
+    assert any(request.get("url", "").endswith("/models") for request in FakeAsyncClient.requests)
+    assert any(request.get("url", "").endswith("/chat/completions") for request in FakeAsyncClient.requests)
