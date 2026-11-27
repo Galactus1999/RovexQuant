@@ -126,8 +126,6 @@ def configured_providers() -> list[dict[str, Any]]:
             "provider_id": provider_id,
             "configured": bool(credentials),
             "credential_ids": [item.credential_id for item in credentials],
-            "default_model": os.getenv(f"{provider_id.upper()}_DEFAULT_MODEL", "").strip() or None,
-            "fallback_model_configured": bool(os.getenv(f"{provider_id.upper()}_FALLBACK_MODEL", "").strip()),
             "api_base": config.base_url,
         })
     return result
@@ -155,11 +153,6 @@ async def discover_provider_model(provider_id: str) -> str | None:
     """Discover a usable chat model from the provider catalogue; never require a caller model ID."""
     if provider_id not in SUPPORTED:
         raise GatewayError("Unsupported AI provider", 400)
-    configured_default = os.getenv(f"{provider_id.upper()}_DEFAULT_MODEL", "").strip()
-    if configured_default:
-        if len(configured_default) > 160:
-            raise GatewayError(f"Invalid default model configuration for {provider_id}", 503)
-        return configured_default
     credentials = _credentials_for(provider_id)
     if not credentials:
         return None
@@ -206,7 +199,7 @@ async def discover_provider_model(provider_id: str) -> str | None:
         if provider_id == "gemini" and model_id.startswith("models/"):
             model_id = model_id.split("/", 1)[1]
         normalized = model_id.lower()
-        if any(term in normalized for term in excluded):
+        if len(model_id) > 160 or any(term in normalized for term in excluded):
             continue
         # Provider metadata, when supplied, can explicitly identify non-chat models.
         architecture = row.get("architecture")
@@ -318,8 +311,7 @@ async def complete_chat(
             selected_id = credential_id if index == 0 else None
             credential = _select_credential(candidate, selected_id)
             config = SUPPORTED[candidate]
-            fallback_model = os.getenv(f"{candidate.upper()}_FALLBACK_MODEL", "").strip()
-            selected_model = model if index == 0 else (fallback_model or await discover_provider_model(candidate))
+            selected_model = model if index == 0 else await discover_provider_model(candidate)
             if not selected_model:
                 last_error = GatewayError(f"No discoverable chat model is available for {candidate}", 503)
                 continue
