@@ -128,10 +128,16 @@ class QuantDashboardRegressionTest {
             .performScrollToNode(hasTestTag("strategy.metric.peek"))
         composeRule.onNodeWithTag("strategy.metric.peek").assertIsDisplayed()
         composeRule.onNodeWithTag("strategy.metric.ask.copilot").performClick()
+        // A semantics node can exist while the lower portion of a modal sheet is
+        // clipped. Wait for actual viewport visibility, not composition alone.
         composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithTag("copilot.input").fetchSemanticsNodes().isNotEmpty()
+            runCatching {
+                composeRule.onNodeWithTag("copilot.input").assertIsDisplayed()
+                composeRule.onNodeWithTag("copilot.send").assertIsDisplayed()
+            }.isSuccess
         }
         composeRule.onNodeWithTag("copilot.input").assertIsDisplayed()
+        composeRule.onNodeWithTag("copilot.send").assertIsDisplayed()
         val chatRequestsBeforeCopilotSend = activity.fakeRepository.aiChatRequestCount
         composeRule.onNodeWithTag("copilot.send").performClick()
         composeRule.waitUntil(10_000) {
