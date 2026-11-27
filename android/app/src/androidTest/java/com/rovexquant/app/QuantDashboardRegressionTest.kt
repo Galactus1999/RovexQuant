@@ -103,7 +103,6 @@ class QuantDashboardRegressionTest {
         waitForDashboard()
         val activity = composeRule.activity
         val initialHistoryRequests = activity.fakeRepository.instrumentHistoryRequestCount
-        val initialChatRequests = activity.fakeRepository.aiChatRequestCount
 
         composeRule.onNodeWithTag("market.pulse.list")
             .performScrollToNode(hasTestTag("strategy.run"))
