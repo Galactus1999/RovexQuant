@@ -57,6 +57,21 @@ class QuantDashboardRegressionTest {
         }
     }
 
+    private fun waitForAutomaticProviderReadiness() {
+        // The provider status is populated by an asynchronous backend fetch.
+        // Wait for the current user-facing contract, not the retired task-route
+        // string that exposed a pinned model ID.
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToIndex(1)
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText("Research ready")
+                .fetchSemanticsNodes().isNotEmpty() &&
+                composeRule.onAllNodesWithTag("ai.open.settings")
+                    .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("Research ready").assertIsDisplayed()
+        composeRule.onNodeWithTag("ai.open.settings").assertIsDisplayed()
+    }
+
     private fun clickIndicator(key: String) {
         val tag = "instrument.chart.indicator.$key.toggle"
         // The controls live in a nested horizontal scroller inside the screen's
@@ -452,13 +467,7 @@ class QuantDashboardRegressionTest {
         // Provider/model configuration is deliberately outside this research
         // workspace. Verify the server-owned route as read-only state instead of
         // testing the retired provider selector and embedded chat panel.
-        composeRule.onNodeWithTag("ai.workspace.list").performScrollToIndex(1)
-        composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithText("Research route · groq/server-research-model", substring = true)
-                .fetchSemanticsNodes().isNotEmpty()
-        }
-        composeRule.onNodeWithText("Research route · groq/server-research-model", substring = true)
-            .assertIsDisplayed()
+        waitForAutomaticProviderReadiness()
         composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.recovery.symbol.find"))
         composeRule.onNodeWithTag("ai.recovery.symbol.find").performClick()
         composeRule.onNodeWithTag("instrument.global.search.input").performTextInput("Reliance Industries")
@@ -505,25 +514,26 @@ class QuantDashboardRegressionTest {
         composeRule.onNodeWithText("No machine-verifiable source references returned.", substring = true).assertIsDisplayed()
     }
 
-    @Test fun aiWorkspaceUsesConfiguredServerTaskRoute() {
+    @Test fun aiWorkspaceUsesAutomaticProviderDiscoveryAndProviderSwitches() {
         waitForDashboard()
         composeRule.onNodeWithText("Scan").performClick()
         composeRule.onNodeWithTag("scanner.list").performScrollToIndex(8)
         composeRule.onNodeWithTag("scanner.ai.recovery").performScrollTo().performClick()
         composeRule.onNodeWithText("Quant Intelligence.").assertIsDisplayed()
 
-        composeRule.onNodeWithTag("ai.workspace.list").performScrollToIndex(1)
-        composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithText("Research route · groq/server-research-model", substring = true)
-                .fetchSemanticsNodes().isNotEmpty()
-        }
-        composeRule.onNodeWithText("Research route · groq/server-research-model", substring = true)
-            .assertIsDisplayed()
-        composeRule.onNodeWithTag("ai.open.settings").performScrollTo().performClick()
+        waitForAutomaticProviderReadiness()
+        composeRule.onNodeWithTag("ai.open.settings").performClick()
         composeRule.onNodeWithTag("settings.screen").assertIsDisplayed()
         composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithTag("settings.ai.provider.key").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag("settings.ai.provider.toggle.groq")
+                .fetchSemanticsNodes().isNotEmpty() &&
+                composeRule.onAllNodesWithTag("settings.ai.provider.key")
+                    .fetchSemanticsNodes().isNotEmpty()
         }
+        composeRule.onNodeWithTag("settings.ai.provider.toggle.groq").assertIsOn()
+        composeRule.onNodeWithText(
+            "Turn providers on or off. RovexQuant discovers a compatible chat model automatically."
+        ).assertIsDisplayed()
     }
 
     @Test fun intelligenceCentreLoadsEventEvidenceAndSectorTransmission() {
