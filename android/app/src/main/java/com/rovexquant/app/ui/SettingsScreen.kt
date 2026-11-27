@@ -34,9 +34,6 @@ fun SettingsScreen(
     var tokenInput by remember { mutableStateOf("") }
     var savingToken by remember { mutableStateOf(false) }
     var tokenError by remember { mutableStateOf<String?>(null) }
-    var providersLoading by remember { mutableStateOf(true) }
-    var configuredAiProviders by remember { mutableStateOf(0) }
-    var providerError by remember { mutableStateOf<String?>(null) }
     var ingestionStatus by remember { mutableStateOf<MarketIngestionStatus?>(null) }
     var ingestionLoading by remember { mutableStateOf(false) }
     var ingestionError by remember { mutableStateOf<String?>(null) }
@@ -61,15 +58,6 @@ fun SettingsScreen(
             ingestionError = failure.message ?: "Database status unavailable"
         } finally {
             ingestionLoading = false
-        }
-        try {
-            configuredAiProviders = repository.fetchAiProviders(session).count { it.configured }
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (failure: Exception) {
-            providerError = failure.message ?: "AI provider status unavailable"
-        } finally {
-            providersLoading = false
         }
     }
 
