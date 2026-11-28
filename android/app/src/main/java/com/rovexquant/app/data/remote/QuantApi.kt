@@ -21,6 +21,8 @@ import com.rovexquant.app.data.model.SectorImpact
 import com.rovexquant.app.data.model.MarketIndexInstrument
 import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.model.MarketIngestionStatus
+import com.rovexquant.app.data.model.MarketHistoryTarget
+import com.rovexquant.app.data.model.MarketHistoryBulkResult
 import com.rovexquant.app.data.model.MacroResearchSummary
 import com.rovexquant.app.data.model.MarketIntegrityDifference
 import com.rovexquant.app.data.model.MarketIntegrityStatus
@@ -47,6 +49,9 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import java.time.LocalDate
+import java.time.OffsetDateTime
+import java.util.Locale
 
 object QuantApi {
     private val http = OkHttpClient.Builder()
@@ -1287,6 +1292,81 @@ object QuantApi {
             )
         }
     }
+    fun fetchMarketHistoryBulk(
+        session: QuantSession,
+        exchange: String,
+        targets: List<MarketHistoryTarget>,
+        toDate: LocalDate,
+        limitPerSymbol: Int = 60
+    ): MarketHistoryBulkResult {
+        val market = exchange.trim().lowercase(Locale.ROOT)
+        require(market in setOf("nse", "bse")) { "Exchange must be NSE or BSE." }
+        require(targets.isNotEmpty() && targets.size <= 2_000) {
+            "Bulk history supports 1 to 2,000 imported instruments per request."
+        }
+        require(limitPerSymbol in 1..60) { "Bulk history limit must be between 1 and 60 bars per symbol." }
+        val normalized = targets.map {
+            val symbol = it.symbol.trim().uppercase(Locale.ROOT)
+            require(symbol.matches(Regex("^[A-Z0-9][A-Z0-9&-]{0,29}$"))) {
+                "Invalid instrument symbol in bulk history request."
+            }
+            require(!it.fromDate.isAfter(toDate)) { "Bulk history start date is after the end date." }
+            symbol to it.fromDate
+        }
+        require(normalized.map { it.first }.distinct().size == normalized.size) {
+            "Bulk history request contains duplicate symbols."
+        }
+        val body = JSONObject()
+            .put("exchange", market)
+            .put("targets", JSONArray().apply {
+                normalized.forEach { (symbol, fromDate) ->
+                    put(JSONObject().put("symbol", symbol).put("from_date", fromDate.toString()))
+                }
+            })
+            .put("to_date", toDate.toString())
+            .put("limit_per_symbol", limitPerSymbol)
+        val request = Request.Builder()
+            .url(session.baseUrl + "/api/v1/app/market-data/ingestion/history/bulk")
+            .header("Authorization", "Bearer " + session.accessToken)
+            .post(body.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+        researchHttp.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException(apiError(text, response.code))
+            require(text.toByteArray(Charsets.UTF_8).size <= 12 * 1024 * 1024) {
+                "Bulk market history response exceeds the 12 MB mobile safety limit."
+            }
+            val root = JSONObject(text)
+            val rows = root.optJSONArray("bars") ?: JSONArray()
+            val grouped = linkedMapOf<String, MutableList<OhlcvBar>>()
+            val providers = linkedMapOf<String, String>()
+            for (index in 0 until rows.length()) {
+                val row = rows.optJSONObject(index) ?: continue
+                val symbol = row.optString("symbol").trim().uppercase(Locale.ROOT)
+                if (symbol.isBlank()) continue
+                val date = LocalDate.parse(row.getString("date"))
+                val timestamp = OffsetDateTime.parse(date.toString() + "T00:00:00+05:30")
+                val open = row.getDouble("open")
+                val high = row.getDouble("high")
+                val low = row.getDouble("low")
+                val close = row.getDouble("close")
+                val volume = row.optLong("volume", 0L)
+                require(open > 0.0 && high >= maxOf(open, close) && low <= minOf(open, close) && high >= low) {
+                    "Bulk history returned invalid OHLC values for " + symbol
+                }
+                require(volume >= 0L) { "Bulk history returned negative volume for " + symbol }
+                grouped.getOrPut(symbol) { mutableListOf() }.add(
+                    OhlcvBar(timestamp, open, high, low, close, volume)
+                )
+                row.optString("provider").takeIf { it.isNotBlank() }?.let { providers[symbol] = it }
+            }
+            return MarketHistoryBulkResult(
+                barsBySymbol = grouped.mapValues { (_, bars) -> bars.sortedBy { it.timestamp.toInstant() } },
+                providersBySymbol = providers
+            )
+        }
+    }
+
     fun fetchLatestEodMarketSnapshot(
         session: QuantSession,
         exchange: String = "nse",

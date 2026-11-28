@@ -5,6 +5,7 @@ import com.rovexquant.app.data.model.MarketEquityInstrument
 import com.rovexquant.app.data.local.TejHqOhlcvStore
 import com.rovexquant.app.data.local.ResearchCsvDatasetStore
 import com.rovexquant.app.data.local.ResearchCsvFolderImporter
+import com.rovexquant.app.data.local.ResearchCsvAutoSyncManager
 import com.rovexquant.app.data.model.MacroResearchSummary
 import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.repository.QuantDataRepository
@@ -18,6 +19,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
@@ -56,6 +58,15 @@ fun ResearchLabScreen(
     var csvFolderStatus by remember { mutableStateOf<String?>(null) }
     var csvFolderError by remember { mutableStateOf<String?>(null) }
     var csvFolderDatasets by remember { mutableStateOf(ResearchCsvDatasetStore.list(context)) }
+    val csvAutoSyncPrefs = remember(context) {
+        context.getSharedPreferences("research_csv_auto_sync", 0)
+    }
+    var csvAutoSyncEnabled by remember(context) {
+        mutableStateOf(csvAutoSyncPrefs.getBoolean("enabled", true))
+    }
+    var csvAutoSyncLoading by remember { mutableStateOf(false) }
+    var csvAutoSyncStatus by remember { mutableStateOf<String?>(null) }
+    var csvAutoSyncError by remember { mutableStateOf<String?>(null) }
     var macroSummary by remember { mutableStateOf<MacroResearchSummary?>(null) }
     var macroLoading by remember { mutableStateOf(false) }
     var macroError by remember { mutableStateOf<String?>(null) }
@@ -106,21 +117,86 @@ fun ResearchLabScreen(
         refreshMacroResearch()
     }
 
+    fun runCsvAutoSync(force: Boolean) {
+        if (csvAutoSyncLoading) return
+        if (session == null || repository == null) {
+            csvAutoSyncError = "Sign in and connect the Quant workspace before refreshing imported datasets."
+            return
+        }
+        if (csvFolderDatasets.isEmpty()) {
+            csvAutoSyncStatus = "Import instrument-mapped CSV datasets first."
+            return
+        }
+        csvAutoSyncLoading = true
+        csvAutoSyncError = null
+        scope.launch {
+            try {
+                val report = ResearchCsvAutoSyncManager.sync(
+                    context, repository, session, force = force
+                )
+                csvFolderDatasets = withContext(Dispatchers.IO) {
+                    ResearchCsvDatasetStore.list(context)
+                }
+                csvAutoSyncStatus = report.summary
+                csvAutoSyncError = report.errors.take(5).joinToString(" · ")
+                    .takeIf { it.isNotBlank() }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                csvAutoSyncError = failure.message ?: "Imported datasets could not be refreshed."
+            } finally {
+                csvAutoSyncLoading = false
+            }
+        }
+    }
+
+    LaunchedEffect(session, repository, csvAutoSyncEnabled, csvFolderDatasets.size) {
+        if (csvAutoSyncEnabled && session != null && repository != null && csvFolderDatasets.isNotEmpty()) {
+            runCsvAutoSync(force = false)
+        }
+    }
+
     fun loadSelectedFile(uri: Uri) {
         loading = true
         error = null
         scope.launch {
             try {
                 val loaded = withContext(Dispatchers.IO) {
-                    val csv = context.contentResolver.openInputStream(uri)?.use { it.readUtf8Limited() }
+                    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytesLimited() }
                         ?: throw IllegalArgumentException("Could not open the selected file")
-                    val bars = OhlcvCsvResearch.parse(csv)
-                    // Keep manual research imports isolated from every typed instrument cache.
-                    TejHqOhlcvStore.save(context, bars)
-                    OhlcvCsvResearch.summarize(bars)
+                    val sourceName = uri.lastPathSegment?.substringAfterLast('/') ?: "Imported CSV"
+                    val exchangeDatasets = ResearchCsvFolderImporter.importExchangeBhavcopy(
+                        context, sourceName, bytes
+                    )
+                    if (exchangeDatasets != null) {
+                        val first = exchangeDatasets.firstOrNull()
+                            ?: throw IllegalArgumentException("Exchange Bhavcopy contained no importable instruments.")
+                        val bars = ResearchCsvDatasetStore.load(context, first)
+                            ?: throw IllegalStateException("Imported exchange dataset could not be reopened.")
+                        OhlcvCsvResearch.summarize(bars) to
+                            ("Exchange Bhavcopy · " + exchangeDatasets.size + " instruments imported")
+                    } else {
+                        val csv = ResearchCsvFolderImporter.decodeCsvPayload(bytes)
+                        val namedDataset = ResearchCsvFolderImporter.importNamedInstrumentCsv(
+                            context, sourceName, csv
+                        )
+                        if (namedDataset != null) {
+                            val bars = ResearchCsvDatasetStore.load(context, namedDataset)
+                                ?: throw IllegalStateException("Imported instrument dataset could not be reopened.")
+                            OhlcvCsvResearch.summarize(bars) to
+                                ("CSV · " + namedDataset.label + " · " + bars.size + " bars")
+                        } else {
+                            val bars = OhlcvCsvResearch.parse(csv)
+                            // Unnamed files remain isolated until the user supplies instrument identity.
+                            TejHqOhlcvStore.save(context, bars)
+                            OhlcvCsvResearch.summarize(bars) to sourceName
+                        }
+                    }
                 }
-                summary = loaded
-                datasetName = uri.lastPathSegment?.substringAfterLast('/') ?: "Imported CSV"
+                summary = loaded.first
+                datasetName = loaded.second
+                csvFolderDatasets = ResearchCsvDatasetStore.list(context)
+                if (csvAutoSyncEnabled) runCsvAutoSync(force = false)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
@@ -145,6 +221,9 @@ fun ResearchLabScreen(
             }
             csvFolderDatasets = report.datasets
             csvFolderStatus = report.summary
+            if (csvAutoSyncEnabled && session != null && repository != null) {
+                runCsvAutoSync(force = false)
+            }
             csvFolderError = report.errors.take(5).joinToString(" · ").takeIf { it.isNotBlank() }
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -288,6 +367,53 @@ fun ResearchLabScreen(
         }
         item {
             TerminalCard {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Eyebrow("Automatic data updates")
+                        Text(
+                            "Refresh imported daily datasets",
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Switch(
+                        checked = csvAutoSyncEnabled,
+                        onCheckedChange = { enabled ->
+                            csvAutoSyncEnabled = enabled
+                            csvAutoSyncPrefs.edit().putBoolean("enabled", enabled).apply()
+                        },
+                        modifier = Modifier.testTag("research.csv.auto_sync")
+                    )
+                }
+                Text(
+                    "When Research Lab opens, the app checks mapped datasets every 4 hours. Equity history is refreshed in exchange batches from the persistent EOD Data Hub; supported NSE indices use Upstox historical candles. Requires internet and a signed-in Quant session. It does not run while the app is closed.",
+                    color = Muted,
+                    fontSize = 10.sp,
+                    lineHeight = 16.sp
+                )
+                Button(
+                    onClick = { runCsvAutoSync(force = true) },
+                    enabled = !csvAutoSyncLoading && csvFolderDatasets.isNotEmpty() &&
+                        session != null && repository != null,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (csvAutoSyncLoading) "Refreshing imported datasets…" else "Sync imported datasets now")
+                }
+                csvAutoSyncStatus?.let {
+                    Text(it, color = Mint, fontSize = 10.sp, lineHeight = 15.sp)
+                }
+                csvAutoSyncError?.let {
+                    Text(it, color = Coral, fontSize = 10.sp, lineHeight = 15.sp)
+                }
+            }
+        }
+        item {
+            TerminalCard {
                 Eyebrow("Automatic CSV folder import")
                 Text(
                     "Choose a folder once. Its immediate CSV files are rescanned whenever Research Lab opens or when you tap Scan now. Only this selected folder is read; the app does not crawl device storage.",
@@ -338,7 +464,9 @@ fun ResearchLabScreen(
                                 Text(
                                     dataset.rowCount.toString() + " bars · " +
                                         dataset.firstTimestamp.substringBefore("T") + " to " +
-                                        dataset.lastTimestamp.substringBefore("T"),
+                                        dataset.lastTimestamp.substringBefore("T") +
+                                        (dataset.lastSyncProvider?.let { " · updated via " + it } ?: " · awaiting online update") +
+                                        (if (dataset.priceBasis == "ADJUSTED_CLOSE") " · adjusted-only" else ""),
                                     color = Muted,
                                     fontSize = 9.sp
                                 )
@@ -381,7 +509,7 @@ fun ResearchLabScreen(
                 Spacer(Modifier.height(7.dp))
                 Text(datasetName, color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(5.dp))
-                Text("CSV columns required: timestamp, open, high, low, close, volume. Timestamps must include an ISO-8601 timezone offset. Maximum file size: 20 MB.", color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
+                Text("Supports CSV and single-CSV ZIP files from common broker exports and NSE/BSE UDiFF Bhavcopy. Delimiters, common header aliases, quoted values, UTF-8/UTF-16 and Indian date formats are detected. Multi-security Bhavcopy rows are split into separate instrument datasets. Maximum selected file size: 20 MB.", color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
                 Spacer(Modifier.height(12.dp))
                 Button(onClick = { picker.launch(arrayOf("text/*", "text/csv", "application/csv", "application/vnd.ms-excel", "*/*")) }, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
                     Text(if (loading) "Importing…" else "Import OHLCV CSV")
@@ -446,7 +574,7 @@ private fun IndicatorLine(label: String, value: String) {
     }
 }
 
-private fun InputStream.readUtf8Limited(): String {
+private fun InputStream.readBytesLimited(): ByteArray {
     val output = ByteArrayOutputStream()
     val buffer = ByteArray(8192)
     var total = 0
@@ -454,8 +582,8 @@ private fun InputStream.readUtf8Limited(): String {
         val count = read(buffer)
         if (count < 0) break
         total += count
-        require(total <= MAX_CSV_BYTES) { "CSV exceeds the 20 MB import limit" }
+        require(total <= MAX_CSV_BYTES) { "Selected file exceeds the 20 MB import limit" }
         output.write(buffer, 0, count)
     }
-    return String(output.toByteArray(), Charsets.UTF_8)
+    return output.toByteArray()
 }

@@ -24,7 +24,10 @@ data class ResearchCsvDatasetMetadata(
     val lastTimestamp: String,
     val updatedAtMillis: Long,
     val sourceFileName: String,
-    val fileName: String
+    val fileName: String,
+    val lastSyncedAtMillis: Long = 0L,
+    val lastSyncProvider: String? = null,
+    val priceBasis: String = "RAW_CLOSE"
 ) {
     val label: String get() = "$exchange:$canonicalSymbol"
 }
@@ -68,7 +71,10 @@ object ResearchCsvDatasetStore {
         context: Context,
         instrument: InstrumentIdentity,
         bars: List<OhlcvBar>,
-        sourceFileName: String
+        sourceFileName: String,
+        lastSyncProvider: String? = null,
+        lastSyncedAtMillis: Long = 0L,
+        priceBasis: String = "RAW_CLOSE"
     ): ResearchCsvDatasetMetadata {
         require(instrument.interval == OhlcvInterval.DAILY) {
             "Automatic folder import currently supports daily OHLCV datasets only."
@@ -101,13 +107,37 @@ object ResearchCsvDatasetStore {
             lastTimestamp = ordered.last().timestamp.toString(),
             updatedAtMillis = System.currentTimeMillis(),
             sourceFileName = sourceFileName.take(120),
-            fileName = fileName
+            fileName = fileName,
+            lastSyncedAtMillis = lastSyncedAtMillis,
+            lastSyncProvider = lastSyncProvider,
+            priceBasis = priceBasis
         )
         val persisted = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString(ENTRY_PREFIX + key, encode(metadata))
             .commit()
         check(persisted) { "Research dataset metadata could not be persisted." }
         return metadata
+    }
+
+    fun markSynced(
+        context: Context,
+        metadata: ResearchCsvDatasetMetadata,
+        provider: String,
+        syncedAtMillis: Long = System.currentTimeMillis()
+    ): ResearchCsvDatasetMetadata {
+        val updated = metadata.copy(
+            updatedAtMillis = syncedAtMillis,
+            lastSyncedAtMillis = syncedAtMillis,
+            lastSyncProvider = provider.take(80)
+        )
+        val identityKey = updated.exchange + "|" + updated.instrumentType.name + "|" +
+            updated.canonicalSymbol + "|" + updated.interval.key
+        val key = sha256(identityKey.toByteArray(Charsets.UTF_8))
+        val persisted = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(ENTRY_PREFIX + key, encode(updated))
+            .commit()
+        check(persisted) { "Research dataset sync metadata could not be persisted." }
+        return updated
     }
 
     fun delete(context: Context, metadata: ResearchCsvDatasetMetadata) {
@@ -135,6 +165,9 @@ object ResearchCsvDatasetStore {
         .put("updatedAtMillis", metadata.updatedAtMillis)
         .put("sourceFileName", metadata.sourceFileName)
         .put("fileName", metadata.fileName)
+        .put("lastSyncedAtMillis", metadata.lastSyncedAtMillis)
+        .put("lastSyncProvider", metadata.lastSyncProvider)
+        .put("priceBasis", metadata.priceBasis)
         .toString()
 
     private fun decode(value: String): ResearchCsvDatasetMetadata {
@@ -152,7 +185,10 @@ object ResearchCsvDatasetStore {
             lastTimestamp = json.getString("lastTimestamp"),
             updatedAtMillis = json.getLong("updatedAtMillis"),
             sourceFileName = json.optString("sourceFileName", ""),
-            fileName = json.getString("fileName")
+            fileName = json.getString("fileName"),
+            lastSyncedAtMillis = json.optLong("lastSyncedAtMillis", 0L),
+            lastSyncProvider = json.optString("lastSyncProvider").takeIf { it.isNotBlank() },
+            priceBasis = json.optString("priceBasis", "RAW_CLOSE")
         )
     }
 

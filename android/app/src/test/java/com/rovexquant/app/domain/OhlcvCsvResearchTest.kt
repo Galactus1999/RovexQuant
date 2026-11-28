@@ -46,9 +46,10 @@ class OhlcvCsvResearchTest {
         assertEquals(3.0, summary.relativeVolume20!!, 0.0001)
     }
 
-    @Test fun rejectsTimezoneNaiveTimestamps() {
+    @Test fun interpretsTimezoneNaiveLocalTimestampsAsIndianMarketTime() {
         val csv = "timestamp,open,high,low,close,volume\n2025-01-01T09:15:00,100,102,99,101,1000"
-        assertTrue(runCatching { OhlcvCsvResearch.parse(csv) }.exceptionOrNull()?.message!!.contains("timezone"))
+        val bar = OhlcvCsvResearch.parse(csv).single()
+        assertEquals(OffsetDateTime.parse("2025-01-01T09:15:00+05:30"), bar.timestamp)
     }
 
     @Test fun rejectsInvalidOhlcAndDuplicateTimestamps() {
