@@ -478,7 +478,7 @@ jobs:
   quant-android-lock-persist:
     name: Quant Android Dependency Lock Persistence
     needs: quant-android-build
-    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/quant-phase1-engineering-foundations') }}
+    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/quant-phase1-engineering-foundations' || github.ref == 'refs/heads/feat/background-csv-eod-refresh') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
