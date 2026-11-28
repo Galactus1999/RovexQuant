@@ -478,7 +478,7 @@ jobs:
   quant-android-lock-persist:
     name: Quant Android Dependency Lock Persistence
     needs: quant-android-build
-    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/quant-phase1-engineering-foundations' || github.ref == 'refs/heads/feat/background-csv-eod-refresh') }}
+    if: ${{ (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/quant-phase1-engineering-foundations' || github.ref == 'refs/heads/feat/background-csv-eod-refresh')) || (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feat/background-csv-eod-refresh' && github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -600,6 +600,9 @@ jobs:
           NSE_SMOKE_REQUESTED: ${{ inputs.run_nse_live_smoke }}
           EVENT_NAME: ${{ github.event_name }}
           REF_FULL: ${{ github.ref }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref || '' }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           for result in "$BACKEND_STATIC" "$POSTGRES" "$CONTAINER" "$SECRET_SCAN" "$SECURITY_ARCHITECTURE" "$ANDROID_BUILD"; do
@@ -620,7 +623,7 @@ jobs:
           else
             [[ "$NSE_MCP_LIVE" == "success" || "$NSE_MCP_LIVE" == "skipped" ]] || { echo "Unexpected optional NSE MCP result: $NSE_MCP_LIVE"; exit 1; }
           fi
-          if [[ "$EVENT_NAME" == "push" && ( "$REF_FULL" == "refs/heads/main" || "$REF_FULL" == "refs/heads/feat/quant-phase1-engineering-foundations" || "$REF_FULL" == "refs/heads/feat/background-csv-eod-refresh" ) ]]; then
+          if [[ "$EVENT_NAME" == "push" && ( "$REF_FULL" == "refs/heads/main" || "$REF_FULL" == "refs/heads/feat/quant-phase1-engineering-foundations" || "$REF_FULL" == "refs/heads/feat/background-csv-eod-refresh" ) ]] || [[ "$EVENT_NAME" == "pull_request" && "$PR_HEAD_REF" == "feat/background-csv-eod-refresh" && "$PR_HEAD_REPO" == "$REPOSITORY" ]]; then
             test "$LOCK_PERSIST" = "success" || {
               echo "Phase 1 acceptance requires persisted Android dependency locks on the implementation branch."
               exit 1
