@@ -5,7 +5,7 @@
 - Repository: `Galactus1999/RovexQuant`
 - Integration base: `main` at `d58173d0bc29d0aff3a9ec119b6f6bb48f11bc28` (the current base verified while auditing PR #40).
 - Updated live branch inventory: 55 branches including `main` and this reconciliation branch.
-- Commit comparison against `main`: 25 non-main branches have commits ahead; 29 non-main branches have no commits ahead. The 25 includes this reconciliation branch itself (2 commits); the source candidate set audited below is the other 24 ahead branches. A commit-ahead count is not proof that its functionality is absent from `main`.
+- Commit comparison against `main`: 25 non-main branches have commits ahead; 29 non-main branches have no commits ahead. The 25 includes this reconciliation branch itself; the source candidate set audited below is the other 24 ahead branches. A commit-ahead count is not proof that its functionality is absent from `main`.
 - The audit compared file-level changes and inspected current-main source for the major feature families. No old branch was merged wholesale.
 
 ## Functionality already represented on current main
