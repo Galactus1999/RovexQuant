@@ -5,6 +5,8 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.rovexquant.app.data.repository.QuantRepository
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.IOException
 
 /**
@@ -19,7 +21,7 @@ class ResearchCsvBackgroundSyncWorker(
     override suspend fun doWork(): Result {
         val prefs = applicationContext.getSharedPreferences("research_csv_auto_sync", Context.MODE_PRIVATE)
         if (!prefs.getBoolean("enabled", true)) return Result.success()
-        val session = QuantSessionStore.load(applicationContext) ?: run {
+        val session = withContext(Dispatchers.IO) { QuantSessionStore.load(applicationContext) } ?: run {
             ResearchCsvBackgroundSyncScheduler.cancel(applicationContext)
             return Result.success()
         }
@@ -34,14 +36,19 @@ class ResearchCsvBackgroundSyncWorker(
 
             ResearchCsvFolderImporter.savedFolderUri(applicationContext)?.let { folderUri ->
                 try {
-                    ResearchCsvFolderImporter.scan(applicationContext, folderUri)
+                    withContext(Dispatchers.IO) {
+                        ResearchCsvFolderImporter.scan(applicationContext, folderUri)
+                    }
                 } catch (_: SecurityException) {
                     // SAF permission was revoked; stop repeatedly retrying an inaccessible folder.
                     ResearchCsvFolderImporter.clearFolder(applicationContext)
                 }
             }
 
-            if (ResearchCsvDatasetStore.list(applicationContext).isEmpty()) {
+            val hasDatasets = withContext(Dispatchers.IO) {
+                ResearchCsvDatasetStore.list(applicationContext).isNotEmpty()
+            }
+            if (!hasDatasets) {
                 record("No imported instrument datasets are available.", null)
                 return Result.success()
             }
