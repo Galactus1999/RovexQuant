@@ -620,7 +620,7 @@ jobs:
           else
             [[ "$NSE_MCP_LIVE" == "success" || "$NSE_MCP_LIVE" == "skipped" ]] || { echo "Unexpected optional NSE MCP result: $NSE_MCP_LIVE"; exit 1; }
           fi
-          if [[ "$EVENT_NAME" == "push" && ( "$REF_FULL" == "refs/heads/main" || "$REF_FULL" == "refs/heads/feat/quant-phase1-engineering-foundations" ) ]]; then
+          if [[ "$EVENT_NAME" == "push" && ( "$REF_FULL" == "refs/heads/main" || "$REF_FULL" == "refs/heads/feat/quant-phase1-engineering-foundations" || "$REF_FULL" == "refs/heads/feat/background-csv-eod-refresh" ) ]]; then
             test "$LOCK_PERSIST" = "success" || {
               echo "Phase 1 acceptance requires persisted Android dependency locks on the implementation branch."
               exit 1
