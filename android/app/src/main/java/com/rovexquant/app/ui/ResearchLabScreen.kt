@@ -6,6 +6,7 @@ import com.rovexquant.app.data.local.TejHqOhlcvStore
 import com.rovexquant.app.data.local.ResearchCsvDatasetStore
 import com.rovexquant.app.data.local.ResearchCsvFolderImporter
 import com.rovexquant.app.data.local.ResearchCsvAutoSyncManager
+import com.rovexquant.app.data.local.ResearchCsvBackgroundSyncScheduler
 import com.rovexquant.app.data.model.MacroResearchSummary
 import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.repository.QuantDataRepository
@@ -385,13 +386,13 @@ fun ResearchLabScreen(
                         checked = csvAutoSyncEnabled,
                         onCheckedChange = { enabled ->
                             csvAutoSyncEnabled = enabled
-                            csvAutoSyncPrefs.edit().putBoolean("enabled", enabled).apply()
+                            ResearchCsvBackgroundSyncScheduler.setEnabled(context, enabled)
                         },
                         modifier = Modifier.testTag("research.csv.auto_sync")
                     )
                 }
                 Text(
-                    "When Research Lab opens, the app checks mapped datasets every 4 hours. Equity history is refreshed in exchange batches from the persistent EOD Data Hub; supported NSE indices use Upstox historical candles. Requires internet and a signed-in Quant session. It does not run while the app is closed.",
+                    "When enabled, mapped daily CSV datasets are rescanned and refreshed approximately every 4 hours in the background, including while the app is closed. Android may defer work until network and battery constraints are met. Equity history uses the persistent EOD Data Hub; supported NSE indices use Upstox historical candles. Requires a signed-in session.",
                     color = Muted,
                     fontSize = 10.sp,
                     lineHeight = 16.sp
