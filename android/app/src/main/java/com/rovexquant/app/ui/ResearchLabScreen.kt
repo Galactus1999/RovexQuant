@@ -6,6 +6,7 @@ import com.rovexquant.app.data.local.TejHqOhlcvStore
 import com.rovexquant.app.data.local.ResearchCsvDatasetStore
 import com.rovexquant.app.data.local.ResearchCsvFolderImporter
 import com.rovexquant.app.data.local.ResearchCsvAutoSyncManager
+import com.rovexquant.app.data.local.ResearchCsvBackgroundSyncScheduler
 import com.rovexquant.app.data.model.MacroResearchSummary
 import com.rovexquant.app.data.model.EventStudyResult
 import com.rovexquant.app.data.repository.QuantDataRepository
@@ -37,6 +38,9 @@ import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.util.Locale
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 private const val MAX_CSV_BYTES = 20 * 1024 * 1024
 
@@ -67,6 +71,15 @@ fun ResearchLabScreen(
     var csvAutoSyncLoading by remember { mutableStateOf(false) }
     var csvAutoSyncStatus by remember { mutableStateOf<String?>(null) }
     var csvAutoSyncError by remember { mutableStateOf<String?>(null) }
+    var csvBackgroundLastAttempt by remember {
+        mutableLongStateOf(csvAutoSyncPrefs.getLong("background_last_attempt_at", 0L))
+    }
+    var csvBackgroundStatus by remember {
+        mutableStateOf(csvAutoSyncPrefs.getString("background_last_status", null))
+    }
+    var csvBackgroundError by remember {
+        mutableStateOf(csvAutoSyncPrefs.getString("background_last_error", null))
+    }
     var macroSummary by remember { mutableStateOf<MacroResearchSummary?>(null) }
     var macroLoading by remember { mutableStateOf(false) }
     var macroError by remember { mutableStateOf<String?>(null) }
@@ -385,17 +398,33 @@ fun ResearchLabScreen(
                         checked = csvAutoSyncEnabled,
                         onCheckedChange = { enabled ->
                             csvAutoSyncEnabled = enabled
-                            csvAutoSyncPrefs.edit().putBoolean("enabled", enabled).apply()
+                            ResearchCsvBackgroundSyncScheduler.setEnabled(context, enabled)
                         },
                         modifier = Modifier.testTag("research.csv.auto_sync")
                     )
                 }
                 Text(
-                    "When Research Lab opens, the app checks mapped datasets every 4 hours. Equity history is refreshed in exchange batches from the persistent EOD Data Hub; supported NSE indices use Upstox historical candles. Requires internet and a signed-in Quant session. It does not run while the app is closed.",
+                    "When enabled, mapped daily CSV datasets are rescanned and refreshed approximately every 4 hours in the background, including while the app is closed. Android may defer work until network and battery constraints are met. Equity history uses the persistent EOD Data Hub; supported NSE indices use Upstox historical candles. Requires a signed-in session.",
                     color = Muted,
                     fontSize = 10.sp,
                     lineHeight = 16.sp
                 )
+                if (csvBackgroundLastAttempt > 0L) {
+                    val attemptedAt = DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm", Locale.US)
+                        .withZone(ZoneId.systemDefault())
+                        .format(Instant.ofEpochMilli(csvBackgroundLastAttempt))
+                    Text(
+                        "Last background attempt · $attemptedAt",
+                        color = Muted,
+                        fontSize = 10.sp
+                    )
+                    csvBackgroundStatus?.let {
+                        Text(it, color = Muted, fontSize = 10.sp, lineHeight = 14.sp)
+                    }
+                    csvBackgroundError?.let {
+                        Text(it, color = Gold, fontSize = 10.sp, lineHeight = 14.sp)
+                    }
+                }
                 Button(
                     onClick = { runCsvAutoSync(force = true) },
                     enabled = !csvAutoSyncLoading && csvFolderDatasets.isNotEmpty() &&

@@ -478,13 +478,15 @@ jobs:
   quant-android-lock-persist:
     name: Quant Android Dependency Lock Persistence
     needs: quant-android-build
-    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/quant-phase1-engineering-foundations') }}
+    if: ${{ (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/quant-phase1-engineering-foundations')) || (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feat/background-csv-eod-refresh' && github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Checkout current branch
+      - name: Checkout implementation branch head (not the synthetic PR merge ref)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref }}
       - name: Download dependency metadata produced by the verified Android build
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -565,7 +567,11 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git commit -m "[skip ci] build(android): persist dependency lock and verification metadata"
-            git push origin "HEAD:$GITHUB_REF_NAME"
+            TARGET_BRANCH="${GITHUB_REF_NAME}"
+            if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+              TARGET_BRANCH="${{ github.event.pull_request.head.ref }}"
+            fi
+            git push origin "HEAD:refs/heads/${TARGET_BRANCH}"
           fi
 
   quant-phase1-acceptance:
@@ -600,6 +606,9 @@ jobs:
           NSE_SMOKE_REQUESTED: ${{ inputs.run_nse_live_smoke }}
           EVENT_NAME: ${{ github.event_name }}
           REF_FULL: ${{ github.ref }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref || '' }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           for result in "$BACKEND_STATIC" "$POSTGRES" "$CONTAINER" "$SECRET_SCAN" "$SECURITY_ARCHITECTURE" "$ANDROID_BUILD"; do
@@ -620,7 +629,7 @@ jobs:
           else
             [[ "$NSE_MCP_LIVE" == "success" || "$NSE_MCP_LIVE" == "skipped" ]] || { echo "Unexpected optional NSE MCP result: $NSE_MCP_LIVE"; exit 1; }
           fi
-          if [[ "$EVENT_NAME" == "push" && ( "$REF_FULL" == "refs/heads/main" || "$REF_FULL" == "refs/heads/feat/quant-phase1-engineering-foundations" ) ]]; then
+          if [[ "$EVENT_NAME" == "push" && ( "$REF_FULL" == "refs/heads/main" || "$REF_FULL" == "refs/heads/feat/quant-phase1-engineering-foundations" ) ]] || [[ "$EVENT_NAME" == "pull_request" && "$PR_HEAD_REF" == "feat/background-csv-eod-refresh" && "$PR_HEAD_REPO" == "$REPOSITORY" ]]; then
             test "$LOCK_PERSIST" = "success" || {
               echo "Phase 1 acceptance requires persisted Android dependency locks on the implementation branch."
               exit 1
@@ -690,6 +699,7 @@ jobs:
 
   quant-regression:
     name: Quant Unit & Backend Regression
+    needs: quant-android-build
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_regression == true }}
     runs-on: ubuntu-latest
     timeout-minutes: 55
@@ -727,6 +737,11 @@ jobs:
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           gradle-version: "8.14.8"
+      - name: Download exact dependency locks from Android build job
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: Quant-Android-Dependency-Locks
+          path: android
       - name: Android unit tests (no emulator)
         run: gradle -p android :app:testDebugUnitTest --no-daemon --stacktrace
 
