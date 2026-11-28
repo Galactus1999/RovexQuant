@@ -26,7 +26,7 @@ object ResearchCsvBackgroundSyncScheduler {
         val appContext = context.applicationContext
         val enabled = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getBoolean(ENABLED_KEY, true)
-        if (!enabled || QuantSessionStore.load(appContext) == null) {
+        if (!enabled || !QuantSessionStore.hasStoredSession(appContext)) {
             cancel(appContext)
             return
         }
