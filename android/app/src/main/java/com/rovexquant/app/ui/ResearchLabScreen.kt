@@ -38,6 +38,9 @@ import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.util.Locale
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 private const val MAX_CSV_BYTES = 20 * 1024 * 1024
 
@@ -68,6 +71,15 @@ fun ResearchLabScreen(
     var csvAutoSyncLoading by remember { mutableStateOf(false) }
     var csvAutoSyncStatus by remember { mutableStateOf<String?>(null) }
     var csvAutoSyncError by remember { mutableStateOf<String?>(null) }
+    var csvBackgroundLastAttempt by remember {
+        mutableLongStateOf(csvAutoSyncPrefs.getLong("background_last_attempt_at", 0L))
+    }
+    var csvBackgroundStatus by remember {
+        mutableStateOf(csvAutoSyncPrefs.getString("background_last_status", null))
+    }
+    var csvBackgroundError by remember {
+        mutableStateOf(csvAutoSyncPrefs.getString("background_last_error", null))
+    }
     var macroSummary by remember { mutableStateOf<MacroResearchSummary?>(null) }
     var macroLoading by remember { mutableStateOf(false) }
     var macroError by remember { mutableStateOf<String?>(null) }
@@ -397,6 +409,22 @@ fun ResearchLabScreen(
                     fontSize = 10.sp,
                     lineHeight = 16.sp
                 )
+                if (csvBackgroundLastAttempt > 0L) {
+                    val attemptedAt = DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm", Locale.US)
+                        .withZone(ZoneId.systemDefault())
+                        .format(Instant.ofEpochMilli(csvBackgroundLastAttempt))
+                    Text(
+                        "Last background attempt · $attemptedAt",
+                        color = Muted,
+                        fontSize = 10.sp
+                    )
+                    csvBackgroundStatus?.let {
+                        Text(it, color = Muted, fontSize = 10.sp, lineHeight = 14.sp)
+                    }
+                    csvBackgroundError?.let {
+                        Text(it, color = Gold, fontSize = 10.sp, lineHeight = 14.sp)
+                    }
+                }
                 Button(
                     onClick = { runCsvAutoSync(force = true) },
                     enabled = !csvAutoSyncLoading && csvFolderDatasets.isNotEmpty() &&
