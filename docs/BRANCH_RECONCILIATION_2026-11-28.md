@@ -4,8 +4,8 @@
 
 - Repository: `Galactus1999/RovexQuant`
 - Integration base: `main` at `d58173d0bc29d0aff3a9ec119b6f6bb48f11bc28` (the current base verified while auditing PR #40).
-- Live branch inventory: 53 branches including `main`.
-- Commit comparison against `main`: 24 non-main branches have commits ahead; 28 non-main branches have no commits ahead. A commit-ahead count is not proof that its functionality is absent from `main`.
+- Updated live branch inventory: 55 branches including `main` and this reconciliation branch.
+- Commit comparison against `main`: 25 non-main branches have commits ahead; 29 non-main branches have no commits ahead. The 25 includes this reconciliation branch itself (2 commits); the source candidate set audited below is the other 24 ahead branches. A commit-ahead count is not proof that its functionality is absent from `main`.
 - The audit compared file-level changes and inspected current-main source for the major feature families. No old branch was merged wholesale.
 
 ## Functionality already represented on current main
@@ -31,8 +31,8 @@ Keep `feat/universal-market-data-acquisition` in its own draft PR rather than mi
 
 - PR: https://github.com/Galactus1999/RovexQuant/pull/40
 - Exact head after the emulator-test adjustment: `0033a7032a90765ee51f945a89a104d4fd550c0f`
-- Previous exact-head CI run #2538 passed backend tests, Android unit tests, Android compile/lint/APK integrity, container/auth smoke, NSE MCP connectivity, PostgreSQL migration/vault, static quality and security checks. One emulator test failed during `performScrollToNode` semantics traversal with a Compose `SnapshotStateObserver` cross-thread exception.
-- The test now scrolls the Research Lab `LazyColumn` by stable item indices 6 and 7. CI run #2540 must pass before the PR is ready.
+- Exact-head CI run #2540 passed backend tests, Android unit tests, Android compile/lint/APK integrity, container/auth smoke, NSE MCP connectivity, PostgreSQL migration/vault, static quality and security checks, but its emulator job failed in `appStartsWithQuantMarketPulseAndHonestOfflineState` with `IllegalArgumentException: Detected multithreaded access to SnapshotStateObserver` (previous thread id 2; instrumentation runner thread id 46). The failing method still performs several `performScrollToNode` operations; the earlier `bottomNavigationOpensAllWorkspacesAndSectorCoverage` scroll adjustment does not resolve this separate failure.
+- The failed emulator job was explicitly re-run; its new result is pending verification. Do not treat the PR as validated until the rerun succeeds.
 - Automatic refresh currently runs when Research Lab is opened (or manually requested) with a four-hour due interval; it does not run while the app is closed. WorkManager scheduling is not claimed by this PR.
 - AI does not generate or fill prices. Market data must come from a permitted provider/source and pass deterministic validation.
 
@@ -54,8 +54,9 @@ This allows the activity window to resize for the keyboard and avoids opening th
 
 ## Open PR disposition
 
-- PR #40 remains the focused CSV/Bhavcopy PR and is not merged.
+- PR #40 remains the focused CSV/Bhavcopy PR and is not merged. Exact-head CI run #2540 has an emulator-only failure described above; its failed job is being retried.
 - PR #27 (`integration/quant-ai-research-history-mainline`) is 84 commits ahead and 561 behind main, and GitHub reports it unmergeable. Its main feature families are already represented on current main. Do not merge this stale aggregate branch; any genuinely missing hunk must be isolated and ported against current main with tests.
+- PR #41 (this reconciliation branch) exact-head CI run #2541 passed all required jobs, including the Android emulator regression. PR #41 remains open and is not merged.
 - No branch or PR is merged into `main` by this reconciliation work.
 
 ## Acceptance rule
