@@ -1,63 +1,77 @@
 # RovexQuant ahead-branch reconciliation — 2026-11-28
 
-## Baseline and method
+## Final integration baseline
 
 - Repository: `Galactus1999/RovexQuant`
-- Integration base: `main` at `d58173d0bc29d0aff3a9ec119b6f6bb48f11bc28` (the current base verified while auditing PR #40).
-- Updated live branch inventory: 55 branches including `main` and this reconciliation branch.
-- Commit comparison against `main`: 25 non-main branches have commits ahead; 29 non-main branches have no commits ahead. The 25 includes this reconciliation branch itself; the source candidate set audited below is the other 24 ahead branches. A commit-ahead count is not proof that its functionality is absent from `main`.
-- The audit compared file-level changes and inspected current-main source for the major feature families. No old branch was merged wholesale.
+- Current `main`: `09db8ed71aa91e46b1f1796f777b5a24279fb06f`
+- PR #40 squash merge: `c38762855c11229a9c88867dac9d23c13b834367`
+- PR #41 squash merge: `09db8ed71aa91e46b1f1796f777b5a24279fb06f`
+- Both PRs are closed as merged. Their exact-head required CI checks passed.
+- The initial PR #40 emulator attempt failed transiently with a Compose SnapshotStateObserver cross-thread exception; the targeted retry passed. No test was weakened.
+- PR #41's exact-head workflow run #2543 passed Android emulator regression, Android compile/lint/APK integrity, unit/backend, static quality, container/auth, NSE MCP, PostgreSQL, security/API/architecture, secret scan and the required Phase 1 acceptance gate.
 
-## Functionality already represented on current main
+## Method and decision rule
 
-The following branch families contain substantial code that is already represented by the current implementation, often in a newer or safer form:
+Commit-ahead count is not proof that a branch contains missing functionality. The audit compared branch histories and changed-file inventories, then inspected relevant source files on current `main` and candidate branches. Old branches were not merged wholesale: they frequently have large divergence from the current mainline and contain earlier implementations, prototypes, or duplicated functionality.
+
+Only distinct, current-main-compatible changes were promoted. Every promoted change was isolated in a focused PR and required exact-head CI before merge.
+
+## Functionality represented on current main
+
+The following branch families were reviewed. Their principal feature families are already represented on current main in newer or safer forms, or the branch is a stale aggregate rather than a clean integration candidate:
 
 - AI provider discovery, server-side routing, AI research tools, claim verification, and persistent research history: `feat/ai-auto-provider-discovery`, `feat/ai-integrations-studio`, `feat/ai-intelligence-tool-registry`, `feat/ai-research-history-ledger`, `integration/ai-studio-mainline`, `integration/ai-studio-mainline-v2`, `integration/quant-ai-research-history-mainline`, `integration/quant-ai-research-mainline`.
 - Instrument identity, company/index search, index/sector research and validated charts: `feature/pulse-interactive-research`, `fix/p1-instrument-identity`, `feature/p2-indicator-integration`.
-- EOD persistence, leased ingestion worker, macro observations, AMFI NAV, event studies and research-data health: `fix/p1-market-data-flow`, `feat/research-data-connectors-launcher`, `fix/quant-phase1-nse-mcp-live-smoke`.
-- Bounded Upstox market-stream handling: `feat/p0-bounded-market-stream`. Current main has the bounded frame queue and explicit chart-flow capacity; the older branch version is not a safe replacement.
-- Backtesting and indicator engine foundations, portfolio/risk screens and related quality UI: `feat/quant-engine-quality-ui-expansion`. Current main already contains the backtesting engine, indicator implementations and portfolio workspace.
-- Mainline visual workspace and market-pulse functionality: `feat/frontend-visual-first`. Its additional visual helper file is not a standalone product feature and is not referenced by the current main screen; do not add dead UI code.
-- The older `QuantTerminal` prototype from `feat/premium-quant-terminal-ui` is a disconnected demo with placeholder prices/charts and explicit “awaiting feed” content. It must not replace the live, data-backed main workspace.
-- `feat/research-data-connectors-launcher` contains an older `QuantWorkspaceViewModel` and `MarketPulseScreen`; current main has offline instrument-master cache fallback and more complete live-data, EOD and copilot UI.
-- `feature/p2-indicator-integration` has an older chart/indicator implementation. Current main adds source-offset-aware indicator coverage, semantic chart labels/sample coverage and stricter indicator value validation.
-- `fix/quant-phase1-nse-mcp-live-smoke`'s current `nse_mcp.py` is byte-for-byte the same as main in the inspected path; its older branch diff does not justify a port.
+- EOD persistence, ingestion worker, macro observations, AMFI NAV, event studies and research-data health: `fix/p1-market-data-flow`, `feat/research-data-connectors-launcher`, `fix/quant-phase1-nse-mcp-live-smoke`.
+- Bounded Upstox market-stream handling: `feat/p0-bounded-market-stream`. Current main has bounded frame ingress and chart-flow handling; the older branch version is not a safe replacement.
+- Backtesting, indicator engine foundations, portfolio/risk screens and quality UI: `feat/quant-engine-quality-ui-expansion`. Current main has the more complete backtesting and portfolio/risk implementation.
+- Mainline visual workspace and Market Pulse functionality: `feat/frontend-visual-first`. Its older helper/UI implementations are not a standalone feature worth replacing current screens with.
+- The older `QuantTerminal` prototype from `feat/premium-quant-terminal-ui` is a disconnected demo with placeholder prices/charts and “awaiting feed” content. It must not replace the live data-backed workspace.
+- The old research connector branch contains earlier workspace and Market Pulse implementations; current main has more complete provider, EOD and copilot integration.
+- `fix/quant-phase1-nse-mcp-live-smoke`'s inspected `nse_mcp.py` was byte-for-byte identical to main in the reviewed path.
 
-## Distinct changes retained separately
+### Source-level checks on representative candidates
+
+- `InstrumentIdentity.kt` on main is 6,899 characters versus 5,587 characters on `fix/p1-instrument-identity` / `feature/pulse-interactive-research`; main's blob is different and more developed.
+- `TejHqOhlcvStore.kt` on main is 8,830 characters versus 8,571 on those branches.
+- `TejHqOhlcvClient.kt` is identical between main and those branches.
+- `InstrumentResearchScreen.kt` on main is 39,531 characters versus 13,771 / 18,212 on the older branches.
+- `fix/android-emulator-research-navigation-test` contains a 13,798-character regression-test file with 10 test methods; current main's 37,357-character file has 18 test methods and includes newer index/sector chart and AI provider-discovery coverage. Do not replace it with the older test file.
+- `feat/quant-phase1-engineering-foundations` contains a Kotlin-daemon metadata pruning script and tests that are absent from main, but current main has a newer `verify_kotlin_daemon_alignment.py` validation integrated into CI. The branch workflow is older and should not replace current dependency-lock / verification-metadata handling.
+
+## Distinct changes merged
 
 ### PR #40 — universal CSV/Bhavcopy ingestion
 
-Keep `feat/universal-market-data-acquisition` in its own draft PR rather than mixing it into unrelated UI/build changes. Compared with main, its 19 changed files add the universal parser, exchange Bhavcopy split/import, bounded ZIP/encoding support, imported-dataset auto-refresh manager, bulk EOD history endpoint, and tests.
-
 - PR: https://github.com/Galactus1999/RovexQuant/pull/40
-- Exact head after the emulator-test adjustment: `0033a7032a90765ee51f945a89a104d4fd550c0f`
-- Exact-head CI run #2540 passed backend tests, Android unit tests, Android compile/lint/APK integrity, container/auth smoke, NSE MCP connectivity, PostgreSQL migration/vault, static quality and security checks, but its emulator job failed in `appStartsWithQuantMarketPulseAndHonestOfflineState` with `IllegalArgumentException: Detected multithreaded access to SnapshotStateObserver` (previous thread id 2; instrumentation runner thread id 46). The failing method still performs several `performScrollToNode` operations; the earlier `bottomNavigationOpensAllWorkspacesAndSectorCoverage` scroll adjustment does not resolve this separate failure.
-- The failed emulator job was explicitly re-run; its new result is pending verification. Do not treat the PR as validated until the rerun succeeds.
-- Automatic refresh currently runs when Research Lab is opened (or manually requested) with a four-hour due interval; it does not run while the app is closed. WorkManager scheduling is not claimed by this PR.
-- AI does not generate or fill prices. Market data must come from a permitted provider/source and pass deterministic validation.
+- Merged commit: `c38762855c11229a9c88867dac9d23c13b834367`
+- Adds universal CSV parsing, NSE/BSE UDiFF and legacy Bhavcopy handling, multi-security splitting, bounded ZIP/encoding support, imported-dataset refresh, a bounded authenticated bulk-history endpoint, per-dataset sync provenance and tests.
+- CI run #2540: all required checks passed after a targeted retry of the Android emulator job. The first emulator attempt raised a Compose `SnapshotStateObserver` cross-thread exception; the retry passed without weakening or changing the test.
+- Operating limit: refresh runs when Research Lab opens or when the user requests Sync Now, subject to login, network and source entitlement. It does not run while the app is closed. WorkManager scheduled background refresh remains follow-on work.
+- AI does not invent or fill prices. Provider data remains authoritative and is validated deterministically.
 
-### IME/window-resize fix
+### PR #41 — IME/window-resize fix and reconciliation record
 
-The single-purpose ahead branch `copilot/fix-android-instrumentation-ime-focus` changes only the main activity's soft-input behavior. This reconciliation branch ports its intended manifest setting:
-
-`android:windowSoftInputMode="adjustResize|stateHidden"`
-
-This allows the activity window to resize for the keyboard and avoids opening the activity with the keyboard already shown. It is isolated from the CSV PR.
+- PR: https://github.com/Galactus1999/RovexQuant/pull/41
+- Merged commit: `09db8ed71aa91e46b1f1796f777b5a24279fb06f`
+- Ports `android:windowSoftInputMode="adjustResize|stateHidden"` to `.MainActivity`, enabling keyboard-aware window resizing and keeping the keyboard initially hidden.
+- Adds this reconciliation record.
+- Exact-head CI run #2543 passed all required checks, including Android emulator regression and the Phase 1 acceptance gate.
 
 ## Explicitly not ported
 
-- `feature/pulse-interactive-research`'s `NiftyIndicesOhlcvClient` uses an undocumented POST contract on the NSE Indices website. Current main already routes supported index history through the Upstox V3 historical API. Do not add the undocumented scraper or the stale `NSE_INDICES_PORTAL` provider path.
-- `feat/quant-phase1-engineering-foundations` adds a Kotlin-daemon metadata pruning script and test, but the branch workflow only tests the script; it does not establish a safe, necessary production invocation. Do not mutate dependency-verification metadata without a proven failure and a reproducible validation path.
-- `fix/android-emulator-research-navigation-test` has older workspace labels and test assumptions that do not match the current main UI.
+- `feature/pulse-interactive-research`'s `NiftyIndicesOhlcvClient` uses an undocumented POST contract on the NSE Indices website. Current main routes supported index history through the Upstox V3 historical API. Do not add the undocumented scraper or stale `NSE_INDICES_PORTAL` provider path.
+- `feat/quant-phase1-engineering-foundations`'s metadata-pruning approach is superseded by current main's explicit Kotlin daemon alignment validation. Do not mutate dependency-verification metadata without a proven failure and reproducible validation path.
+- `fix/android-emulator-research-navigation-test` has older workspace labels and test assumptions that do not match current main.
 - Snapshot branches `snapshot/ai-merge-base` and `snapshot/p2-merge-base` contain merge-base workflow snapshots, not user-facing product functionality.
-- `fix/p1-auth-token-hardening` and `fix/p4-macro-refresh-health` have no commits ahead of main in the live comparison.
+- `fix/p1-auth-token-hardening` and `fix/p4-macro-refresh-health` had no commits ahead in the earlier live comparison.
+- PR #27 (`integration/quant-ai-research-history-mainline`) was a large, stale, unmergeable aggregate. Its principal AI/research feature families are already represented on current main. Do not bulk merge it; any newly proven missing hunk must be isolated and ported with tests.
 
-## Open PR disposition
+## Remaining work
 
-- PR #40 remains the focused CSV/Bhavcopy PR and is not merged. Exact-head CI run #2540 has an emulator-only failure described above; its failed job is being retried.
-- PR #27 (`integration/quant-ai-research-history-mainline`) is 84 commits ahead and 561 behind main, and GitHub reports it unmergeable. Its main feature families are already represented on current main. Do not merge this stale aggregate branch; any genuinely missing hunk must be isolated and ported against current main with tests.
-- PR #41 (this reconciliation branch) exact-head CI run #2541 passed all required jobs, including the Android emulator regression. PR #41 remains open and is not merged.
-- No branch or PR is merged into `main` by this reconciliation work.
+- Do not merge remaining ahead branches by commit count alone. Recompare against current main and port only a demonstrably missing, non-regressive feature.
+- The CSV refresh feature currently lacks closed-app scheduled execution. If that requirement is pursued, implement it as a separate WorkManager/backend-scheduler change with unique work, network constraints, bounded retries, cancellation, provenance/freshness and observable sync state.
+- Continue reproducing and fixing any still-open product defects (index/sector chart details, automatic data refresh behavior, emulator regressions) against current main rather than restoring old branch snapshots.
 
 ## Acceptance rule
 
