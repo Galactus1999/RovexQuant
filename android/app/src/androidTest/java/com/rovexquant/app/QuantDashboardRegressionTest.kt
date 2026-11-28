@@ -187,7 +187,9 @@ class QuantDashboardRegressionTest {
         }
         composeRule.waitForIdle()
         composeRule.onAllNodesWithTag("market.ingestion.status").assertCountEquals(0)
-        composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasText("FIXTURE"))
+        // EOD snapshot is LazyColumn item 2 (title, strategy playground, EOD card).
+        // Index scrolling avoids descendant semantics traversal for this already-expanded card.
+        composeRule.onNodeWithTag("market.pulse.list").performScrollToIndex(2)
         composeRule.waitForIdle()
         composeRule.onNodeWithText("FIXTURE").assertIsDisplayed()
         composeRule.onNodeWithTag("market.pulse.list").performScrollToNode(hasTestTag("market.sector.heading"))
@@ -470,7 +472,10 @@ class QuantDashboardRegressionTest {
         // workspace. Verify automatic provider readiness here; provider switches
         // and encrypted credential management are covered in Settings below.
         waitForAutomaticProviderReadiness()
-        composeRule.onNodeWithTag("ai.workspace.list").performScrollToNode(hasTestTag("ai.recovery.symbol.find"))
+        // Recovery is LazyColumn item 7 after the heading, provider, tools, briefing,
+        // history, connected-tools and Copilot sections. Scroll by item index so the
+        // test does not traverse the full semantics subtree on the instrumentation thread.
+        composeRule.onNodeWithTag("ai.workspace.list").performScrollToIndex(7)
         composeRule.onNodeWithTag("ai.recovery.symbol.find").performClick()
         composeRule.onNodeWithTag("instrument.global.search.input").performTextInput("Reliance Industries")
         composeRule.waitUntil(5_000) {
