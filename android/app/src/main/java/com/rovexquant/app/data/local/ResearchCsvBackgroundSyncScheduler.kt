@@ -45,7 +45,7 @@ object ResearchCsvBackgroundSyncScheduler {
 
         WorkManager.getInstance(appContext).enqueueUniquePeriodicWork(
             UNIQUE_WORK_NAME,
-            ExistingPeriodicWorkPolicy.UPDATE,
+            ExistingPeriodicWorkPolicy.KEEP,
             request
         )
     }
