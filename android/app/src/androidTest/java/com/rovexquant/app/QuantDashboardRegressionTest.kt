@@ -384,10 +384,12 @@ class QuantDashboardRegressionTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Research lab.").assertIsDisplayed()
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("research.lab.list").performScrollToNode(hasText("Choose CSV folder"))
+        // These are LazyColumn item indices: header, history, MCP, event study, macro, auto-sync, folder import.
+        // Scroll by index instead of traversing the off-screen semantics subtree.
+        composeRule.onNodeWithTag("research.lab.list").performScrollToIndex(6)
         composeRule.onNodeWithText("AUTOMATIC CSV FOLDER IMPORT").assertIsDisplayed()
         composeRule.onNodeWithText("Choose CSV folder").assertIsDisplayed()
-        composeRule.onNodeWithTag("research.lab.list").performScrollToNode(hasText("Import OHLCV CSV"))
+        composeRule.onNodeWithTag("research.lab.list").performScrollToIndex(7)
         composeRule.onNodeWithText("Import OHLCV CSV").assertIsDisplayed()
         composeRule.onNodeWithText("More").performClick()
         composeRule.onNodeWithText("Portfolio").performClick()
