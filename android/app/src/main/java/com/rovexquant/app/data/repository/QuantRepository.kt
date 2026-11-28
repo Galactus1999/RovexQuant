@@ -59,10 +59,16 @@ class QuantRepository(context: Context) : QuantDataRepository {
         withContext(Dispatchers.IO) { QuantSessionStore.load(appContext) }
 
     override suspend fun saveSession(session: QuantSession, username: String) =
-        withContext(Dispatchers.IO) {\n            QuantSessionStore.save(appContext, session, username)\n            ResearchCsvBackgroundSyncScheduler.ensureScheduled(appContext)\n        }
+        withContext(Dispatchers.IO) {
+            QuantSessionStore.save(appContext, session, username)
+            ResearchCsvBackgroundSyncScheduler.ensureScheduled(appContext)
+        }
 
     override suspend fun clearSession() =
-        withContext(Dispatchers.IO) {\n            QuantSessionStore.clearSession(appContext)\n            ResearchCsvBackgroundSyncScheduler.cancel(appContext)\n        }
+        withContext(Dispatchers.IO) {
+            QuantSessionStore.clearSession(appContext)
+            ResearchCsvBackgroundSyncScheduler.cancel(appContext)
+        }
 
     override suspend fun login(baseUrl: String, username: String, password: String): QuantSession =
         withContext(Dispatchers.IO) { QuantApi.login(baseUrl, username, password) }
