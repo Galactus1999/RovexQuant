@@ -19,12 +19,16 @@ class ResearchCsvBackgroundSyncWorker(
     override suspend fun doWork(): Result {
         val prefs = applicationContext.getSharedPreferences("research_csv_auto_sync", Context.MODE_PRIVATE)
         if (!prefs.getBoolean("enabled", true)) return Result.success()
-        val session = QuantSessionStore.load(applicationContext) ?: return Result.success()
+        val session = QuantSessionStore.load(applicationContext) ?: run {
+            ResearchCsvBackgroundSyncScheduler.cancel(applicationContext)
+            return Result.success()
+        }
         val repository = QuantRepository(applicationContext)
 
         return try {
             if (!repository.validateSession(session)) {
                 QuantSessionStore.clearSession(applicationContext)
+                ResearchCsvBackgroundSyncScheduler.cancel(applicationContext)
                 return Result.success()
             }
 
