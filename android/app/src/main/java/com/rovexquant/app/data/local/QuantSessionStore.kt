@@ -38,6 +38,14 @@ object QuantSessionStore {
             .apply()
     }
 
+    /** Cheap presence check for scheduling; does not decrypt or touch Android Keystore. */
+    fun hasStoredSession(context: Context): Boolean {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val baseUrl = prefs.getString(URL_KEY, null)?.trim()
+        val token = prefs.getString(TOKEN_KEY, null)
+        return !baseUrl.isNullOrBlank() && baseUrl.startsWith("https://") && !token.isNullOrBlank()
+    }
+
     fun load(context: Context): QuantSession? {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val baseUrl = prefs.getString(URL_KEY, null)?.trim()?.trimEnd('/')
