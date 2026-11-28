@@ -483,8 +483,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout current branch
+      - name: Checkout implementation branch head (not the synthetic PR merge ref)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref }}
       - name: Download dependency metadata produced by the verified Android build
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
